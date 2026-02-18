@@ -1,17 +1,477 @@
-"""CLI entry point — stub for Phase 0 verification."""
+"""Click CLI definition for ``dvad``.
+
+Commands: review, history, config, override.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import signal
+import sys
+from pathlib import Path
 
 import click
+from rich.markdown import Markdown
+from rich.table import Table
 
 from devils_advocate import __version__
+from .config import find_config, load_config, validate_config, get_models_by_role
+from .orchestrator import run_plan_review, run_code_review, run_integration_review
+from .storage import StorageManager
+from .types import (
+    APIError,
+    ConfigError,
+    CostLimitError,
+    Resolution,
+    StorageError,
+)
+from .ui import console
+
+
+# ─── CLI Group ────────────────────────────────────────────────────────────────
 
 
 @click.group()
 @click.version_option(version=__version__, prog_name="dvad")
 def cli():
-    """Devil's Advocate — Cost-aware multi-LLM adversarial review engine."""
+    """Devil's Advocate -- Cost-aware multi-LLM adversarial review engine."""
+
+
+# ─── review ───────────────────────────────────────────────────────────────────
 
 
 @cli.command()
-def review():
-    """Run a review (not yet implemented)."""
-    click.echo("Not yet implemented.")
+@click.option(
+    "--mode",
+    type=click.Choice(["plan", "code", "integration"]),
+    required=True,
+    help="Review mode: plan, code, or integration",
+)
+@click.option(
+    "--input",
+    "input_path",
+    multiple=True,
+    help="Input file(s) to review",
+)
+@click.option(
+    "--spec",
+    "spec_path",
+    default=None,
+    help="Specification file (for code or integration review mode)",
+)
+@click.option(
+    "--project",
+    required=True,
+    help="Project name/identifier",
+)
+@click.option(
+    "--max-cost",
+    type=float,
+    default=None,
+    help="Maximum cost in USD -- abort if estimated cost exceeds this",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Show planned API calls without executing them",
+)
+@click.option(
+    "--config",
+    "config_path",
+    default=None,
+    help="Path to models.yaml",
+)
+@click.option(
+    "--project-dir",
+    "project_dir",
+    default=None,
+    help="Project directory (for integration mode spec discovery)",
+)
+def review(mode, input_path, spec_path, project, max_cost, dry_run, config_path, project_dir):
+    """Run an adversarial review."""
+    try:
+        config = load_config(Path(config_path) if config_path else None)
+    except ConfigError as e:
+        console.print(f"[red]Config error:[/red] {e}")
+        sys.exit(1)
+
+    issues = validate_config(config)
+    errors = [msg for level, msg in issues if level == "error"]
+    warnings = [msg for level, msg in issues if level == "warn"]
+
+    for w in warnings:
+        console.print(f"[yellow]Warning:[/yellow] {w}")
+    if errors:
+        for e in errors:
+            console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+
+    if mode in ("plan", "code"):
+        if not input_path:
+            console.print(
+                "[red]Error:[/red] --input is required for plan and code reviews."
+            )
+            sys.exit(1)
+        for p in input_path:
+            if not Path(p).exists():
+                console.print(f"[red]Error:[/red] Input file not found: {p}")
+                sys.exit(1)
+
+    # Build the coroutine
+    if mode == "plan":
+        input_files = [Path(p) for p in input_path]
+        main_coro = run_plan_review(config, input_files, project, max_cost, dry_run)
+    elif mode == "code":
+        spec_file = Path(spec_path) if spec_path else None
+        if spec_file and not spec_file.exists():
+            console.print(f"[red]Error:[/red] Spec file not found: {spec_file}")
+            sys.exit(1)
+        main_coro = run_code_review(
+            config, Path(input_path[0]), project, spec_file, max_cost, dry_run
+        )
+    elif mode == "integration":
+        input_files_list = list(input_path) if input_path else None
+        spec_file = Path(spec_path) if spec_path else None
+        proj_dir = Path(project_dir) if project_dir else None
+        main_coro = run_integration_review(
+            config,
+            project,
+            input_files=input_files_list,
+            spec_file=spec_file,
+            project_dir=proj_dir,
+            max_cost=max_cost,
+            dry_run=dry_run,
+        )
+    else:
+        sys.exit(1)
+
+    # Signal handling (Bug 9 fix): install handlers around asyncio.run()
+    # Use loop.add_signal_handler on POSIX; fall back to signal.signal elsewhere.
+    storage = StorageManager(Path.cwd())
+
+    def _cleanup():
+        try:
+            storage.release_lock()
+        except Exception:
+            pass
+        try:
+            storage.close()
+        except Exception:
+            pass
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        # POSIX signal handler for SIGTERM
+        try:
+            loop.add_signal_handler(signal.SIGTERM, _cleanup)
+        except NotImplementedError:
+            # Fallback for platforms where add_signal_handler is unavailable
+            # (e.g., Windows). Note: signal.signal handlers may not interact
+            # cleanly with asyncio on all platforms.
+            signal.signal(signal.SIGTERM, lambda s, f: _cleanup())
+
+        # SIGINT is handled by KeyboardInterrupt propagation
+        loop.run_until_complete(main_coro)
+    except KeyboardInterrupt:
+        _cleanup()
+        console.print("\n[yellow]Interrupted.[/yellow]")
+        sys.exit(130)
+    except (APIError, CostLimitError) as e:
+        _cleanup()
+        console.print(f"\n[red]Aborted:[/red] {e}")
+        sys.exit(1)
+    finally:
+        loop.close()
+
+
+# ─── history ──────────────────────────────────────────────────────────────────
+
+
+@cli.command("history")
+@click.option("--project", required=True, help="Project name")
+@click.option(
+    "--review-id",
+    default=None,
+    help="Show details for a specific review",
+)
+@click.option(
+    "--config",
+    "config_path",
+    default=None,
+    help="Path to models.yaml",
+)
+@click.option(
+    "--project-dir",
+    "project_dir",
+    default=None,
+    help="Project directory to search for reviews",
+)
+def history(project, review_id, config_path, project_dir):
+    """Show review history for a project."""
+    base_dir = Path(project_dir) if project_dir else Path.cwd()
+    storage = StorageManager(base_dir)
+
+    if review_id:
+        data = storage.load_review(review_id)
+        if not data:
+            console.print(f"[red]Error:[/red] Review {review_id} not found.")
+            sys.exit(1)
+        # Print the report
+        report_path = storage.reviews_dir / review_id / "dvad-report.md"
+        if report_path.exists():
+            console.print(Markdown(report_path.read_text()))
+        else:
+            console.print_json(json.dumps(data, indent=2))
+        return
+
+    reviews = storage.list_reviews()
+    if not reviews:
+        console.print("No reviews found for this project.")
+        return
+
+    table = Table(title=f"Review History -- {project}")
+    table.add_column("Review ID", style="cyan", no_wrap=True)
+    table.add_column("Mode")
+    table.add_column("Input")
+    table.add_column("Date")
+    table.add_column("Points", justify="right")
+    table.add_column("Cost", justify="right")
+
+    for r in reviews:
+        table.add_row(
+            r["review_id"],
+            r["mode"],
+            str(r["input_file"])[:40],
+            str(r["timestamp"])[:19],
+            str(r["total_points"]),
+            f"${r['total_cost']:.4f}",
+        )
+    console.print(table)
+
+
+# ─── config ───────────────────────────────────────────────────────────────────
+
+
+@cli.command("config")
+@click.option("--show", is_flag=True, help="Show current configuration")
+@click.option("--init", "do_init", is_flag=True, help="Create example config directory")
+@click.option(
+    "--config",
+    "config_path",
+    default=None,
+    help="Path to models.yaml",
+)
+def config_cmd(show, do_init, config_path):
+    """Show, validate, or initialize configuration."""
+    if do_init:
+        _init_config()
+        return
+
+    if not show:
+        console.print("Use --show to display configuration or --init to create example config.")
+        return
+
+    try:
+        config = load_config(Path(config_path) if config_path else None)
+    except ConfigError as e:
+        console.print(f"[red]Config error:[/red] {e}")
+        sys.exit(1)
+
+    console.print(f"[bold]Config file:[/bold] {config['config_path']}")
+    console.print()
+
+    table = Table(title="Configured Models")
+    table.add_column("Name", style="cyan")
+    table.add_column("Provider")
+    table.add_column("Model ID")
+    table.add_column("Role")
+    table.add_column("Flags")
+    table.add_column("Context Window", justify="right")
+    table.add_column("Timeout", justify="right")
+    table.add_column("API Key", style="green")
+
+    display_models = config.get("all_models", config["models"])
+    for name, m in display_models.items():
+        flags = []
+        if m.deduplication:
+            flags.append("dedup")
+        if m.integration_reviewer:
+            flags.append("integration")
+        active = name in config["models"]
+        key_status = "set" if m.api_key else "[red]MISSING[/red]"
+        if not active:
+            key_status = "[dim]--[/dim]"
+        ctx_str = (
+            f"{m.context_window:,}" if m.context_window else "[dim]unset[/dim]"
+        )
+        style = None if active else "dim"
+        table.add_row(
+            name,
+            m.provider,
+            m.model_id,
+            ", ".join(sorted(m.roles)) or "[dim]--[/dim]",
+            ", ".join(flags) or "[dim]--[/dim]",
+            ctx_str,
+            f"{m.timeout}s",
+            key_status,
+            style=style,
+        )
+    console.print(table)
+
+    # Validate
+    issues = validate_config(config)
+    if issues:
+        console.print()
+        for level, msg in issues:
+            tag = "[red]ERROR[/red]" if level == "error" else "[yellow]WARN[/yellow]"
+            console.print(f"  {tag}: {msg}")
+    else:
+        console.print("\n[green]Configuration is valid.[/green]")
+
+
+def _init_config() -> None:
+    """Create ~/.config/devils-advocate/ with an example models.yaml."""
+    config_dir = Path.home() / ".config" / "devils-advocate"
+    config_file = config_dir / "models.yaml"
+
+    if config_file.exists():
+        console.print(
+            f"[yellow]Config already exists:[/yellow] {config_file}\n"
+            "  Edit it directly or delete it to regenerate."
+        )
+        return
+
+    config_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(config_dir, 0o700)
+
+    example = """\
+# Devil's Advocate configuration
+# API keys must be set via environment variables; do not put secrets in this file.
+
+models:
+  # Author model -- generates responses and revisions
+  claude-sonnet:
+    provider: anthropic
+    model_id: claude-sonnet-4-20250514
+    api_key_env: ANTHROPIC_API_KEY
+    context_window: 200000
+    cost_per_1k_input: 0.003
+    cost_per_1k_output: 0.015
+    timeout: 180
+
+  # Reviewer 1
+  gpt-4o:
+    provider: openai
+    model_id: gpt-4o
+    api_key_env: OPENAI_API_KEY
+    api_base: https://api.openai.com/v1
+    context_window: 128000
+    cost_per_1k_input: 0.005
+    cost_per_1k_output: 0.015
+
+  # Reviewer 2
+  gemini-pro:
+    provider: openai
+    model_id: gemini-2.0-flash
+    api_key_env: GOOGLE_API_KEY
+    api_base: https://generativelanguage.googleapis.com/v1beta/openai
+    context_window: 1000000
+    cost_per_1k_input: 0.0001
+    cost_per_1k_output: 0.0004
+
+  # Dedup / normalization model
+  claude-haiku:
+    provider: anthropic
+    model_id: claude-3-5-haiku-20241022
+    api_key_env: ANTHROPIC_API_KEY
+    context_window: 200000
+    cost_per_1k_input: 0.0008
+    cost_per_1k_output: 0.004
+
+roles:
+  author: claude-sonnet
+  reviewers:
+    - gpt-4o
+    - gemini-pro
+  deduplication: claude-haiku
+  integration_reviewer: gpt-4o
+  # normalization: claude-haiku  # optional; defaults to deduplication model
+"""
+
+    config_file.write_text(example)
+    os.chmod(config_file, 0o600)
+
+    console.print(f"[green]Config created:[/green] {config_file}")
+    console.print("  Edit the file to configure your models and API keys.")
+
+
+# ─── override ─────────────────────────────────────────────────────────────────
+
+
+@cli.command("override")
+@click.option("--project", required=True, help="Project name")
+@click.option(
+    "--review",
+    "review_id",
+    required=True,
+    help="Review ID",
+)
+@click.option(
+    "--point",
+    "point_id",
+    required=True,
+    help="Point or group ID to override",
+)
+@click.option(
+    "--resolution",
+    type=click.Choice(["uphold", "dismiss", "escalate"]),
+    required=True,
+    help=(
+        "uphold: reviewer's finding is valid. "
+        "dismiss: author's position holds. "
+        "escalate: keep flagged for human review."
+    ),
+)
+@click.option(
+    "--config",
+    "config_path",
+    default=None,
+    help="Path to models.yaml",
+)
+@click.option(
+    "--project-dir",
+    "project_dir",
+    default=None,
+    help="Project directory containing .dvad/",
+)
+def override(project, review_id, point_id, resolution, config_path, project_dir):
+    """Resolve an escalated governance decision.
+
+    \b
+    uphold  -- The reviewer was right. The finding is valid and should be addressed.
+    dismiss -- The author was right. The finding does not warrant action.
+    escalate -- Keep flagged for human review (no change).
+    """
+    resolution_map = {
+        "uphold": Resolution.OVERRIDDEN.value,
+        "dismiss": Resolution.AUTO_DISMISSED.value,
+        "escalate": Resolution.ESCALATED.value,
+    }
+    base_dir = Path(project_dir) if project_dir else Path.cwd()
+    storage = StorageManager(base_dir)
+    try:
+        storage.update_point_override(
+            review_id, point_id, resolution_map[resolution]
+        )
+        console.print(f"[green]Override applied:[/green] {point_id} -> {resolution}")
+        console.print(
+            f"  Updated: {storage.reviews_dir / review_id / 'review-ledger.json'}"
+        )
+    except StorageError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)

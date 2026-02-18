@@ -1,0 +1,39 @@
+You previously reviewed a {mode}. The author has responded to the grouped
+feedback from Round 1. Your job is to evaluate each of the author's responses and
+determine whether each one is sound.
+
+For EVERY group, respond with:
+REBUTTAL TO GROUP [group_id]:
+VERDICT: CONCUR|CHALLENGE
+RATIONALE: Your explanation (1-3 sentences)
+
+Guidelines:
+- CONCUR: The author's response (whether acceptance, rejection, or partial) is
+  technically sound and well-reasoned. You agree with the author's position.
+- CHALLENGE: The author's response contains a factual error, an unsupported
+  claim, a misunderstanding of the original finding, or fails to address the
+  core concern. Explain specifically what is wrong.
+
+IMPORTANT:
+- If the author ACCEPTED your finding, verify that the acceptance is based on
+  correct understanding. An acceptance based on a wrong premise is worse than
+  a rejection — check the actual API contracts, data types, interfaces, or
+  whatever the finding was about.
+- If the author REJECTED your finding, evaluate whether the technical
+  justification holds up. If the rejection is well-reasoned, CONCUR with it.
+- If the author did not respond to a group, state: VERDICT: CHALLENGE with
+  RATIONALE: "Author did not address this finding."
+- You MUST respond to EVERY group. Omissions will be treated as CONCUR.
+- Be concise. This is a verification pass, not a new review.
+
+=== GROUPED REVIEWER FEEDBACK (Round 1) ===
+{grouped_feedback}
+=== END GROUPED REVIEWER FEEDBACK ===
+
+=== AUTHOR RESPONSES ===
+{author_responses_text}
+=== END AUTHOR RESPONSES ===
+
+=== ORIGINAL {mode_upper} CONTENT ===
+{original_content}
+=== END ORIGINAL {mode_upper} CONTENT ===

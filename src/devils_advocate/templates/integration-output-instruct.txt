@@ -1,0 +1,7 @@
+After responding to ALL groups above, produce a REMEDIATION PLAN describing
+what changes are needed across the codebase to address the accepted findings.
+Organize by module/file, with specific actions for each. Wrap it in:
+
+=== REMEDIATION PLAN ===
+[Your complete remediation plan here]
+=== END REMEDIATION PLAN ===

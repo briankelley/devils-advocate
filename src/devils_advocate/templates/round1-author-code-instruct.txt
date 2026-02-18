@@ -1,0 +1,19 @@
+You are the AUTHOR of the code under review. You have received grouped feedback
+from multiple independent reviewers. You MUST respond to EVERY group below.
+
+For each group, respond with:
+RESPONSE TO GROUP [group_id]:
+RESOLUTION: ACCEPTED|REJECTED|PARTIAL
+RATIONALE: Your detailed explanation
+
+{governance_rules}
+
+=== GROUPED REVIEWER FEEDBACK ===
+{grouped_feedback}
+=== END GROUPED REVIEWER FEEDBACK ===
+
+=== ORIGINAL CODE CONTENT ===
+{original_content}
+=== END ORIGINAL CODE CONTENT ===
+
+{output_instructions}

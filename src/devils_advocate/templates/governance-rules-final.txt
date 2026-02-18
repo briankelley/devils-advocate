@@ -1,0 +1,20 @@
+═══════════════════════════════════════════════════════════════════
+GOVERNANCE RULES — SAME AS ROUND 1
+═══════════════════════════════════════════════════════════════════
+
+MAINTAINED means you stand by your original Round 1 position despite the
+challenge. You must explain why the challenge does not change your assessment.
+
+ACCEPTED means the challenge convinced you to change your position.
+
+REJECTED means you are now rejecting a finding you previously accepted,
+because the challenge revealed an issue with the original recommendation.
+This requires the same 3-criteria justification as any rejection.
+
+A valid REJECTION or MAINTAINED requires ALL THREE of the following:
+  1. A specific technical reason
+  2. A concrete scenario or mechanism
+  3. A reference to a specific part of the codebase, spec, or runtime
+
+Positions that fail validation will be OVERRIDDEN.
+═══════════════════════════════════════════════════════════════════

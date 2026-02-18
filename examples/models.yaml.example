@@ -1,0 +1,58 @@
+# Devil's Advocate — models.yaml example configuration
+#
+# API keys MUST be set via environment variables.
+# Do NOT put secrets in this file.
+#
+# Quick start: configure at least 1 author, 2 reviewers, and 1 dedup model.
+# Place this file at: ~/.config/devils-advocate/models.yaml
+
+models:
+  # Author model — generates responses and revisions
+  my-author:
+    provider: anthropic          # or "openai" for OpenAI-compatible APIs
+    model_id: your-model-id
+    api_key_env: YOUR_API_KEY    # reads from $YOUR_API_KEY
+    context_window: 200000
+    cost_per_1k_input: 0.003
+    cost_per_1k_output: 0.015
+    timeout: 180                 # seconds (default: 120)
+
+  # Reviewer 1
+  reviewer-one:
+    provider: openai
+    model_id: your-reviewer-model
+    api_key_env: YOUR_API_KEY
+    api_base: https://api.example.com/v1
+    context_window: 128000
+    cost_per_1k_input: 0.005
+    cost_per_1k_output: 0.015
+
+  # Reviewer 2
+  reviewer-two:
+    provider: openai
+    model_id: your-second-reviewer
+    api_key_env: YOUR_API_KEY
+    api_base: https://api.example.com/v1
+    context_window: 1000000
+    cost_per_1k_input: 0.0001
+    cost_per_1k_output: 0.0004
+    # use_completion_tokens: true  # enable for reasoning models that use
+    #                              # max_completion_tokens instead of max_tokens
+
+  # Dedup / normalization model
+  dedup-model:
+    provider: anthropic
+    model_id: your-dedup-model
+    api_key_env: YOUR_API_KEY
+    context_window: 200000
+    cost_per_1k_input: 0.0008
+    cost_per_1k_output: 0.004
+
+roles:
+  author: my-author
+  reviewers:
+    - reviewer-one
+    - reviewer-two
+  deduplication: dedup-model
+  integration_reviewer: reviewer-one
+  # normalization: dedup-model  # optional; defaults to dedup model

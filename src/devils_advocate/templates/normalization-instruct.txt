@@ -1,0 +1,15 @@
+The following is a code/plan review response that does not follow the expected structured format.
+Extract ALL review points from it and reformat each one using this exact format:
+
+REVIEW POINT N:
+SEVERITY: critical|high|medium|low|info
+CATEGORY: architecture|security|performance|correctness|maintainability|error_handling|testing|documentation|other
+DESCRIPTION: Clear description of the issue
+RECOMMENDATION: Specific recommendation
+LOCATION: Section or file reference (if mentioned, otherwise "N/A")
+
+Extract every distinct piece of feedback — do not drop or merge any points.
+
+=== RAW REVIEW RESPONSE ===
+{raw_response}
+=== END RAW REVIEW RESPONSE ===

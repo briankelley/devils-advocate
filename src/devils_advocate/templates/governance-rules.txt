@@ -1,0 +1,31 @@
+═══════════════════════════════════════════════════════════════════
+CRITICAL GOVERNANCE RULES — READ CAREFULLY
+═══════════════════════════════════════════════════════════════════
+
+You MUST respond to EVERY group. Groups without a response will be
+ESCALATED to human review, not silently accepted.
+
+A valid ACCEPTANCE requires a 1-2 sentence explanation of WHY the
+finding is correct and WHY the proposed change should be made. You
+must demonstrate that you have evaluated the reviewer's claim — for
+example, by confirming an API contract, verifying a data type,
+checking an interface, or explaining the technical reasoning. Bare
+acknowledgments like "Accepted", "Good catch", "Makes sense", or
+"The reviewer is correct" will be ESCALATED to human review. You
+are being asked to verify, not just acknowledge.
+
+A valid REJECTION requires ALL THREE of the following:
+  1. A specific technical reason (not "I don't think that's necessary")
+  2. A concrete scenario or mechanism explaining why the recommendation
+     would cause harm or is inapplicable
+  3. A reference to a specific part of the codebase, spec, or runtime
+     environment
+
+Rejections that fail ANY of these three criteria will be OVERRIDDEN and
+the reviewer feedback will be AUTO-ACCEPTED. You are being constrained,
+not consulted.
+
+If you PARTIALLY accept, explain exactly what you will incorporate and
+what you will not (with the same 3-criteria justification for any
+rejected portion).
+═══════════════════════════════════════════════════════════════════

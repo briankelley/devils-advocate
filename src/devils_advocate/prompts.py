@@ -1,1 +1,190 @@
-# Stub — populated in Phase 2
+"""Prompt template loading and builder functions.
+
+Templates are package data files under ``devils_advocate/templates/*.txt``,
+loaded via :mod:`importlib.resources` so no filesystem path assumptions are
+needed.
+"""
+
+from __future__ import annotations
+
+import importlib.resources
+
+from .types import AdvocateError
+
+# ─── Constants ────────────────────────────────────────────────────────────────
+
+CONTENT_START = "=== FILE CONTENT ==="
+CONTENT_END = "=== END FILE CONTENT ==="
+
+# ─── Template Loader ─────────────────────────────────────────────────────────
+
+_reviewer_system_cache: str | None = None
+
+
+def load_template(name: str, **kwargs: str) -> str:
+    """Load a template from package data and apply str.format() substitution.
+
+    Raises :class:`~devils_advocate.types.AdvocateError` if the template file
+    is missing or a required variable is undefined.
+    """
+    templates = importlib.resources.files("devils_advocate.templates")
+    resource = templates.joinpath(name)
+    try:
+        raw = resource.read_text(encoding="utf-8")
+    except (FileNotFoundError, TypeError, OSError) as exc:
+        raise AdvocateError(f"Template not found: {name}") from exc
+    try:
+        return raw.format(**kwargs) if kwargs else raw
+    except KeyError as exc:
+        raise AdvocateError(f"Template '{name}' missing variable: {exc}") from exc
+
+
+# ─── Prompt Builders ─────────────────────────────────────────────────────────
+
+
+def get_reviewer_system_prompt() -> str:
+    """Lazy-loaded reviewer system prompt from template."""
+    global _reviewer_system_cache
+    if _reviewer_system_cache is None:
+        _reviewer_system_cache = load_template("reviewer-system.txt")
+    return _reviewer_system_cache
+
+
+def _load_governance_block() -> str:
+    """Load Round 1 governance rules from template."""
+    return load_template("governance-rules.txt")
+
+
+def _load_governance_final_block() -> str:
+    """Load final round governance rules from template."""
+    return load_template("governance-rules-final.txt")
+
+
+def build_review_prompt(
+    mode: str,
+    content: str,
+    spec: str | None = None,
+) -> str:
+    """Build the Round 1 reviewer instruction prompt."""
+    mode_label = "PLAN" if mode == "plan" else "CODE"
+    spec_line = (
+        "Include whether the code correctly implements the specification." if spec else ""
+    )
+    spec_block = (
+        f"\n\n=== SPECIFICATION ===\n{spec}\n=== END SPECIFICATION ===" if spec else ""
+    )
+    return load_template(
+        "round1-reviewer-instruct.txt",
+        mode_label=mode_label,
+        content=content,
+        spec_line=spec_line,
+        spec_block=spec_block,
+    )
+
+
+def build_round1_author_prompt(
+    mode: str,
+    original_content: str,
+    grouped_feedback: str,
+) -> str:
+    """Build the Round 1 author response prompt.
+
+    Renamed from the monolith's ``build_round2_prompt`` to eliminate naming
+    confusion with the actual Round 2 exchange.
+    """
+    if mode == "plan":
+        output_instructions = load_template("plan-output-instruct.txt")
+        template = "round1-author-plan-instruct.txt"
+    elif mode == "integration":
+        output_instructions = load_template("integration-output-instruct.txt")
+        # Integration mode uses the code author template structure
+        template = "round1-author-code-instruct.txt"
+    else:
+        output_instructions = load_template("code-output-instruct.txt")
+        template = "round1-author-code-instruct.txt"
+    return load_template(
+        template,
+        governance_rules=_load_governance_block(),
+        grouped_feedback=grouped_feedback,
+        original_content=original_content,
+        output_instructions=output_instructions,
+    )
+
+
+# Backwards-compat alias — remove before Phase 4 completion
+build_round2_prompt = build_round1_author_prompt
+
+
+def build_reviewer_rebuttal_prompt(
+    mode: str,
+    original_content: str,
+    grouped_feedback: str,
+    author_responses_text: str,
+) -> str:
+    """Build the Round 2 rebuttal prompt for reviewers."""
+    return load_template(
+        "round2-reviewer-rebuttal-instruct.txt",
+        mode=mode,
+        mode_upper=mode.upper(),
+        original_content=original_content,
+        grouped_feedback=grouped_feedback,
+        author_responses_text=author_responses_text,
+    )
+
+
+def build_author_final_prompt(
+    mode: str,
+    original_content: str,
+    challenged_groups_text: str,
+) -> str:
+    """Build the author's final response prompt for challenged groups only."""
+    if mode == "plan":
+        output_instructions = load_template("plan-output-final-instruct.txt")
+        template = "round2-author-final-plan-instruct.txt"
+    else:
+        output_instructions = load_template("code-output-final-instruct.txt")
+        template = "round2-author-final-code-instruct.txt"
+    return load_template(
+        template,
+        governance_rules_final=_load_governance_final_block(),
+        challenged_groups_text=challenged_groups_text,
+        original_content=original_content,
+        output_instructions=output_instructions,
+    )
+
+
+def build_dedup_prompt(formatted_points: str) -> str:
+    """Build the deduplication instruction prompt."""
+    return load_template("dedup-instruct.txt", formatted_points=formatted_points)
+
+
+def build_normalization_prompt(raw_response: str) -> str:
+    """Build the response normalization instruction prompt."""
+    return load_template("normalization-instruct.txt", raw_response=raw_response)
+
+
+def build_integration_prompt(files_content: str, spec: str) -> str:
+    """Build the integration reviewer instruction prompt."""
+    return load_template(
+        "integration-reviewer-instruct.txt",
+        files_content=files_content,
+        spec=spec,
+    )
+
+
+def build_revised_plan_followup_prompt(author_raw: str, original_content: str) -> str:
+    """Build the follow-up prompt when the author omitted the revised plan."""
+    return load_template(
+        "plan-revised-followup-instruct.txt",
+        author_raw=author_raw,
+        original_content=original_content,
+    )
+
+
+def build_revised_diff_followup_prompt(author_raw: str, original_content: str) -> str:
+    """Build the follow-up prompt when the author omitted the unified diff."""
+    return load_template(
+        "code-revised-followup-instruct.txt",
+        author_raw=author_raw,
+        original_content=original_content,
+    )

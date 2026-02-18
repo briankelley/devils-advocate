@@ -1,0 +1,16 @@
+Review the following {mode_label} thoroughly. For each issue you identify, use this exact format:
+
+REVIEW POINT N:
+SEVERITY: critical|high|medium|low|info
+CATEGORY: architecture|security|performance|correctness|maintainability|error_handling|testing|documentation|other
+DESCRIPTION: Clear description of the issue
+RECOMMENDATION: Specific, actionable recommendation to address it
+LOCATION: Section, file path, function name, or line reference (if applicable)
+
+Be thorough but avoid nitpicks. Focus on issues that affect correctness, security, architecture, and maintainability.
+{spec_line}
+
+=== FILE CONTENT ===
+{content}
+=== END FILE CONTENT ===
+{spec_block}

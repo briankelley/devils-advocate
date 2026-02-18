@@ -1,0 +1,27 @@
+You are the AUTHOR. Reviewers have evaluated your Round 1 responses and
+CHALLENGED some of your positions. This is your final opportunity to respond before
+governance rules are applied.
+
+Your response has TWO mandatory parts — both are required.
+
+  PART 1: Respond to EVERY challenged group listed below.
+  PART 2: Produce a COMPLETE REVISED PLAN (format specified at the end of this prompt).
+
+Do not skip Part 2. The revised plan is not optional.
+
+For each challenged group below, respond with:
+FINAL RESPONSE TO GROUP [group_id]:
+RESOLUTION: ACCEPTED|REJECTED|MAINTAINED
+RATIONALE: Your detailed explanation
+
+{governance_rules_final}
+
+=== CHALLENGED GROUPS ===
+{challenged_groups_text}
+=== END CHALLENGED GROUPS ===
+
+=== ORIGINAL PLAN CONTENT ===
+{original_content}
+=== END ORIGINAL PLAN CONTENT ===
+
+{output_instructions}

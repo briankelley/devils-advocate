@@ -1,0 +1,20 @@
+You are the AUTHOR. Reviewers have evaluated your Round 1 responses and
+CHALLENGED some of your positions. This is your final opportunity to respond before
+governance rules are applied.
+
+For each challenged group below, respond with:
+FINAL RESPONSE TO GROUP [group_id]:
+RESOLUTION: ACCEPTED|REJECTED|MAINTAINED
+RATIONALE: Your detailed explanation
+
+{governance_rules_final}
+
+=== CHALLENGED GROUPS ===
+{challenged_groups_text}
+=== END CHALLENGED GROUPS ===
+
+=== ORIGINAL CODE CONTENT ===
+{original_content}
+=== END ORIGINAL CODE CONTENT ===
+
+{output_instructions}
