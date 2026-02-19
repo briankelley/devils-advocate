@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Config — dvad{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Configuration</h1>
+</div>
+
+<div class="config-meta">
+    <span class="dim">Config file:</span> <span class="mono">{{ config_file }}</span>
+</div>
+
+<div class="tab-bar">
+    <button class="tab-btn active" data-tab="structured" onclick="dvad.switchTab('structured')">Structured</button>
+    <button class="tab-btn" data-tab="raw" onclick="dvad.switchTab('raw')">Raw YAML</button>
+</div>
+
+{# ── Structured Tab ─────────────────────────────────────────────────── #}
+<div class="tab-content" id="tab-structured">
+    <div class="config-layout">
+        <div class="config-panel">
+            <h2>Models</h2>
+            {% if config and all_models %}
+            {% for name, m in all_models.items() %}
+            <div class="model-card">
+                <div class="model-header">
+                    <span class="model-name">{{ name }}</span>
+                </div>
+                <div class="model-fields">
+                    <div class="field-row">
+                        <span class="field-label">provider:</span>
+                        <span>{{ m.provider }}</span>
+                    </div>
+                    <div class="field-row">
+                        <span class="field-label">model_id:</span>
+                        <span class="mono">{{ m.model_id }}</span>
+                    </div>
+                    <div class="field-row">
+                        <span class="field-label">api_key_env:</span>
+                        <span class="mono">{{ m.api_key_env }}</span>
+                        {% if m.api_key %}
+                        <span class="key-status key-set">set</span>
+                        {% else %}
+                        <span class="key-status key-missing">MISSING</span>
+                        {% endif %}
+                    </div>
+                    {% if m.api_base %}
+                    <div class="field-row">
+                        <span class="field-label">api_base:</span>
+                        <span class="mono truncate">{{ m.api_base }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="field-row">
+                        <span class="field-label">context:</span>
+                        <span>{{ "{:,}".format(m.context_window) if m.context_window else 'unset' }}</span>
+                        <span class="field-label" style="margin-left:12px">timeout:</span>
+                        <span>{{ m.timeout }}s</span>
+                    </div>
+                    <div class="field-row">
+                        <span class="field-label">cost in:</span>
+                        <span>{{ m.cost_per_1k_input if m.cost_per_1k_input is not none else 'unset' }}</span>
+                        <span class="field-label" style="margin-left:12px">cost out:</span>
+                        <span>{{ m.cost_per_1k_output if m.cost_per_1k_output is not none else 'unset' }}</span>
+                        <span class="dim">per 1K tokens</span>
+                    </div>
+                    {% if m.use_completion_tokens %}
+                    <div class="field-row">
+                        <span class="dim">use_completion_tokens: true</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p class="dim">No models configured.</p>
+            {% endif %}
+        </div>
+
+        <div class="config-panel">
+            <h2>Role Assignment</h2>
+            {% if roles %}
+            <div class="roles-list">
+                <div class="role-row">
+                    <span class="role-label">Author:</span>
+                    <span class="mono">{{ roles.get('author', '—') }}</span>
+                </div>
+                <div class="role-row">
+                    <span class="role-label">Reviewers:</span>
+                    <span class="mono">{{ roles.get('reviewers', [])|join(', ') }}</span>
+                </div>
+                <div class="role-row">
+                    <span class="role-label">Deduplication:</span>
+                    <span class="mono">{{ roles.get('deduplication', '—') }}</span>
+                </div>
+                <div class="role-row">
+                    <span class="role-label">Integration Reviewer:</span>
+                    <span class="mono">{{ roles.get('integration_reviewer', '—') }}</span>
+                </div>
+                <div class="role-row">
+                    <span class="role-label">Normalization:</span>
+                    <span class="mono">{{ roles.get('normalization', '—') or '(defaults to dedup)' }}</span>
+                </div>
+                <div class="role-row">
+                    <span class="role-label">Revision:</span>
+                    <span class="mono">{{ roles.get('revision', '—') or '(defaults to author)' }}</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="validation-result" id="validation-result">
+                {% if issues %}
+                {% for level, msg in issues %}
+                <div class="issue issue-{{ level }}">{{ level|upper }}: {{ msg }}</div>
+                {% endfor %}
+                {% else %}
+                <div class="issue issue-ok">Configuration is valid.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Raw YAML Tab ───────────────────────────────────────────────────── #}
+<div class="tab-content" id="tab-raw" style="display:none">
+    <textarea id="yaml-editor" class="yaml-editor" spellcheck="false">{{ raw_yaml }}</textarea>
+    <div class="yaml-actions">
+        <button class="btn" onclick="dvad.validateYaml()">Validate</button>
+        <button class="btn btn-accent" onclick="dvad.saveYaml()">Save</button>
+    </div>
+    <div id="yaml-result" class="yaml-result"></div>
+</div>
+
+{% endblock %}

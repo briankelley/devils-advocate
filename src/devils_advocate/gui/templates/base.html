@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Devil's Advocate{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+</head>
+<body>
+    <nav class="topnav">
+        <a href="/" class="nav-brand">dvad</a>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/review/new">New Review</a>
+            <a href="/config">Config</a>
+        </div>
+    </nav>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    <script src="/static/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

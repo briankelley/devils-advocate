@@ -603,3 +603,54 @@ def revise(project, review_id, config_path, project_dir, max_cost, input_overrid
         storage.log(f"Revision command failed (non-fatal): {e}")
     finally:
         loop.close()
+
+
+# ─── gui ──────────────────────────────────────────────────────────────────
+
+
+@cli.command("gui")
+@click.option("--port", default=8411, help="Port to listen on")
+@click.option("--host", default="127.0.0.1", help="Host to bind to")
+@click.option("--config", "config_path", default=None, help="Path to models.yaml")
+@click.option(
+    "--allow-nonlocal",
+    is_flag=True,
+    default=False,
+    help="Allow binding to non-localhost interfaces (unsafe; requires token header for POST).",
+)
+def gui_cmd(port, host, config_path, allow_nonlocal):
+    """Launch the Devil's Advocate web GUI."""
+    try:
+        from .gui import create_app
+    except ImportError:
+        console.print("[red]Error:[/red] GUI dependencies not installed.")
+        console.print("  Install with: pip install -e '.[gui]'")
+        sys.exit(1)
+
+    # Preflight port bind for clean UX
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind((host, port))
+    except OSError:
+        console.print(f"[red]Error:[/red] Port {port} is already in use.")
+        console.print(f"  Try: dvad gui --port {port + 1}")
+        sys.exit(1)
+    finally:
+        try:
+            s.close()
+        except Exception:
+            pass
+
+    if host != "127.0.0.1" and not allow_nonlocal:
+        console.print("[red]Refusing to bind to non-localhost without --allow-nonlocal.[/red]")
+        console.print("  This GUI has mutating endpoints and is intended for local use only.")
+        sys.exit(1)
+
+    if host != "127.0.0.1":
+        console.print("[yellow]Warning:[/yellow] Binding to a non-local interface exposes review/config endpoints.")
+        console.print("  This tool is intended for local-only use. Ensure you understand the risks.")
+
+    import uvicorn
+    app = create_app(config_path=config_path)
+    uvicorn.run(app, host=host, port=port, log_level="warning")

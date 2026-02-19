@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Review {{ review_id[:20] }} — dvad{% endblock %}
+{% block content %}
+
+{% if status == 'running' %}
+{# ── Progress View ───────────────────────────────────────────────────── #}
+<div class="page-header">
+    <h1>Review In Progress</h1>
+    <span class="badge badge-running">Running</span>
+</div>
+<div class="progress-container">
+    <div class="review-meta">
+        <span class="mono">{{ review_id }}</span>
+    </div>
+    <div class="progress-phases" id="progress-phases">
+        <div class="phase-item" data-phase="round1_calling">
+            <span class="phase-dot" id="dot-round1">&#9675;</span> Round 1: Reviewers
+            <span id="round1-detail" class="phase-detail"></span>
+        </div>
+        <div class="phase-item" data-phase="round1_author">
+            <span class="phase-dot" id="dot-author">&#9675;</span> Round 1: Author Response
+        </div>
+        <div class="phase-item" data-phase="round2">
+            <span class="phase-dot" id="dot-round2">&#9675;</span> Round 2 / Rebuttals
+        </div>
+        <div class="phase-item" data-phase="governance">
+            <span class="phase-dot" id="dot-governance">&#9675;</span> Governance / Output
+        </div>
+    </div>
+    <div class="log-container">
+        <div class="log-header">Log</div>
+        <div class="log-output" id="log-output"></div>
+    </div>
+</div>
+
+{% else %}
+{# ── Detail View ─────────────────────────────────────────────────────── #}
+{% if ledger %}
+<div class="page-header">
+    <h1>
+        {{ ledger.get('project', '—') }}
+        <span class="dim">|</span>
+        {{ ledger.get('mode', '—') }} review
+        <span class="dim">|</span>
+        <span class="mono">{{ review_id[:20] }}</span>
+    </h1>
+    <span class="cost-badge">${{ "%.4f"|format(ledger.get('cost', {}).get('total_usd', 0)) }}</span>
+</div>
+
+<div class="review-meta">
+    Models:
+    author={{ ledger.get('author_model', '—') }}
+    reviewers={{ ledger.get('reviewer_models', [])|join(', ') }}
+    dedup={{ ledger.get('dedup_model', '—') }}
+</div>
+
+{# Summary Strip #}
+<div class="summary-strip">
+    <span class="summary-tag tag-accepted">Auto-Accepted: {{ auto_accepted|length }}</span>
+    <span class="summary-tag tag-dismissed">Auto-Dismissed: {{ auto_dismissed|length }}</span>
+    <span class="summary-tag tag-escalated">Escalated: {{ escalated|length }}</span>
+    <span class="summary-tag tag-overridden">Overridden: {{ overridden|length }}</span>
+</div>
+
+{# Escalated Items #}
+{% if escalated %}
+<section class="review-section">
+    <h2>Escalated Items</h2>
+    {% for g in escalated %}
+    <div class="group-card card-escalated" id="group-{{ g.group_id }}" data-group-id="{{ g.group_id }}">
+        <div class="card-header">
+            <span class="mono group-id">{{ g.group_id }}</span>
+            <span class="badge badge-{{ g.severity }}">{{ g.severity|upper }}</span>
+            <span class="badge badge-cat">{{ g.category }}</span>
+            <span class="dim">{{ g.source_reviewers|length }} reviewer{{ 's' if g.source_reviewers|length != 1 }}</span>
+        </div>
+        <div class="card-concern">{{ g.concern }}</div>
+
+        <details class="expand-section">
+            <summary>Reviewer Feedback</summary>
+            <div class="expand-content">
+                {% for p in g.points %}
+                <div class="point-item">
+                    <span class="reviewer-name">[{{ p.reviewer }}]</span>
+                    {{ p.description }}
+                    {% if p.recommendation %}
+                    <div class="recommendation">Recommendation: {{ p.recommendation }}</div>
+                    {% endif %}
+                    {% if p.location %}
+                    <div class="location">Location: {{ p.location }}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+
+        {% if g.author_resolution %}
+        <details class="expand-section">
+            <summary>Author Response (Round 1): {{ g.author_resolution }}</summary>
+            <div class="expand-content">{{ g.author_rationale }}</div>
+        </details>
+        {% endif %}
+
+        {% if g.rebuttals %}
+        <details class="expand-section">
+            <summary>Reviewer Rebuttals (Round 2)</summary>
+            <div class="expand-content">
+                {% for rb in g.rebuttals %}
+                <div class="rebuttal-item">
+                    <span class="reviewer-name">[{{ rb.reviewer }}]</span>
+                    <span class="badge badge-{{ rb.verdict|lower }}">{{ rb.verdict }}</span>
+                    {{ rb.rationale }}
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
+
+        {% if g.author_final_resolution %}
+        <details class="expand-section">
+            <summary>Author Final Response: {{ g.author_final_resolution }}</summary>
+            <div class="expand-content">{{ g.author_final_rationale }}</div>
+        </details>
+        {% endif %}
+
+        {% if g.governance_reason %}
+        <details class="expand-section">
+            <summary>Governance: {{ g.governance_resolution }}</summary>
+            <div class="expand-content">{{ g.governance_reason }}</div>
+        </details>
+        {% endif %}
+
+        <div class="card-actions">
+            <button class="btn btn-sm btn-green override-btn" data-action="overridden" data-group="{{ g.group_id }}">Uphold</button>
+            <button class="btn btn-sm btn-dim override-btn" data-action="auto_dismissed" data-group="{{ g.group_id }}">Dismiss</button>
+            <button class="btn btn-sm override-btn" data-action="escalated" data-group="{{ g.group_id }}">Keep Escalated</button>
+        </div>
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
+
+{# Other Groups #}
+{% if auto_accepted %}
+<section class="review-section">
+    <details>
+        <summary class="section-toggle">Auto-Accepted Groups ({{ auto_accepted|length }})</summary>
+        {% for g in auto_accepted %}
+        <div class="group-card card-accepted">
+            <div class="card-header">
+                <span class="mono group-id">{{ g.group_id }}</span>
+                <span class="badge badge-{{ g.severity }}">{{ g.severity|upper }}</span>
+                <span class="badge badge-cat">{{ g.category }}</span>
+            </div>
+            <div class="card-concern">{{ g.concern }}</div>
+            <details class="expand-section">
+                <summary>Details</summary>
+                <div class="expand-content">
+                    {% for p in g.points %}
+                    <div class="point-item">
+                        <span class="reviewer-name">[{{ p.reviewer }}]</span>
+                        {{ p.description }}
+                        {% if p.recommendation %}
+                        <div class="recommendation">Recommendation: {{ p.recommendation }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    {% if g.author_rationale %}
+                    <div class="author-response">Author: {{ g.author_rationale }}</div>
+                    {% endif %}
+                </div>
+            </details>
+        </div>
+        {% endfor %}
+    </details>
+</section>
+{% endif %}
+
+{% if auto_dismissed %}
+<section class="review-section">
+    <details>
+        <summary class="section-toggle">Auto-Dismissed Groups ({{ auto_dismissed|length }})</summary>
+        {% for g in auto_dismissed %}
+        <div class="group-card card-dismissed">
+            <div class="card-header">
+                <span class="mono group-id">{{ g.group_id }}</span>
+                <span class="dim">{{ g.concern }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </details>
+</section>
+{% endif %}
+
+{% if overridden %}
+<section class="review-section">
+    <details>
+        <summary class="section-toggle">Overridden Groups ({{ overridden|length }})</summary>
+        {% for g in overridden %}
+        <div class="group-card card-overridden">
+            <div class="card-header">
+                <span class="mono group-id">{{ g.group_id }}</span>
+                <span class="badge badge-{{ g.severity }}">{{ g.severity|upper }}</span>
+                <span class="badge badge-cat">{{ g.category }}</span>
+            </div>
+            <div class="card-concern">{{ g.concern }}</div>
+        </div>
+        {% endfor %}
+    </details>
+</section>
+{% endif %}
+
+{# Footer Actions #}
+<div class="footer-actions">
+    {% if has_original %}
+    <button class="btn btn-accent" id="revise-btn" onclick="dvad.startRevision('{{ review_id }}')">Generate Revision</button>
+    {% else %}
+    <button class="btn btn-disabled" disabled title="original_content.txt not found">Generate Revision</button>
+    {% endif %}
+    {% if has_report %}
+    <a href="/api/review/{{ review_id }}/report" class="btn">Download Report</a>
+    {% endif %}
+    <a href="/api/review/{{ review_id }}" class="btn" target="_blank">Download Ledger</a>
+    {% if has_revised %}
+    <a href="/api/review/{{ review_id }}/revised" class="btn btn-green">Download Revised</a>
+    {% endif %}
+</div>
+
+{# Revision Output Area #}
+<div id="revision-output" class="revision-output" style="display:none">
+    <h3>Revised Artifact</h3>
+    <div class="revision-actions">
+        <button class="btn btn-sm" onclick="dvad.copyRevision()">Copy</button>
+    </div>
+    <pre class="revision-content" id="revision-content"></pre>
+    <div class="revision-cost" id="revision-cost"></div>
+</div>
+
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if status == 'running' %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    dvad.connectSSE('{{ review_id }}');
+});
+</script>
+{% endif %}
+{% endblock %}

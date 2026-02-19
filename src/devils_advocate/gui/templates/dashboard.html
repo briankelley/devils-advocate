@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — dvad{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Reviews <span class="dim">({{ total }})</span></h1>
+    <a href="/review/new" class="btn btn-accent">New Review</a>
+</div>
+
+<div class="filter-bar">
+    <input type="text" id="project-filter" placeholder="Filter by project..." class="input-sm">
+</div>
+
+<table class="data-table" id="reviews-table">
+    <thead>
+        <tr>
+            <th>Review ID</th>
+            <th>Project</th>
+            <th>Mode</th>
+            <th>Input</th>
+            <th>Date</th>
+            <th class="num">Points</th>
+            <th class="num">Groups</th>
+            <th class="num">Escalated</th>
+            <th class="num">Cost</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in reviews %}
+        <tr class="clickable-row" data-href="/review/{{ r.review_id }}">
+            <td class="mono">{{ r.review_id[:20] }}</td>
+            <td>{{ r.get('project', '—') }}</td>
+            <td>{{ r.mode }}</td>
+            <td class="truncate" title="{{ r.input_file }}">{{ r.input_file|string|truncate(35) }}</td>
+            <td class="mono">{{ r.timestamp|string|truncate(19) }}</td>
+            <td class="num">{{ r.total_points }}</td>
+            <td class="num">{{ r.get('total_groups', '—') }}</td>
+            <td class="num">{{ r.get('escalated', '—') }}</td>
+            <td class="num">${{ "%.4f"|format(r.total_cost) }}</td>
+        </tr>
+        {% endfor %}
+        {% if not reviews %}
+        <tr><td colspan="9" class="empty-state">No reviews found.</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="/?page={{ page - 1 }}" class="btn btn-sm">&laquo; Prev</a>
+    {% endif %}
+    <span class="dim">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="/?page={{ page + 1 }}" class="btn btn-sm">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

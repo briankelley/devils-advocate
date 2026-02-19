@@ -299,12 +299,16 @@ class StorageManager:
             if ledger_path.exists():
                 try:
                     data = json.loads(ledger_path.read_text())
+                    summary = data.get("summary", {})
                     reviews.append({
                         "review_id": data.get("review_id", d.name),
+                        "project": data.get("project", ""),
                         "mode": data.get("mode", "?"),
                         "input_file": data.get("input_file", "?"),
                         "timestamp": data.get("timestamp", "?"),
-                        "total_points": data.get("summary", {}).get("total_points", 0),
+                        "total_points": summary.get("total_points", 0),
+                        "total_groups": summary.get("total_groups", 0),
+                        "escalated": summary.get("escalated", 0),
                         "total_cost": data.get("cost", {}).get("total_usd", 0),
                     })
                 except json.JSONDecodeError:
