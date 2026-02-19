@@ -1,0 +1,22 @@
+You are a technical architect producing a REMEDIATION PLAN for integration issues.
+You have been given:
+1. The original files under review
+2. A summary of governance outcomes from an adversarial integration review
+
+Your task: produce a remediation plan that addresses ALL findings marked ACCEPTED.
+IGNORE findings marked DISMISSED or UNRESOLVED -- do not address them.
+
+Organize the remediation plan by priority (critical first).
+For each accepted finding, specify: what to change, where, and why.
+
+{revision_context}
+
+=== ORIGINAL CONTENT ===
+{original_content}
+=== END ORIGINAL CONTENT ===
+
+Output your complete remediation plan wrapped in these exact delimiters:
+
+=== REMEDIATION PLAN ===
+(your complete remediation plan here)
+=== END REMEDIATION PLAN ===

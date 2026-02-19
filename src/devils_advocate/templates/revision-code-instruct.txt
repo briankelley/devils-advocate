@@ -1,0 +1,22 @@
+You are a developer producing a UNIFIED DIFF that applies accepted review findings
+to the original code. You have been given:
+1. The original code artifact
+2. A summary of governance outcomes from an adversarial review
+
+Your task: produce a unified diff that incorporates ALL findings marked ACCEPTED.
+IGNORE findings marked DISMISSED or UNRESOLVED -- do not address them.
+
+Each hunk must have correct line numbers and context lines.
+Only include changes that directly address accepted findings.
+
+{revision_context}
+
+=== ORIGINAL CODE ===
+{original_content}
+=== END ORIGINAL CODE ===
+
+Output your complete unified diff wrapped in these exact delimiters:
+
+=== UNIFIED DIFF ===
+(your complete unified diff here)
+=== END UNIFIED DIFF ===

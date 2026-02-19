@@ -35,8 +35,9 @@ from ..ids import assign_guids, generate_review_id
 from ..cost import check_context_window, estimate_cost, estimate_tokens
 from ..config import get_models_by_role
 from ..providers import (
-    AUTHOR_MAX_OUTPUT_TOKENS,
+    AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
     MAX_OUTPUT_TOKENS,
+    REVISION_MAX_OUTPUT_TOKENS,
     call_with_retry,
 )
 from ..prompts import (
@@ -44,13 +45,10 @@ from ..prompts import (
     build_integration_prompt,
     build_review_prompt,
     build_reviewer_rebuttal_prompt,
-    build_revised_diff_followup_prompt,
-    build_revised_plan_followup_prompt,
     build_round1_author_prompt,
     get_reviewer_system_prompt,
 )
 from ..parser import (
-    extract_revised_output,
     parse_author_final_response,
     parse_author_response,
     parse_rebuttal_response,
@@ -210,6 +208,7 @@ def _estimate_total_cost(
     author: ModelConfig,
     reviewers: list[ModelConfig],
     dedup: ModelConfig,
+    revision_model: ModelConfig | None = None,
 ) -> float:
     """Rough cost estimate covering both rounds of the review protocol."""
     input_tokens = estimate_tokens(content)
@@ -221,12 +220,15 @@ def _estimate_total_cost(
     # Dedup
     total += estimate_cost(dedup, input_tokens, est_output // 2)
     # Round 1 author response
-    total += estimate_cost(author, input_tokens * 2, AUTHOR_MAX_OUTPUT_TOKENS)
+    total += estimate_cost(author, input_tokens * 2, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS)
     # Round 2: reviewer rebuttal (same reviewers, similar input size)
     for r in reviewers:
         total += estimate_cost(r, input_tokens * 2, MAX_OUTPUT_TOKENS)
     # Round 2: author final response (estimated -- only triggered if challenges)
-    total += estimate_cost(author, input_tokens * 2, AUTHOR_MAX_OUTPUT_TOKENS // 2)
+    total += estimate_cost(author, input_tokens * 2, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS // 2)
+    # Revision (post-governance)
+    rev = revision_model or author
+    total += estimate_cost(rev, input_tokens * 2, REVISION_MAX_OUTPUT_TOKENS)
     return total
 
 
@@ -237,6 +239,7 @@ def _print_dry_run(
     reviewers: list[ModelConfig],
     dedup: ModelConfig,
     max_cost: float | None,
+    revision_model: ModelConfig | None = None,
 ) -> None:
     """Print a dry-run summary table without making API calls."""
     console.print(
@@ -284,12 +287,12 @@ def _print_dry_run(
     )
 
     r2_in = input_tokens * 2
-    cost_a = estimate_cost(author, r2_in, AUTHOR_MAX_OUTPUT_TOKENS)
+    cost_a = estimate_cost(author, r2_in, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS)
     table.add_row(
         "Round 1 (author response)",
         author.name,
         str(r2_in),
-        str(AUTHOR_MAX_OUTPUT_TOKENS),
+        str(AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS),
         f"${cost_a:.4f}",
     )
 
@@ -305,18 +308,29 @@ def _print_dry_run(
         )
 
     # Round 2: author final (if challenges)
-    cost_af = estimate_cost(author, r2_in, AUTHOR_MAX_OUTPUT_TOKENS // 2)
+    cost_af = estimate_cost(author, r2_in, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS // 2)
     table.add_row(
         "Round 2 (author final, if challenges)",
         author.name,
         str(r2_in),
-        str(AUTHOR_MAX_OUTPUT_TOKENS // 2),
+        str(AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS // 2),
         f"${cost_af:.4f}",
+    )
+
+    # Revision (post-governance)
+    rev = revision_model or author
+    cost_rev = estimate_cost(rev, r2_in, REVISION_MAX_OUTPUT_TOKENS)
+    table.add_row(
+        "Revision (post-governance)",
+        rev.name,
+        str(r2_in),
+        str(REVISION_MAX_OUTPUT_TOKENS),
+        f"${cost_rev:.4f}",
     )
 
     console.print(table)
 
-    total = _estimate_total_cost(content, author, reviewers, dedup)
+    total = _estimate_total_cost(content, author, reviewers, dedup, revision_model)
     console.print(f"\nEstimated total cost: [bold]${total:.4f}[/bold]")
     if max_cost:
         color = "green" if total <= max_cost else "red"
@@ -561,7 +575,6 @@ async def _run_round2_exchange(
 
     # -- Author final response (only if challenges exist) --
     author_final_responses: list[AuthorFinalResponse] = []
-    updated_revised: str | None = None
     challenged_group_ids = set(
         rb.group_id for rb in all_rebuttals if rb.verdict == "CHALLENGE"
     )
@@ -594,7 +607,7 @@ async def _run_round2_exchange(
                     author,
                     "",
                     final_prompt,
-                    AUTHOR_MAX_OUTPUT_TOKENS,
+                    AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
                     log_fn=storage.log,
                 )
                 cost_tracker.add(
@@ -622,14 +635,6 @@ async def _run_round2_exchange(
                     f"  Parsed: {len(author_final_responses)}/{len(challenged_group_ids)} "
                     f"challenges matched ({final_usage['output_tokens']} tokens)"
                 )
-
-                # Extract updated revised output if author produced one
-                final_revised = extract_revised_output(final_raw, mode)
-                if final_revised:
-                    updated_revised = final_revised
-                    console.print(
-                        f"  Updated revised output extracted ({len(updated_revised):,} chars)"
-                    )
             except APIError as e:
                 console.print(
                     f"  [yellow]Warning: Author final response failed: {e}[/yellow]"
@@ -639,7 +644,7 @@ async def _run_round2_exchange(
     else:
         console.print("  No challenges -- skipping author final response")
 
-    return all_rebuttals, author_final_responses, updated_revised
+    return all_rebuttals, author_final_responses, None
 
 
 # ---- Catastrophic parse / governance helpers --------------------------------

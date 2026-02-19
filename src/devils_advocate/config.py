@@ -121,6 +121,12 @@ def load_config(path: Path | None = None) -> dict:
         _resolve("normalization", norm_name)
         all_models[norm_name].roles.add("normalization")
 
+    # Revision role: optional, defaults to author model in get_models_by_role
+    revision_name = roles_block.get("revision")
+    if revision_name:
+        _resolve("revision", revision_name)
+        all_models[revision_name].roles.add("revision")
+
     # Only active models (referenced in roles) go into the working set
     models = {name: all_models[name] for name in active_names}
 
@@ -180,10 +186,19 @@ def get_models_by_role(config: dict) -> dict:
     if norm_model is None:
         norm_model = dedup_model
 
+    # Revision: explicit role or fallback to author
+    revision_model = next(
+        (m for m in models.values() if "revision" in m.roles),
+        None,
+    )
+    if revision_model is None:
+        revision_model = next((m for m in models.values() if "author" in m.roles), None)
+
     return {
         "author": next((m for m in models.values() if "author" in m.roles), None),
         "reviewers": [m for m in models.values() if "reviewer" in m.roles],
         "dedup": dedup_model,
         "integration": next((m for m in models.values() if m.integration_reviewer), None),
         "normalization": norm_model,
+        "revision": revision_model,
     }

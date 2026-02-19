@@ -19,11 +19,13 @@ from rich.table import Table
 from devils_advocate import __version__
 from .config import find_config, load_config, validate_config, get_models_by_role
 from .orchestrator import run_plan_review, run_code_review, run_integration_review
+from .revision import run_revision
 from .storage import StorageManager
 from .types import (
     APIError,
     ConfigError,
     CostLimitError,
+    CostTracker,
     Resolution,
     StorageError,
 )
@@ -401,6 +403,7 @@ roles:
   deduplication: claude-haiku
   integration_reviewer: gpt-4o
   # normalization: claude-haiku  # optional; defaults to deduplication model
+  # revision: claude-sonnet  # optional; defaults to author model
 """
 
     config_file.write_text(example)
@@ -475,3 +478,128 @@ def override(project, review_id, point_id, resolution, config_path, project_dir)
     except StorageError as e:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
+
+
+# ─── revise ──────────────────────────────────────────────────────────────────
+
+
+@cli.command("revise")
+@click.option("--project", required=True, help="Project name")
+@click.option(
+    "--review",
+    "review_id",
+    required=True,
+    help="Review ID to revise from",
+)
+@click.option(
+    "--config",
+    "config_path",
+    default=None,
+    help="Path to models.yaml",
+)
+@click.option(
+    "--project-dir",
+    "project_dir",
+    default=None,
+    help="Project directory containing .dvad/",
+)
+@click.option(
+    "--max-cost",
+    type=float,
+    default=None,
+    help="Maximum cost in USD for this revision (independent budget)",
+)
+@click.option(
+    "--input",
+    "input_override",
+    default=None,
+    help="Override: path to artifact file (default: uses saved original_content.txt)",
+)
+def revise(project, review_id, config_path, project_dir, max_cost, input_override):
+    """Generate a revised artifact from a completed review.
+
+    Uses the governance outcomes from the specified review to produce a
+    revised plan, diff, or remediation plan. Run this after ``dvad override``
+    to incorporate manual overrides into the revised artifact.
+    """
+    try:
+        config = load_config(Path(config_path) if config_path else None)
+    except ConfigError as e:
+        console.print(f"[red]Config error:[/red] {e}")
+        sys.exit(1)
+
+    roles = get_models_by_role(config)
+    revision_model = roles["revision"]
+
+    base_dir = Path(project_dir) if project_dir else Path.cwd()
+    storage = StorageManager(base_dir)
+
+    # Load ledger
+    ledger_data = storage.load_review(review_id)
+    if not ledger_data:
+        console.print(f"[red]Error:[/red] Review {review_id} not found.")
+        sys.exit(1)
+
+    mode = ledger_data.get("mode", "plan")
+    rd = storage.reviews_dir / review_id
+
+    # Load original content
+    if input_override:
+        input_path = Path(input_override)
+        if not input_path.exists():
+            console.print(f"[red]Error:[/red] Input file not found: {input_path}")
+            sys.exit(1)
+        original_content = input_path.read_text()
+    else:
+        oc_path = rd / "original_content.txt"
+        if not oc_path.exists():
+            console.print(
+                f"[red]Error:[/red] original_content.txt not found in {rd}. "
+                "Use --input to specify the artifact file."
+            )
+            sys.exit(1)
+        original_content = oc_path.read_text()
+
+    # Output filename per mode
+    output_names = {
+        "plan": "revised-plan.md",
+        "code": "revised-diff.patch",
+        "integration": "remediation-plan.md",
+    }
+    output_name = output_names.get(mode, "revised-plan.md")
+
+    cost_tracker = CostTracker(max_cost=max_cost)
+
+    async def _run():
+        import httpx
+        async with httpx.AsyncClient() as client:
+            return await run_revision(
+                client,
+                revision_model,
+                original_content,
+                ledger_data,
+                mode=mode,
+                cost_tracker=cost_tracker,
+                storage=storage,
+                review_id=review_id,
+            )
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        revised = loop.run_until_complete(_run())
+        if revised:
+            storage._atomic_write(rd / output_name, revised)
+            console.print(f"[green]Revision complete.[/green]")
+            console.print(f"  Output: {rd / output_name}")
+            console.print(f"  Cost: ${cost_tracker.total_usd:.4f}")
+        else:
+            console.print("[yellow]No revised artifact produced.[/yellow]")
+    except (APIError, CostLimitError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[yellow]Warning: Revision failed: {e}[/yellow]")
+        storage.log(f"Revision command failed (non-fatal): {e}")
+    finally:
+        loop.close()

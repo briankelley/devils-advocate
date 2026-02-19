@@ -338,3 +338,64 @@ class TestGetModelsByRole:
         roles = get_models_by_role(config)
         assert roles["normalization"].name == "norm-model"
         assert roles["normalization"] is not roles["dedup"]
+
+    def test_revision_defaults_to_author(self, tmp_path, monkeypatch):
+        config = self._load_valid(tmp_path, monkeypatch)
+        roles = get_models_by_role(config)
+        assert roles["revision"] is roles["author"]
+
+    def test_revision_uses_explicit_model(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("TEST_KEY", "fake-key-123")
+        yaml_with_revision = textwrap.dedent("""\
+            models:
+              author-model:
+                provider: anthropic
+                model_id: claude-test
+                api_key_env: TEST_KEY
+                context_window: 200000
+                cost_per_1k_input: 0.003
+                cost_per_1k_output: 0.015
+              reviewer1:
+                provider: openai
+                model_id: gpt-test
+                api_key_env: TEST_KEY
+                api_base: https://api.example.com/v1
+                context_window: 128000
+                cost_per_1k_input: 0.005
+                cost_per_1k_output: 0.015
+              reviewer2:
+                provider: openai
+                model_id: gemini-test
+                api_key_env: TEST_KEY
+                api_base: https://api.example.com/v1
+                context_window: 1000000
+                cost_per_1k_input: 0.001
+                cost_per_1k_output: 0.004
+              dedup-model:
+                provider: anthropic
+                model_id: haiku-test
+                api_key_env: TEST_KEY
+                context_window: 200000
+                cost_per_1k_input: 0.001
+                cost_per_1k_output: 0.004
+              revision-model:
+                provider: anthropic
+                model_id: revision-test
+                api_key_env: TEST_KEY
+                context_window: 200000
+                cost_per_1k_input: 0.003
+                cost_per_1k_output: 0.015
+            roles:
+              author: author-model
+              reviewers:
+                - reviewer1
+                - reviewer2
+              deduplication: dedup-model
+              integration_reviewer: reviewer1
+              revision: revision-model
+        """)
+        cfg_path = _write_yaml(tmp_path / "rev.yaml", yaml_with_revision)
+        config = load_config(path=cfg_path)
+        roles = get_models_by_role(config)
+        assert roles["revision"].name == "revision-model"
+        assert roles["revision"] is not roles["author"]

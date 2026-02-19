@@ -15,5 +15,3 @@ RATIONALE: Your detailed explanation
 === ORIGINAL CODE CONTENT ===
 {original_content}
 === END ORIGINAL CODE CONTENT ===
-
-{output_instructions}

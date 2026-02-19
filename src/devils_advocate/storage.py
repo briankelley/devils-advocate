@@ -229,6 +229,7 @@ class StorageManager:
         d.mkdir(parents=True, exist_ok=True)
         (d / "round1").mkdir(exist_ok=True)
         (d / "round2").mkdir(exist_ok=True)
+        (d / "revision").mkdir(exist_ok=True)
         return d
 
     # ─── Save / Load ─────────────────────────────────────────────────────────

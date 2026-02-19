@@ -61,7 +61,9 @@ RATIONALE: The reviewer correctly identified that the user input is not sanitize
 RESPONSE TO GROUP 2:
 RESOLUTION: ACCEPTED
 RATIONALE: The N+1 query pattern is confirmed in the dashboard view. Using select_related or prefetch_related in Django ORM would resolve the performance issue because the current implementation makes separate DB calls for each row.
+"""
 
+REVISION_OUTPUT = """\
 === REVISED PLAN ===
 Updated plan content with security fixes and performance improvements applied.
 === END REVISED PLAN ===
@@ -202,7 +204,7 @@ async def test_dry_run_no_api_calls(plan_config, plan_file, tmp_path):
 
 
 async def test_successful_plan_review_e2e(plan_config, plan_file, tmp_path):
-    """Full successful plan review with 2 reviewers, dedup, and author response."""
+    """Full successful plan review with 2 reviewers, dedup, author response, and revision."""
     with respx.mock:
         # Reviewer 1 (OpenAI-compatible)
         respx.post("https://api.test.com/v1/chat/completions").mock(
@@ -212,13 +214,15 @@ async def test_successful_plan_review_e2e(plan_config, plan_file, tmp_path):
         respx.post("https://api.test2.com/v1/chat/completions").mock(
             return_value=httpx.Response(200, json=_openai_json(REVIEWER_OUTPUT))
         )
-        # Dedup + Author (both Anthropic — same endpoint, called multiple times)
+        # Dedup + Author + Revision (all Anthropic — same endpoint, called multiple times)
         respx.post("https://api.anthropic.com/v1/messages").mock(
             side_effect=[
                 # Call 1: Dedup
                 httpx.Response(200, json=_anthropic_json(DEDUP_OUTPUT)),
                 # Call 2: Author round 1 response
                 httpx.Response(200, json=_anthropic_json(AUTHOR_OUTPUT_TEMPLATE)),
+                # Call 3: Revision (post-governance)
+                httpx.Response(200, json=_anthropic_json(REVISION_OUTPUT)),
             ]
         )
 
@@ -242,6 +246,8 @@ async def test_successful_plan_review_e2e(plan_config, plan_file, tmp_path):
     assert len(result.author_responses) > 0
     assert len(result.governance_decisions) > 0
     assert result.cost.total_usd > 0
+    # Revised output stays empty -- canonical artifact is the separate file
+    assert result.revised_output == ""
 
     # Verify storage artifacts were written
     dvad_data = Path.home() / ".local" / "share" / "devils-advocate"
@@ -252,6 +258,8 @@ async def test_successful_plan_review_e2e(plan_config, plan_file, tmp_path):
     latest_review = sorted(review_dirs)[-1]
     assert (latest_review / "dvad-report.md").exists()
     assert (latest_review / "review-ledger.json").exists()
+    assert (latest_review / "original_content.txt").exists()
+    assert (latest_review / "revised-plan.md").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -271,11 +279,12 @@ async def test_one_reviewer_failure_continues(plan_config, plan_file, tmp_path):
         respx.post("https://api.test2.com/v1/chat/completions").mock(
             return_value=httpx.Response(200, json=_openai_json(REVIEWER_OUTPUT))
         )
-        # Dedup + Author (Anthropic)
+        # Dedup + Author + Revision (Anthropic)
         respx.post("https://api.anthropic.com/v1/messages").mock(
             side_effect=[
                 httpx.Response(200, json=_anthropic_json(DEDUP_OUTPUT)),
                 httpx.Response(200, json=_anthropic_json(AUTHOR_OUTPUT_TEMPLATE)),
+                httpx.Response(200, json=_anthropic_json(REVISION_OUTPUT)),
             ]
         )
 
@@ -315,11 +324,12 @@ async def test_lock_acquired_and_released(plan_config, plan_file, tmp_path):
         respx.post("https://api.test2.com/v1/chat/completions").mock(
             return_value=httpx.Response(200, json=_openai_json(REVIEWER_OUTPUT))
         )
-        # Dedup + Author
+        # Dedup + Author + Revision
         respx.post("https://api.anthropic.com/v1/messages").mock(
             side_effect=[
                 httpx.Response(200, json=_anthropic_json(DEDUP_OUTPUT)),
                 httpx.Response(200, json=_anthropic_json(AUTHOR_OUTPUT_TEMPLATE)),
+                httpx.Response(200, json=_anthropic_json(REVISION_OUTPUT)),
             ]
         )
 

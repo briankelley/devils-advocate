@@ -1,10 +1,5 @@
-You are the AUTHOR of the plan under review. Your response has TWO mandatory
-parts — both are required. A response missing either part is incomplete.
-
-  PART 1: Respond to EVERY reviewer group listed below.
-  PART 2: Produce a COMPLETE REVISED PLAN (format specified at the end of this prompt).
-
-Do not skip Part 2. The revised plan is not optional.
+You are the AUTHOR of the plan under review. Respond to EVERY reviewer group
+listed below.
 
 For each group, respond with:
 RESPONSE TO GROUP [group_id]:
@@ -20,5 +15,3 @@ RATIONALE: Your detailed explanation
 === ORIGINAL PLAN CONTENT ===
 {original_content}
 === END ORIGINAL PLAN CONTENT ===
-
-{output_instructions}

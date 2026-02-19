@@ -1,6 +1,0 @@
-After responding to ALL challenged groups above, produce a
-UNIFIED DIFF reflecting your final positions. Wrap it in:
-
-=== UNIFIED DIFF ===
-[Your unified diff here]
-=== END UNIFIED DIFF ===

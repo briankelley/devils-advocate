@@ -93,26 +93,17 @@ def build_round1_author_prompt(
     confusion with the actual Round 2 exchange.
     """
     if mode == "plan":
-        output_instructions = load_template("plan-output-instruct.txt")
         template = "round1-author-plan-instruct.txt"
     elif mode == "integration":
-        output_instructions = load_template("integration-output-instruct.txt")
-        # Integration mode uses the code author template structure
         template = "round1-author-code-instruct.txt"
     else:
-        output_instructions = load_template("code-output-instruct.txt")
         template = "round1-author-code-instruct.txt"
     return load_template(
         template,
         governance_rules=_load_governance_block(),
         grouped_feedback=grouped_feedback,
         original_content=original_content,
-        output_instructions=output_instructions,
     )
-
-
-# Backwards-compat alias — remove before Phase 4 completion
-build_round2_prompt = build_round1_author_prompt
 
 
 def build_reviewer_rebuttal_prompt(
@@ -139,17 +130,14 @@ def build_author_final_prompt(
 ) -> str:
     """Build the author's final response prompt for challenged groups only."""
     if mode == "plan":
-        output_instructions = load_template("plan-output-final-instruct.txt")
         template = "round2-author-final-plan-instruct.txt"
     else:
-        output_instructions = load_template("code-output-final-instruct.txt")
         template = "round2-author-final-code-instruct.txt"
     return load_template(
         template,
         governance_rules_final=_load_governance_final_block(),
         challenged_groups_text=challenged_groups_text,
         original_content=original_content,
-        output_instructions=output_instructions,
     )
 
 
@@ -172,19 +160,3 @@ def build_integration_prompt(files_content: str, spec: str) -> str:
     )
 
 
-def build_revised_plan_followup_prompt(author_raw: str, original_content: str) -> str:
-    """Build the follow-up prompt when the author omitted the revised plan."""
-    return load_template(
-        "plan-revised-followup-instruct.txt",
-        author_raw=author_raw,
-        original_content=original_content,
-    )
-
-
-def build_revised_diff_followup_prompt(author_raw: str, original_content: str) -> str:
-    """Build the follow-up prompt when the author omitted the unified diff."""
-    return load_template(
-        "code-revised-followup-instruct.txt",
-        author_raw=author_raw,
-        original_content=original_content,
-    )
