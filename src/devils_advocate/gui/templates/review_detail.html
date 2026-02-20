@@ -44,14 +44,40 @@
         <span class="dim">|</span>
         <span class="mono">{{ review_id[:20] }}</span>
     </h1>
-    <span class="cost-badge">${{ "%.4f"|format(ledger.get('cost', {}).get('total_usd', 0)) }}</span>
+    <div>
+        <span class="cost-badge">${{ "%.6f"|format(ledger.get('cost', {}).get('total_usd', 0)) }}</span>
+        {% if cost_breakdown %}
+        <div class="cost-breakdown">
+            {% for model, amount in cost_breakdown.items() %}
+            <div class="cost-breakdown-row"><span>{{ model }}</span><span>${{ "%.6f"|format(amount) }}</span></div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="pipeline-rail">
+    <div class="pipeline-step done"><span class="step-dot"></span><span class="step-label">Round 1 — Reviewers</span></div>
+    <div class="pipeline-step done"><span class="step-dot"></span><span class="step-label">Round 1 — Author</span></div>
+    <div class="pipeline-step done"><span class="step-dot"></span><span class="step-label">Round 2 — Rebuttals</span></div>
+    <div class="pipeline-step done"><span class="step-dot"></span><span class="step-label">Governance</span></div>
+    {% if escalated|length > 0 or overridden|length > 0 %}
+    <div class="pipeline-step {{ 'done' if has_overrides else 'active' }}"><span class="step-dot"></span><span class="step-label">Overrides</span></div>
+    {% endif %}
+    {% if has_revised %}
+    <div class="pipeline-step done"><span class="step-dot"></span><span class="step-label">Revision</span></div>
+    {% elif has_original %}
+    <div class="pipeline-step pending"><span class="step-dot"></span><span class="step-label">Revision</span></div>
+    {% endif %}
 </div>
 
 <div class="review-meta">
     Models:
-    author={{ ledger.get('author_model', '—') }}
-    reviewers={{ ledger.get('reviewer_models', [])|join(', ') }}
-    dedup={{ ledger.get('dedup_model', '—') }}
+    {% set _author = ledger.get('author_model', '—') %}
+    author={% if _author in ['author','reviewer1','reviewer2','dedup','integration'] %}<span class="dim" style="font-style:italic">{{ _author }}</span>{% else %}{{ _author }}{% endif %}
+    reviewers={% for rv in ledger.get('reviewer_models', []) %}{% if rv in ['author','reviewer1','reviewer2','dedup','integration'] %}<span class="dim" style="font-style:italic">{{ rv }}</span>{% else %}{{ rv }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+    {% set _dedup = ledger.get('dedup_model', '—') %}
+    dedup={% if _dedup in ['author','reviewer1','reviewer2','dedup','integration'] %}<span class="dim" style="font-style:italic">{{ _dedup }}</span>{% else %}{{ _dedup }}{% endif %}
 </div>
 
 {# Summary Strip #}
@@ -131,9 +157,9 @@
         {% endif %}
 
         <div class="card-actions">
-            <button class="btn btn-sm btn-green override-btn" data-action="overridden" data-group="{{ g.group_id }}">Uphold</button>
-            <button class="btn btn-sm btn-dim override-btn" data-action="auto_dismissed" data-group="{{ g.group_id }}">Dismiss</button>
-            <button class="btn btn-sm override-btn" data-action="escalated" data-group="{{ g.group_id }}">Keep Escalated</button>
+            <button class="btn btn-sm btn-green override-btn" data-action="overridden" data-group="{{ g.group_id }}">Accept Reviewer</button>
+            <button class="btn btn-sm btn-dim override-btn" data-action="auto_dismissed" data-group="{{ g.group_id }}">Accept Author</button>
+            <button class="btn btn-sm override-btn" data-action="escalated" data-group="{{ g.group_id }}">Keep Open</button>
         </div>
     </div>
     {% endfor %}
@@ -212,7 +238,9 @@
 
 {# Footer Actions #}
 <div class="footer-actions">
-    {% if has_original %}
+    {% if has_revised %}
+    <a href="/api/review/{{ review_id }}/revised" class="btn btn-green download-revised-link">Download Revised</a>
+    {% elif has_original %}
     <button class="btn btn-accent" id="revise-btn" onclick="dvad.startRevision('{{ review_id }}')">Generate Revision</button>
     {% else %}
     <button class="btn btn-disabled" disabled title="original_content.txt not found">Generate Revision</button>
@@ -221,9 +249,6 @@
     <a href="/api/review/{{ review_id }}/report" class="btn">Download Report</a>
     {% endif %}
     <a href="/api/review/{{ review_id }}" class="btn" target="_blank">Download Ledger</a>
-    {% if has_revised %}
-    <a href="/api/review/{{ review_id }}/revised" class="btn btn-green">Download Revised</a>
-    {% endif %}
 </div>
 
 {# Revision Output Area #}

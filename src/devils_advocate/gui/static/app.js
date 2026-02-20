@@ -3,6 +3,8 @@
 const dvad = {
     _sseSource: null,
     _revisionContent: '',
+    _pendingRoles: {},
+    _sortState: { col: null, asc: true },
 
     // ── Table row click navigation ───────────────────────────────────
     init() {
@@ -12,13 +14,13 @@ const dvad = {
             });
         });
 
-        // Project filter
+        // Project filter (Project is now column 0)
         const filter = document.getElementById('project-filter');
         if (filter) {
             filter.addEventListener('input', () => {
                 const val = filter.value.toLowerCase();
                 document.querySelectorAll('#reviews-table tbody tr').forEach(tr => {
-                    const project = tr.children[1]?.textContent?.toLowerCase() || '';
+                    const project = tr.children[0]?.textContent?.toLowerCase() || '';
                     tr.style.display = project.includes(val) ? '' : 'none';
                 });
             });
@@ -31,11 +33,58 @@ const dvad = {
                 this.overrideGroup(btn.dataset.group, btn.dataset.action);
             });
         });
+
+        this.initSorting();
+        this.initRolePills();
+        this.initTimeoutEditing();
     },
 
     // ── CSRF token ───────────────────────────────────────────────────
     getToken() {
         return document.querySelector('meta[name="csrf-token"]')?.content || '';
+    },
+
+    // ── Column sorting ───────────────────────────────────────────────
+    initSorting() {
+        const headers = document.querySelectorAll('.th-sortable');
+        if (!headers.length) return;
+
+        headers.forEach(th => {
+            th.addEventListener('click', () => {
+                const col = parseInt(th.dataset.col);
+                const type = th.dataset.sortType || 'string';
+                const asc = this._sortState.col === col ? !this._sortState.asc : true;
+                this._sortState = { col, asc };
+
+                // Update indicators
+                headers.forEach(h => {
+                    const ind = h.querySelector('.sort-indicator');
+                    if (ind) ind.textContent = '';
+                });
+                const indicator = th.querySelector('.sort-indicator');
+                if (indicator) indicator.textContent = asc ? ' \u25B2' : ' \u25BC';
+
+                // Sort rows
+                const tbody = document.querySelector('#reviews-table tbody');
+                if (!tbody) return;
+                const rows = Array.from(tbody.querySelectorAll('tr.clickable-row'));
+
+                rows.sort((a, b) => {
+                    const aVal = a.children[col]?.dataset.sortVal || '';
+                    const bVal = b.children[col]?.dataset.sortVal || '';
+
+                    let cmp;
+                    if (type === 'numeric') {
+                        cmp = (parseFloat(aVal) || 0) - (parseFloat(bVal) || 0);
+                    } else {
+                        cmp = aVal.localeCompare(bVal);
+                    }
+                    return asc ? cmp : -cmp;
+                });
+
+                rows.forEach(row => tbody.appendChild(row));
+            });
+        });
     },
 
     // ── Override group ───────────────────────────────────────────────
@@ -63,9 +112,9 @@ const dvad = {
                 const actions = card.querySelector('.card-actions');
                 if (actions) {
                     const label = {
-                        'overridden': 'Upheld',
-                        'auto_dismissed': 'Dismissed',
-                        'escalated': 'Kept Escalated'
+                        'overridden': 'Accepted (Reviewer)',
+                        'auto_dismissed': 'Accepted (Author)',
+                        'escalated': 'Kept Open'
                     }[resolution] || resolution;
                     actions.innerHTML = `<span class="dim">Resolution: ${label}</span>`;
                 }
@@ -198,9 +247,19 @@ const dvad = {
                     output.style.display = '';
                 }
                 if (cost) {
-                    cost.textContent = `Cost: $${(data.cost || 0).toFixed(4)}`;
+                    cost.textContent = `Cost: $${(data.cost || 0).toFixed(6)}`;
                 }
-                if (btn) btn.textContent = 'Revision Complete';
+
+                // Hide generate button, add download link
+                if (btn) btn.style.display = 'none';
+                const footer = document.querySelector('.footer-actions');
+                if (footer && !footer.querySelector('.download-revised-link')) {
+                    const link = document.createElement('a');
+                    link.href = `/api/review/${reviewId}/revised`;
+                    link.className = 'btn btn-green download-revised-link';
+                    link.textContent = 'Download Revised';
+                    footer.insertBefore(link, footer.firstChild);
+                }
             } else {
                 alert(data.detail || data.message || 'Revision failed');
                 if (btn) {
@@ -292,6 +351,171 @@ const dvad = {
         } catch (err) {
             if (result) result.textContent = 'Error: ' + err.message;
         }
+    },
+
+    // ── Role Pills ───────────────────────────────────────────────────
+    initRolePills() {
+        const pills = document.querySelectorAll('.role-pill');
+        if (!pills.length) return;
+
+        pills.forEach(pill => {
+            pill.addEventListener('click', () => {
+                const model = pill.dataset.model;
+                const role = pill.dataset.role;
+                const isActive = pill.classList.contains('active');
+
+                // Radio roles: only one model per role (except reviewer which is multi)
+                const radioRoles = ['author', 'deduplication', 'integration_reviewer', 'normalization', 'revision'];
+
+                if (radioRoles.includes(role)) {
+                    // Deactivate all other pills for this role
+                    document.querySelectorAll(`.role-pill[data-role="${role}"]`).forEach(p => {
+                        p.classList.remove('active');
+                    });
+                    // Activate this one (unless toggling off — radio roles always need one)
+                    if (!isActive) {
+                        pill.classList.add('active');
+                    }
+                } else {
+                    // Checkbox role (reviewer): toggle
+                    pill.classList.toggle('active');
+                }
+
+                this._markRolesDirty();
+            });
+        });
+    },
+
+    _markRolesDirty() {
+        const toast = document.getElementById('save-roles-toast');
+        if (toast) toast.classList.add('visible');
+    },
+
+    async saveRoleAssignments() {
+        const editor = document.getElementById('yaml-editor');
+        if (!editor || typeof jsyaml === 'undefined') {
+            alert('YAML editor or js-yaml library not available. Switch to Raw YAML tab to edit roles.');
+            return;
+        }
+
+        let config;
+        try {
+            config = jsyaml.load(editor.value);
+        } catch (e) {
+            alert('Failed to parse current YAML: ' + e.message);
+            return;
+        }
+
+        // Build roles from active pills
+        const roles = {};
+        const reviewers = [];
+
+        document.querySelectorAll('.role-pill.active').forEach(pill => {
+            const model = pill.dataset.model;
+            const role = pill.dataset.role;
+
+            if (role === 'reviewer') {
+                reviewers.push(model);
+            } else {
+                roles[role] = model;
+            }
+        });
+
+        if (reviewers.length > 0) {
+            roles.reviewers = reviewers;
+        }
+
+        config.roles = roles;
+
+        // Serialize and save
+        const newYaml = jsyaml.dump(config, { lineWidth: -1, noRefs: true });
+        editor.value = newYaml;
+
+        try {
+            const resp = await fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-DVAD-Token': this.getToken(),
+                },
+                body: JSON.stringify({ yaml: newYaml }),
+            });
+            const data = await resp.json();
+
+            const toast = document.getElementById('save-roles-toast');
+            if (toast) toast.classList.remove('visible');
+
+            const vr = document.getElementById('validation-result');
+            if (resp.ok) {
+                if (vr) vr.innerHTML = '<div class="issue issue-ok">Roles saved. Configuration is valid.</div>';
+            } else {
+                if (vr) vr.innerHTML = `<div class="issue issue-error">ERROR: ${data.detail}</div>`;
+            }
+        } catch (err) {
+            alert('Network error: ' + err.message);
+        }
+    },
+
+    // ── Inline Timeout Editing ───────────────────────────────────────
+    initTimeoutEditing() {
+        document.querySelectorAll('.editable-timeout').forEach(span => {
+            span.addEventListener('click', () => {
+                if (span.querySelector('input')) return; // Already editing
+                const currentVal = span.textContent.trim();
+                const modelName = span.dataset.model;
+
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.min = '10';
+                input.max = '7200';
+                input.value = currentVal;
+                input.className = 'timeout-input';
+
+                span.textContent = '';
+                span.appendChild(input);
+                input.focus();
+                input.select();
+
+                const commit = async () => {
+                    const newVal = parseInt(input.value);
+                    if (isNaN(newVal) || newVal < 10 || newVal > 7200) {
+                        span.textContent = currentVal;
+                        return;
+                    }
+
+                    span.textContent = newVal;
+
+                    try {
+                        const resp = await fetch('/api/config/model-timeout', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-DVAD-Token': this.getToken(),
+                            },
+                            body: JSON.stringify({ model_name: modelName, timeout: newVal }),
+                        });
+                        if (!resp.ok) {
+                            const data = await resp.json();
+                            alert(data.detail || 'Failed to update timeout');
+                            span.textContent = currentVal;
+                        }
+                    } catch (err) {
+                        alert('Network error: ' + err.message);
+                        span.textContent = currentVal;
+                    }
+                };
+
+                input.addEventListener('blur', commit);
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        input.blur();
+                    } else if (e.key === 'Escape') {
+                        span.textContent = currentVal;
+                    }
+                });
+            });
+        });
     },
 };
 

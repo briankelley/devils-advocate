@@ -381,6 +381,57 @@ async def get_config_json(request: Request):
     })
 
 
+@router.post("/config/model-timeout")
+async def set_model_timeout(request: Request):
+    """Update a single model's timeout value in the config file."""
+    _check_csrf(request)
+    body = await request.json()
+    model_name = body.get("model_name", "")
+    timeout = body.get("timeout")
+
+    if not model_name:
+        raise HTTPException(status_code=400, detail="model_name is required")
+    try:
+        timeout = int(timeout)
+        if timeout < 10 or timeout > 7200:
+            raise ValueError
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="timeout must be an integer between 10 and 7200")
+
+    from ..config import find_config
+
+    config_path_str = request.app.state.config_path
+    if config_path_str:
+        target = Path(config_path_str)
+    else:
+        try:
+            target = find_config()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Cannot determine config file path")
+
+    try:
+        from ruamel.yaml import YAML
+        ruamel = YAML()
+        ruamel.preserve_quotes = True
+        data = ruamel.load(target.read_text())
+
+        if "models" not in data or model_name not in data["models"]:
+            raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found in config")
+
+        data["models"][model_name]["timeout"] = timeout
+
+        from io import StringIO
+        stream = StringIO()
+        ruamel.dump(data, stream)
+        await asyncio.to_thread(StorageManager._atomic_write, target, stream.getvalue())
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update timeout: {exc}")
+
+    return JSONResponse({"status": "ok", "model_name": model_name, "timeout": timeout})
+
+
 @router.post("/config/validate")
 async def validate_config_endpoint(request: Request):
     """Validate config YAML. Returns issues list."""

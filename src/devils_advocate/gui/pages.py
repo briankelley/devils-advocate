@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 import time
 from pathlib import Path
 
@@ -145,6 +146,12 @@ async def review_detail(request: Request, review_id: str):
     has_original = (review_dir / "original_content.txt").exists()
     has_report = (review_dir / "dvad-report.md").exists()
 
+    # Cost breakdown for tooltip
+    cost_breakdown = ledger.get("cost", {}).get("breakdown", {})
+
+    # Whether any overrides have been applied
+    has_overrides = len(overridden) > 0
+
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "review_detail.html", {
         "review_id": review_id,
@@ -157,6 +164,8 @@ async def review_detail(request: Request, review_id: str):
         "has_revised": has_revised,
         "has_original": has_original,
         "has_report": has_report,
+        "cost_breakdown": cost_breakdown,
+        "has_overrides": has_overrides,
         "csrf_token": request.app.state.csrf_token,
     })
 
@@ -181,6 +190,25 @@ async def config_page(request: Request):
         # Extract current roles
         raw = await asyncio.to_thread(_load_raw_yaml, config_file)
         roles_block = raw.get("roles", {})
+
+        # Group models by provider, sorted by cost_per_1k_output desc within each
+        models_by_provider: dict[str, list[tuple[str, object]]] = {}
+        for name, m in all_models.items():
+            provider = m.provider if hasattr(m, "provider") else "unknown"
+            models_by_provider.setdefault(provider, []).append((name, m))
+        for provider in models_by_provider:
+            models_by_provider[provider].sort(
+                key=lambda x: getattr(x[1], "cost_per_1k_output", 0) or 0,
+                reverse=True,
+            )
+        models_by_provider = dict(sorted(models_by_provider.items()))
+
+        # .env file path
+        env_file_path = str(Path(config_file).parent / ".env")
+        env_file_exists = Path(env_file_path).is_file()
+
+        # dvad binary path
+        dvad_binary = shutil.which("dvad") or "(not found in PATH)"
     except Exception as exc:
         config = None
         config_file = ""
@@ -188,6 +216,10 @@ async def config_page(request: Request):
         issues = [("error", str(exc))]
         model_names = []
         roles_block = {}
+        models_by_provider = {}
+        env_file_path = ""
+        env_file_exists = False
+        dvad_binary = "(not found in PATH)"
 
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "config.html", {
@@ -198,6 +230,10 @@ async def config_page(request: Request):
         "model_names": model_names,
         "roles": roles_block,
         "all_models": config.get("all_models", {}) if config else {},
+        "models_by_provider": models_by_provider,
+        "env_file_path": env_file_path,
+        "env_file_exists": env_file_exists,
+        "dvad_binary": dvad_binary,
         "csrf_token": request.app.state.csrf_token,
     })
 

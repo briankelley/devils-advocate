@@ -13,29 +13,29 @@
 <table class="data-table" id="reviews-table">
     <thead>
         <tr>
-            <th>Review ID</th>
-            <th>Project</th>
-            <th>Mode</th>
-            <th>Input</th>
-            <th>Date</th>
-            <th class="num">Points</th>
-            <th class="num">Groups</th>
-            <th class="num">Escalated</th>
-            <th class="num">Cost</th>
+            <th class="th-sortable" data-col="0" data-sort-type="string">Project<span class="sort-indicator"></span></th>
+            <th class="th-sortable" data-col="1" data-sort-type="string">Review ID<span class="sort-indicator"></span></th>
+            <th class="th-sortable" data-col="2" data-sort-type="string">Mode<span class="sort-indicator"></span></th>
+            <th class="th-sortable" data-col="3" data-sort-type="string">Input<span class="sort-indicator"></span></th>
+            <th class="th-sortable" data-col="4" data-sort-type="string">Date<span class="sort-indicator"></span></th>
+            <th class="num th-sortable" data-col="5" data-sort-type="numeric">Points<span class="sort-indicator"></span></th>
+            <th class="num th-sortable" data-col="6" data-sort-type="numeric">Groups<span class="sort-indicator"></span></th>
+            <th class="num th-sortable" data-col="7" data-sort-type="numeric">Escalated<span class="sort-indicator"></span></th>
+            <th class="num th-sortable" data-col="8" data-sort-type="numeric">Cost<span class="sort-indicator"></span></th>
         </tr>
     </thead>
     <tbody>
         {% for r in reviews %}
         <tr class="clickable-row" data-href="/review/{{ r.review_id }}">
-            <td class="mono">{{ r.review_id[:20] }}</td>
-            <td>{{ r.get('project', '—') }}</td>
-            <td>{{ r.mode }}</td>
-            <td class="truncate" title="{{ r.input_file }}">{{ r.input_file|string|truncate(35) }}</td>
-            <td class="mono">{{ r.timestamp|string|truncate(19) }}</td>
-            <td class="num">{{ r.total_points }}</td>
-            <td class="num">{{ r.get('total_groups', '—') }}</td>
-            <td class="num">{{ r.get('escalated', '—') }}</td>
-            <td class="num">${{ "%.4f"|format(r.total_cost) }}</td>
+            <td data-sort-val="{{ r.get('project', '—')|lower }}">{{ r.get('project', '—') }}</td>
+            <td class="mono" data-sort-val="{{ r.review_id[:20]|lower }}">{{ r.review_id[:20] }}</td>
+            <td data-sort-val="{{ r.mode|lower }}">{{ r.mode }}</td>
+            <td class="truncate" title="{{ r.input_file }}" data-sort-val="{{ r.input_file|string|lower }}">{{ r.input_file|string|truncate(35) }}</td>
+            <td class="mono" data-sort-val="{{ r.timestamp|string }}">{{ r.timestamp|string|truncate(19) }}</td>
+            <td class="num" data-sort-val="{{ r.total_points }}">{{ r.total_points }}</td>
+            <td class="num" data-sort-val="{{ r.get('total_groups', 0) }}">{{ r.get('total_groups', '—') }}</td>
+            <td class="num" data-sort-val="{{ r.get('escalated', 0) }}">{{ r.get('escalated', '—') }}</td>
+            <td class="num" data-sort-val="{{ r.total_cost }}">${{ "%.4f"|format(r.total_cost) }}</td>
         </tr>
         {% endfor %}
         {% if not reviews %}
