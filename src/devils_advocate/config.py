@@ -13,6 +13,24 @@ from .types import ConfigError, ModelConfig
 DEFAULT_TIMEOUT = 120
 
 
+def _load_dotenv(config_path: Path) -> None:
+    """Load a .env file from the same directory as models.yaml into os.environ.
+
+    Only sets variables that are not already present in the environment,
+    so explicit shell exports or systemd Environment= still take precedence.
+    """
+    env_file = config_path.parent / ".env"
+    if not env_file.is_file():
+        return
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, sep, value = line.partition("=")
+        if sep and key not in os.environ:
+            os.environ[key] = value
+
+
 def find_config(explicit: Path | None = None) -> Path:
     """Locate models.yaml using a priority search order.
 
@@ -60,6 +78,7 @@ def load_config(path: Path | None = None) -> dict:
     If *path* is None, uses :func:`find_config` to locate the file.
     """
     config_path = path or find_config()
+    _load_dotenv(config_path)
     with open(config_path) as f:
         raw = yaml.safe_load(f)
     if not raw or "models" not in raw:
