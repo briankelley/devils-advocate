@@ -54,6 +54,7 @@ async def run_code_review(
     spec_file: Path | None = None,
     max_cost: float | None = None,
     dry_run: bool = False,
+    storage: StorageManager | None = None,
 ) -> ReviewResult | None:
     """Full code review orchestration."""
     roles = get_models_by_role(config)
@@ -61,7 +62,8 @@ async def run_code_review(
     reviewers = roles["reviewers"]
     dedup_model = roles["dedup"]
     normalization_model = roles["normalization"]
-    storage = StorageManager(Path.cwd())
+    if storage is None:
+        storage = StorageManager(Path.cwd())
 
     content = input_file.read_text()
     spec_content = spec_file.read_text() if spec_file else None

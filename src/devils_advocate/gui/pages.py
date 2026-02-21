@@ -38,11 +38,14 @@ def _list_reviews_cached() -> list[dict]:
 
 
 @router.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, page: int = 1):
+async def dashboard(request: Request, page: int = 1, show_test: bool = False):
     """Dashboard — list all reviews with server-side pagination."""
     reviews = await asyncio.to_thread(_list_reviews_cached)
     # Sort newest first
     reviews = sorted(reviews, key=lambda r: r.get("timestamp", ""), reverse=True)
+
+    if not show_test:
+        reviews = [r for r in reviews if r.get("project", "") != "test-project"]
 
     per_page = 25
     total = len(reviews)
@@ -57,6 +60,7 @@ async def dashboard(request: Request, page: int = 1):
         "page": page,
         "total_pages": total_pages,
         "total": total,
+        "show_test": show_test,
         "csrf_token": request.app.state.csrf_token,
     })
 
@@ -152,6 +156,18 @@ async def review_detail(request: Request, review_id: str):
     # Whether any overrides have been applied
     has_overrides = len(overridden) > 0
 
+    # Resolve normalization and revision model names from config
+    try:
+        from ..config import load_config, get_models_by_role
+        config_path = request.app.state.config_path
+        config = load_config(Path(config_path) if config_path else None)
+        roles = get_models_by_role(config)
+        normalization_model = roles["normalization"].name if roles.get("normalization") else "\u2014"
+        revision_model = roles["revision"].name if roles.get("revision") else "\u2014"
+    except Exception:
+        normalization_model = "\u2014"
+        revision_model = "\u2014"
+
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "review_detail.html", {
         "review_id": review_id,
@@ -166,8 +182,34 @@ async def review_detail(request: Request, review_id: str):
         "has_report": has_report,
         "cost_breakdown": cost_breakdown,
         "has_overrides": has_overrides,
+        "normalization_model": normalization_model,
+        "revision_model": revision_model,
         "csrf_token": request.app.state.csrf_token,
     })
+
+
+def _infer_vendor(model) -> str:
+    """Derive a display-friendly vendor name from model metadata."""
+    api_base = getattr(model, "api_base", "") or ""
+    provider = getattr(model, "provider", "unknown")
+
+    if provider == "anthropic":
+        return "Anthropic"
+
+    base_lower = api_base.lower()
+    if "api.openai.com" in base_lower:
+        return "OpenAI"
+    if "api.x.ai" in base_lower:
+        return "xAI"
+    if "generativelanguage.googleapis.com" in base_lower:
+        return "Google"
+    if "api.deepseek.com" in base_lower:
+        return "DeepSeek"
+    if "api.moonshot.ai" in base_lower:
+        return "Moonshot"
+
+    # Fallback to provider name
+    return provider.title()
 
 
 @router.get("/config", response_class=HTMLResponse)
@@ -191,11 +233,11 @@ async def config_page(request: Request):
         raw = await asyncio.to_thread(_load_raw_yaml, config_file)
         roles_block = raw.get("roles", {})
 
-        # Group models by provider, sorted by cost_per_1k_output desc within each
+        # Group models by vendor (derived from api_base or provider)
         models_by_provider: dict[str, list[tuple[str, object]]] = {}
         for name, m in all_models.items():
-            provider = m.provider if hasattr(m, "provider") else "unknown"
-            models_by_provider.setdefault(provider, []).append((name, m))
+            vendor = _infer_vendor(m)
+            models_by_provider.setdefault(vendor, []).append((name, m))
         for provider in models_by_provider:
             models_by_provider[provider].sort(
                 key=lambda x: getattr(x[1], "cost_per_1k_output", 0) or 0,

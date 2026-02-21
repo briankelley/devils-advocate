@@ -516,12 +516,13 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     color: var(--text-dim);
 }
 .pipeline-step:not(:last-child)::after {
-    content: '';
+    content: '\2192';
     display: inline-block;
     width: 24px;
-    height: 1px;
-    background: var(--border);
     margin: 0 6px;
+    color: var(--text-dim);
+    font-size: 11px;
+    text-align: center;
     vertical-align: middle;
 }
 .step-dot {
@@ -537,6 +538,7 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .pipeline-step.active .step-dot {
     background: var(--accent);
     box-shadow: 0 0 4px rgba(122, 159, 181, 0.4);
+    animation: step-pulse 2s ease-in-out infinite;
 }
 .pipeline-step.active { color: var(--accent); }
 .pipeline-step.pending .step-dot {
@@ -616,6 +618,43 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     font-weight: 600;
 }
 
+/* ── Role Summary (Config) ────────────────────────────────────────── */
+
+.role-summary {
+    margin-top: var(--pad-sm);
+    font-size: 11px;
+    font-family: var(--font-mono);
+}
+.role-summary-row {
+    display: flex;
+    gap: var(--pad-sm);
+    padding: 2px 0;
+}
+.role-summary-label {
+    color: var(--text-dim);
+    min-width: 110px;
+}
+.role-summary-value {
+    color: var(--accent);
+}
+.role-summary-value.unassigned {
+    color: var(--red);
+    font-style: italic;
+}
+
+/* ── Editable Max Tokens ──────────────────────────────────────────── */
+
+.editable-max-tokens {
+    border-bottom: 1px dashed var(--text-dim);
+    cursor: text;
+    padding-bottom: 1px;
+    transition: border-color 0.15s, color 0.15s;
+}
+.editable-max-tokens:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 /* ── Editable Timeout ──────────────────────────────────────────────── */
 
 .editable-timeout {
@@ -676,3 +715,85 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     padding: 1px 0;
 }
 .cost-breakdown-row span:last-child { color: var(--yellow); }
+
+/* ── Progress Arrows (Phase View) ─────────────────────────────────── */
+
+.phase-arrow {
+    color: var(--text-dim);
+    font-size: 14px;
+    padding: 0 var(--pad-xs);
+    user-select: none;
+}
+
+@keyframes step-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(122, 159, 181, 0.4); }
+    50% { opacity: 0.4; box-shadow: 0 0 8px rgba(122, 159, 181, 0.6); }
+}
+
+.phase-dot.active {
+    animation: step-pulse 2s ease-in-out infinite;
+}
+
+/* ── Overrides Completion Banner ──────────────────────────────────── */
+
+.overrides-banner {
+    display: none;
+    padding: var(--pad-sm) var(--pad-md);
+    background: #2d3d32;
+    border: 1px solid var(--green);
+    border-radius: 3px;
+    color: var(--green);
+    font-size: 12px;
+    margin: var(--pad-md) 0;
+}
+.overrides-banner.visible {
+    display: block;
+}
+
+/* ── Cost Role List ───────────────────────────────────────────────── */
+
+.cost-roles {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    margin-top: 4px;
+    max-width: 320px;
+}
+.cost-roles-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 1px 0;
+}
+.cost-roles-row span:last-child { color: var(--accent); }
+.cost-separator {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 4px 0;
+}
+
+/* ── Collapsible Card Body ────────────────────────────────────────── */
+
+.card-collapsible {
+    margin: var(--pad-sm) 0;
+}
+.card-expand-toggle {
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 11px;
+    padding: var(--pad-xs) 0;
+    user-select: none;
+    list-style: none;
+}
+.card-expand-toggle::-webkit-details-marker { display: none; }
+.card-expand-toggle::before {
+    content: '\25B8';
+    display: inline-block;
+    margin-right: 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+    transition: transform 0.15s;
+}
+.card-collapsible[open] > .card-expand-toggle::before { transform: rotate(90deg); }
+.card-collapsible-body {
+    padding-top: var(--pad-sm);
+}

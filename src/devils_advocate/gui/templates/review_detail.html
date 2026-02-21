@@ -17,12 +17,15 @@
             <span class="phase-dot" id="dot-round1">&#9675;</span> Round 1: Reviewers
             <span id="round1-detail" class="phase-detail"></span>
         </div>
+        <span class="phase-arrow">&rarr;</span>
         <div class="phase-item" data-phase="round1_author">
             <span class="phase-dot" id="dot-author">&#9675;</span> Round 1: Author Response
         </div>
+        <span class="phase-arrow">&rarr;</span>
         <div class="phase-item" data-phase="round2">
             <span class="phase-dot" id="dot-round2">&#9675;</span> Round 2 / Rebuttals
         </div>
+        <span class="phase-arrow">&rarr;</span>
         <div class="phase-item" data-phase="governance">
             <span class="phase-dot" id="dot-governance">&#9675;</span> Governance / Output
         </div>
@@ -46,7 +49,18 @@
     </h1>
     <div>
         <span class="cost-badge">${{ "%.6f"|format(ledger.get('cost', {}).get('total_usd', 0)) }}</span>
+        <hr class="cost-separator">
+        <div class="cost-roles">
+            <div class="cost-roles-row"><span>author:</span><span>{{ ledger.get('author_model', '—') }}</span></div>
+            {% for rv in ledger.get('reviewer_models', []) %}
+            <div class="cost-roles-row"><span>reviewer{% if ledger.get('reviewer_models', [])|length > 1 %} {{ loop.index }}{% endif %}:</span><span>{{ rv }}</span></div>
+            {% endfor %}
+            <div class="cost-roles-row"><span>dedup:</span><span>{{ ledger.get('dedup_model', '—') }}</span></div>
+            <div class="cost-roles-row"><span>normalization:</span><span>{{ normalization_model }}</span></div>
+            <div class="cost-roles-row"><span>revision:</span><span>{{ revision_model }}</span></div>
+        </div>
         {% if cost_breakdown %}
+        <hr class="cost-separator">
         <div class="cost-breakdown">
             {% for model, amount in cost_breakdown.items() %}
             <div class="cost-breakdown-row"><span>{{ model }}</span><span>${{ "%.6f"|format(amount) }}</span></div>
@@ -57,27 +71,18 @@
 </div>
 
 <div class="pipeline-rail">
-    <div class="pipeline-step done"><span class="step-dot"></span><span class="step-label">Round 1 — Reviewers</span></div>
-    <div class="pipeline-step done"><span class="step-dot"></span><span class="step-label">Round 1 — Author</span></div>
-    <div class="pipeline-step done"><span class="step-dot"></span><span class="step-label">Round 2 — Rebuttals</span></div>
-    <div class="pipeline-step done"><span class="step-dot"></span><span class="step-label">Governance</span></div>
+    <div class="pipeline-step done" id="pipe-round1"><span class="step-dot"></span><span class="step-label">Round 1 — Reviewers</span></div>
+    <div class="pipeline-step done" id="pipe-author"><span class="step-dot"></span><span class="step-label">Round 1 — Author</span></div>
+    <div class="pipeline-step done" id="pipe-round2"><span class="step-dot"></span><span class="step-label">Round 2 — Rebuttals</span></div>
+    <div class="pipeline-step done" id="pipe-governance"><span class="step-dot"></span><span class="step-label">Governance</span></div>
     {% if escalated|length > 0 or overridden|length > 0 %}
-    <div class="pipeline-step {{ 'done' if has_overrides else 'active' }}"><span class="step-dot"></span><span class="step-label">Overrides</span></div>
+    <div class="pipeline-step {{ 'done' if has_overrides else 'active' }}" id="pipe-overrides"><span class="step-dot"></span><span class="step-label">Overrides</span></div>
     {% endif %}
     {% if has_revised %}
-    <div class="pipeline-step done"><span class="step-dot"></span><span class="step-label">Revision</span></div>
+    <div class="pipeline-step done" id="pipe-revision"><span class="step-dot"></span><span class="step-label">Revision</span></div>
     {% elif has_original %}
-    <div class="pipeline-step pending"><span class="step-dot"></span><span class="step-label">Revision</span></div>
+    <div class="pipeline-step pending" id="pipe-revision"><span class="step-dot"></span><span class="step-label">Revision</span></div>
     {% endif %}
-</div>
-
-<div class="review-meta">
-    Models:
-    {% set _author = ledger.get('author_model', '—') %}
-    author={% if _author in ['author','reviewer1','reviewer2','dedup','integration'] %}<span class="dim" style="font-style:italic">{{ _author }}</span>{% else %}{{ _author }}{% endif %}
-    reviewers={% for rv in ledger.get('reviewer_models', []) %}{% if rv in ['author','reviewer1','reviewer2','dedup','integration'] %}<span class="dim" style="font-style:italic">{{ rv }}</span>{% else %}{{ rv }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
-    {% set _dedup = ledger.get('dedup_model', '—') %}
-    dedup={% if _dedup in ['author','reviewer1','reviewer2','dedup','integration'] %}<span class="dim" style="font-style:italic">{{ _dedup }}</span>{% else %}{{ _dedup }}{% endif %}
 </div>
 
 {# Summary Strip #}
@@ -87,6 +92,7 @@
     <span class="summary-tag tag-escalated">Escalated: {{ escalated|length }}</span>
     <span class="summary-tag tag-overridden">Overridden: {{ overridden|length }}</span>
 </div>
+<div class="overrides-banner" id="overrides-banner">All escalations resolved — ready for revision</div>
 
 {# Escalated Items #}
 {% if escalated %}
@@ -102,59 +108,64 @@
         </div>
         <div class="card-concern">{{ g.concern }}</div>
 
-        <details class="expand-section">
-            <summary>Reviewer Feedback</summary>
-            <div class="expand-content">
-                {% for p in g.points %}
-                <div class="point-item">
-                    <span class="reviewer-name">[{{ p.reviewer }}]</span>
-                    {{ p.description }}
-                    {% if p.recommendation %}
-                    <div class="recommendation">Recommendation: {{ p.recommendation }}</div>
-                    {% endif %}
-                    {% if p.location %}
-                    <div class="location">Location: {{ p.location }}</div>
-                    {% endif %}
-                </div>
-                {% endfor %}
+        <details class="card-collapsible">
+            <summary class="card-expand-toggle">Show details</summary>
+            <div class="card-collapsible-body">
+                <details class="expand-section" open>
+                    <summary>Reviewer Feedback</summary>
+                    <div class="expand-content">
+                        {% for p in g.points %}
+                        <div class="point-item">
+                            <span class="reviewer-name">[{{ p.reviewer }}]</span>
+                            {{ p.description }}
+                            {% if p.recommendation %}
+                            <div class="recommendation">Recommendation: {{ p.recommendation }}</div>
+                            {% endif %}
+                            {% if p.location %}
+                            <div class="location">Location: {{ p.location }}</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </details>
+
+                {% if g.author_resolution %}
+                <details class="expand-section">
+                    <summary>Author Response (Round 1): {{ g.author_resolution }}</summary>
+                    <div class="expand-content">{{ g.author_rationale }}</div>
+                </details>
+                {% endif %}
+
+                {% if g.rebuttals %}
+                <details class="expand-section">
+                    <summary>Reviewer Rebuttals (Round 2)</summary>
+                    <div class="expand-content">
+                        {% for rb in g.rebuttals %}
+                        <div class="rebuttal-item">
+                            <span class="reviewer-name">[{{ rb.reviewer }}]</span>
+                            <span class="badge badge-{{ rb.verdict|lower }}">{{ rb.verdict }}</span>
+                            {{ rb.rationale }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </details>
+                {% endif %}
+
+                {% if g.author_final_resolution %}
+                <details class="expand-section">
+                    <summary>Author Final Response: {{ g.author_final_resolution }}</summary>
+                    <div class="expand-content">{{ g.author_final_rationale }}</div>
+                </details>
+                {% endif %}
+
+                {% if g.governance_reason %}
+                <details class="expand-section">
+                    <summary>Governance: {{ g.governance_resolution }}</summary>
+                    <div class="expand-content">{{ g.governance_reason }}</div>
+                </details>
+                {% endif %}
             </div>
         </details>
-
-        {% if g.author_resolution %}
-        <details class="expand-section">
-            <summary>Author Response (Round 1): {{ g.author_resolution }}</summary>
-            <div class="expand-content">{{ g.author_rationale }}</div>
-        </details>
-        {% endif %}
-
-        {% if g.rebuttals %}
-        <details class="expand-section">
-            <summary>Reviewer Rebuttals (Round 2)</summary>
-            <div class="expand-content">
-                {% for rb in g.rebuttals %}
-                <div class="rebuttal-item">
-                    <span class="reviewer-name">[{{ rb.reviewer }}]</span>
-                    <span class="badge badge-{{ rb.verdict|lower }}">{{ rb.verdict }}</span>
-                    {{ rb.rationale }}
-                </div>
-                {% endfor %}
-            </div>
-        </details>
-        {% endif %}
-
-        {% if g.author_final_resolution %}
-        <details class="expand-section">
-            <summary>Author Final Response: {{ g.author_final_resolution }}</summary>
-            <div class="expand-content">{{ g.author_final_rationale }}</div>
-        </details>
-        {% endif %}
-
-        {% if g.governance_reason %}
-        <details class="expand-section">
-            <summary>Governance: {{ g.governance_resolution }}</summary>
-            <div class="expand-content">{{ g.governance_reason }}</div>
-        </details>
-        {% endif %}
 
         <div class="card-actions">
             <button class="btn btn-sm btn-green override-btn" data-action="overridden" data-group="{{ g.group_id }}">Accept Reviewer</button>

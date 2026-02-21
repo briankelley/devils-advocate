@@ -53,6 +53,7 @@ async def run_plan_review(
     project: str,
     max_cost: float | None = None,
     dry_run: bool = False,
+    storage: StorageManager | None = None,
 ) -> ReviewResult | None:
     """Full plan review orchestration."""
     roles = get_models_by_role(config)
@@ -60,7 +61,8 @@ async def run_plan_review(
     reviewers = roles["reviewers"]
     dedup_model = roles["dedup"]
     normalization_model = roles["normalization"]
-    storage = StorageManager(Path.cwd())
+    if storage is None:
+        storage = StorageManager(Path.cwd())
 
     primary_file = input_files[0]
     primary_content = primary_file.read_text()

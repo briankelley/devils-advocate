@@ -53,6 +53,7 @@ async def run_integration_review(
     project_dir: Path | None = None,
     max_cost: float | None = None,
     dry_run: bool = False,
+    storage: StorageManager | None = None,
 ) -> ReviewResult | None:
     """Integration review across completed project files."""
     roles = get_models_by_role(config)
@@ -60,7 +61,8 @@ async def run_integration_review(
     integ_reviewer = roles["integration"]
     dedup_model = roles["dedup"]
     normalization_model = roles["normalization"]
-    storage = StorageManager(Path.cwd())
+    if storage is None:
+        storage = StorageManager(Path.cwd())
 
     if not integ_reviewer:
         console.print(

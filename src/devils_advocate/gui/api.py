@@ -432,6 +432,62 @@ async def set_model_timeout(request: Request):
     return JSONResponse({"status": "ok", "model_name": model_name, "timeout": timeout})
 
 
+@router.post("/config/model-max-tokens")
+async def set_model_max_tokens(request: Request):
+    """Update a single model's max_output_tokens value in the config file."""
+    _check_csrf(request)
+    body = await request.json()
+    model_name = body.get("model_name", "")
+    max_tokens = body.get("max_output_tokens")
+
+    if not model_name:
+        raise HTTPException(status_code=400, detail="model_name is required")
+
+    if max_tokens is not None:
+        try:
+            max_tokens = int(max_tokens)
+            if max_tokens < 1 or max_tokens > 1000000:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="max_output_tokens must be an integer between 1 and 1000000")
+
+    from ..config import find_config
+
+    config_path_str = request.app.state.config_path
+    if config_path_str:
+        target = Path(config_path_str)
+    else:
+        try:
+            target = find_config()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Cannot determine config file path")
+
+    try:
+        from ruamel.yaml import YAML
+        ruamel = YAML()
+        ruamel.preserve_quotes = True
+        data = ruamel.load(target.read_text())
+
+        if "models" not in data or model_name not in data["models"]:
+            raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found in config")
+
+        if max_tokens is not None:
+            data["models"][model_name]["max_output_tokens"] = max_tokens
+        else:
+            data["models"][model_name].pop("max_output_tokens", None)
+
+        from io import StringIO
+        stream = StringIO()
+        ruamel.dump(data, stream)
+        await asyncio.to_thread(StorageManager._atomic_write, target, stream.getvalue())
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update max_output_tokens: {exc}")
+
+    return JSONResponse({"status": "ok", "model_name": model_name, "max_output_tokens": max_tokens})
+
+
 @router.post("/config/validate")
 async def validate_config_endpoint(request: Request):
     """Validate config YAML. Returns issues list."""

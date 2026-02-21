@@ -163,12 +163,14 @@ class ReviewRunner:
                 if mode == "plan":
                     from ..orchestrator import run_plan_review
                     result = await run_plan_review(
-                        config, input_files, project, max_cost, dry_run
+                        config, input_files, project, max_cost, dry_run,
+                        storage=storage,
                     )
                 elif mode == "code":
                     from ..orchestrator import run_code_review
                     result = await run_code_review(
-                        config, input_files[0], project, spec_file, max_cost, dry_run
+                        config, input_files[0], project, spec_file, max_cost, dry_run,
+                        storage=storage,
                     )
                 elif mode == "integration":
                     from ..orchestrator import run_integration_review
@@ -179,6 +181,7 @@ class ReviewRunner:
                         project_dir=project_dir,
                         max_cost=max_cost,
                         dry_run=dry_run,
+                        storage=storage,
                     )
                 else:
                     raise ValueError(f"Unknown mode: {mode}")

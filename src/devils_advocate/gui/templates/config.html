@@ -66,6 +66,8 @@
                             <span>{{ "{:,}".format(m.context_window) if m.context_window else 'unset' }}</span>
                             <span class="field-label" style="margin-left:12px">timeout:</span>
                             <span class="editable-timeout" data-model="{{ name }}">{{ m.timeout }}</span>s
+                            <span class="field-label" style="margin-left:12px">max out:</span>
+                            <span class="editable-max-tokens" data-model="{{ name }}">{{ m.max_output_tokens if m.max_output_tokens is defined and m.max_output_tokens else 'unset' }}</span>
                         </div>
                         <div class="field-row">
                             <span class="field-label">cost in:</span>
@@ -81,7 +83,7 @@
                         {% endif %}
                         <div class="model-roles">
                             <span class="role-pill{% if roles.get('author') == name %} active{% endif %}" data-role="author" data-model="{{ name }}">author</span>
-                            <span class="role-pill{% if name in (roles.get('reviewers') or []) %} active{% endif %}" data-role="reviewer" data-model="{{ name }}">reviewer</span>
+                            <span class="role-pill{% if name in (roles.get('reviewers') or []) %} active{% endif %}" data-role="reviewer" data-model="{{ name }}" title="To use the same model twice as reviewer, create a second entry in the YAML with a different name">reviewer</span>
                             <span class="role-pill{% if roles.get('deduplication') == name %} active{% endif %}" data-role="deduplication" data-model="{{ name }}">dedup</span>
                             <span class="role-pill{% if roles.get('integration_reviewer') == name %} active{% endif %}" data-role="integration_reviewer" data-model="{{ name }}">integration</span>
                             <span class="role-pill{% if roles.get('normalization') == name %} active{% endif %}" data-role="normalization" data-model="{{ name }}">normalization</span>
@@ -107,6 +109,16 @@
                 {% else %}
                 <div class="issue issue-ok">Configuration is valid.</div>
                 {% endif %}
+            </div>
+            <h2 style="margin-top:12px">Role Assignments</h2>
+            <div class="role-summary" id="role-summary">
+                <div class="role-summary-row"><span class="role-summary-label">Author:</span><span class="role-summary-value" id="rs-author">—</span></div>
+                <div class="role-summary-row"><span class="role-summary-label">Reviewer 1:</span><span class="role-summary-value" id="rs-reviewer1">—</span></div>
+                <div class="role-summary-row"><span class="role-summary-label">Reviewer 2:</span><span class="role-summary-value" id="rs-reviewer2">—</span></div>
+                <div class="role-summary-row"><span class="role-summary-label">Dedup:</span><span class="role-summary-value" id="rs-deduplication">—</span></div>
+                <div class="role-summary-row"><span class="role-summary-label">Normalization:</span><span class="role-summary-value" id="rs-normalization">—</span></div>
+                <div class="role-summary-row"><span class="role-summary-label">Revision:</span><span class="role-summary-value" id="rs-revision">—</span></div>
+                <div class="role-summary-row"><span class="role-summary-label">Integration:</span><span class="role-summary-value" id="rs-integration_reviewer">—</span></div>
             </div>
         </div>
     </div>

@@ -8,6 +8,10 @@
 
 <div class="filter-bar">
     <input type="text" id="project-filter" placeholder="Filter by project..." class="input-sm">
+    <label class="checkbox-label" style="margin-left:12px">
+        <input type="checkbox" id="show-test-toggle" {% if show_test %}checked{% endif %} onchange="window.location.href='/?show_test=' + this.checked">
+        Show test reviews
+    </label>
 </div>
 
 <table class="data-table" id="reviews-table">

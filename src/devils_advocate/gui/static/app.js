@@ -37,6 +37,7 @@ const dvad = {
         this.initSorting();
         this.initRolePills();
         this.initTimeoutEditing();
+        this.initMaxTokenEditing();
     },
 
     // ── CSRF token ───────────────────────────────────────────────────
@@ -118,6 +119,7 @@ const dvad = {
                     }[resolution] || resolution;
                     actions.innerHTML = `<span class="dim">Resolution: ${label}</span>`;
                 }
+                this._checkAllOverridesResolved();
             } else {
                 alert(data.detail || 'Override failed');
                 buttons.forEach(b => b.disabled = false);
@@ -197,6 +199,10 @@ const dvad = {
             'cost_exceeded': null,
             'revision_calling': 'dot-governance',
             'revision_responded': 'dot-governance',
+            'revision_skip': 'dot-governance',
+            'revision_skip_context': 'dot-governance',
+            'revision_extraction_failed': 'dot-governance',
+            'revision_failed': 'dot-governance',
         };
 
         const dotId = phaseMap[phase];
@@ -215,6 +221,28 @@ const dvad = {
             } else if (i === currentIdx) {
                 dot.innerHTML = '&#9679;';
                 dot.className = 'phase-dot active';
+            }
+        }
+    },
+
+    _checkAllOverridesResolved() {
+        const cards = document.querySelectorAll('.group-card.card-escalated');
+        if (!cards.length) return;
+        const allResolved = Array.from(cards).every(c => c.classList.contains('resolved'));
+        if (allResolved) {
+            // Mark overrides pipeline step as done
+            const overrideStep = document.getElementById('pipe-overrides');
+            if (overrideStep) {
+                overrideStep.className = 'pipeline-step done';
+            }
+            // Show banner
+            const banner = document.getElementById('overrides-banner');
+            if (banner) banner.classList.add('visible');
+            // Highlight revision button
+            const reviseBtn = document.getElementById('revise-btn');
+            if (reviseBtn) {
+                reviseBtn.classList.add('btn-accent');
+                reviseBtn.style.animation = 'step-pulse 2s ease-in-out 3';
             }
         }
     },
@@ -259,6 +287,11 @@ const dvad = {
                     link.className = 'btn btn-green download-revised-link';
                     link.textContent = 'Download Revised';
                     footer.insertBefore(link, footer.firstChild);
+                }
+                // Mark revision pipeline step as done
+                const revisionStep = document.getElementById('pipe-revision');
+                if (revisionStep) {
+                    revisionStep.className = 'pipeline-step done';
                 }
             } else {
                 alert(data.detail || data.message || 'Revision failed');
@@ -384,11 +417,67 @@ const dvad = {
                 this._markRolesDirty();
             });
         });
+        this._updateRoleSummary();
     },
 
     _markRolesDirty() {
         const toast = document.getElementById('save-roles-toast');
         if (toast) toast.classList.add('visible');
+        this._updateRoleSummary();
+    },
+
+    _updateRoleSummary() {
+        const summary = document.getElementById('role-summary');
+        if (!summary) return;
+
+        // Scan all active pills
+        const roles = {};
+        document.querySelectorAll('.role-pill.active').forEach(pill => {
+            const model = pill.dataset.model;
+            const role = pill.dataset.role;
+            if (role === 'reviewer') {
+                if (!roles.reviewers) roles.reviewers = [];
+                roles.reviewers.push(model);
+            } else {
+                roles[role] = model;
+            }
+        });
+
+        // Update single-assignment roles
+        const singleRoles = ['author', 'deduplication', 'normalization', 'revision', 'integration_reviewer'];
+        singleRoles.forEach(role => {
+            const el = document.getElementById('rs-' + role);
+            if (!el) return;
+            if (roles[role]) {
+                el.textContent = roles[role];
+                el.className = 'role-summary-value';
+            } else {
+                el.textContent = 'unassigned';
+                el.className = 'role-summary-value unassigned';
+            }
+        });
+
+        // Update reviewers
+        const rv1 = document.getElementById('rs-reviewer1');
+        const rv2 = document.getElementById('rs-reviewer2');
+        if (rv1) {
+            if (roles.reviewers && roles.reviewers[0]) {
+                rv1.textContent = roles.reviewers[0];
+                rv1.className = 'role-summary-value';
+            } else {
+                rv1.textContent = 'unassigned';
+                rv1.className = 'role-summary-value unassigned';
+            }
+        }
+        if (rv2) {
+            if (roles.reviewers && roles.reviewers[1]) {
+                rv2.textContent = roles.reviewers[1];
+                rv2.className = 'role-summary-value';
+            } else {
+                rv2.textContent = '\u2014';
+                rv2.className = 'role-summary-value';
+            }
+        }
     },
 
     async saveRoleAssignments() {
@@ -497,6 +586,85 @@ const dvad = {
                         if (!resp.ok) {
                             const data = await resp.json();
                             alert(data.detail || 'Failed to update timeout');
+                            span.textContent = currentVal;
+                        }
+                    } catch (err) {
+                        alert('Network error: ' + err.message);
+                        span.textContent = currentVal;
+                    }
+                };
+
+                input.addEventListener('blur', commit);
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        input.blur();
+                    } else if (e.key === 'Escape') {
+                        span.textContent = currentVal;
+                    }
+                });
+            });
+        });
+    },
+
+    // ── Inline Max Token Editing ────────────────────────────────────
+    initMaxTokenEditing() {
+        document.querySelectorAll('.editable-max-tokens').forEach(span => {
+            span.addEventListener('click', () => {
+                if (span.querySelector('input')) return;
+                const currentVal = span.textContent.trim();
+                const modelName = span.dataset.model;
+
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.min = '1';
+                input.max = '1000000';
+                input.value = currentVal === 'unset' ? '' : currentVal;
+                input.className = 'timeout-input';
+                input.placeholder = 'unset';
+
+                span.textContent = '';
+                span.appendChild(input);
+                input.focus();
+                input.select();
+
+                const commit = async () => {
+                    const rawVal = input.value.trim();
+                    if (rawVal === '') {
+                        span.textContent = 'unset';
+                        // Send null to clear
+                        try {
+                            await fetch('/api/config/model-max-tokens', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-DVAD-Token': this.getToken(),
+                                },
+                                body: JSON.stringify({ model_name: modelName, max_output_tokens: null }),
+                            });
+                        } catch (err) { /* ignore */ }
+                        return;
+                    }
+                    const newVal = parseInt(rawVal);
+                    if (isNaN(newVal) || newVal < 1 || newVal > 1000000) {
+                        span.textContent = currentVal;
+                        return;
+                    }
+
+                    span.textContent = newVal;
+
+                    try {
+                        const resp = await fetch('/api/config/model-max-tokens', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-DVAD-Token': this.getToken(),
+                            },
+                            body: JSON.stringify({ model_name: modelName, max_output_tokens: newVal }),
+                        });
+                        if (!resp.ok) {
+                            const data = await resp.json();
+                            alert(data.detail || 'Failed to update max output tokens');
                             span.textContent = currentVal;
                         }
                     } catch (err) {
