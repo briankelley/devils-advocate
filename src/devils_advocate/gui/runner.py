@@ -49,9 +49,16 @@ class ReviewRunner:
                 detail="A review is already running. Wait for it to complete.",
             )
 
-        # Generate review ID
+        # Read input content for review ID generation (content hash)
         from ..ids import generate_review_id
-        review_id = generate_review_id()
+        content_parts = []
+        for f in input_files:
+            try:
+                content_parts.append(f.read_text())
+            except OSError:
+                content_parts.append(str(f))
+        content = "\n".join(content_parts)
+        review_id = generate_review_id(content)
 
         queue: asyncio.Queue = asyncio.Queue(maxsize=500)
         buffered: list[dict] = []
