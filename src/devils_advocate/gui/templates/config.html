@@ -34,18 +34,12 @@
                 <summary class="model-card-header">
                     <span class="model-name">{{ name }}</span>
                     <span class="model-role-icons">
-                        <i data-lucide="pen-tool" class="role-icon{% if roles.get('author') == name %} role-active{% endif %}"
-                           data-role="author" data-model="{{ name }}" title="Author{% if roles.get('author') == name %} (assigned){% endif %}"></i>
-                        <i data-lucide="scan-eye" class="role-icon{% if name in (roles.get('reviewers') or []) %} role-active{% endif %}"
-                           data-role="reviewer" data-model="{{ name }}" title="Reviewer{% if name in (roles.get('reviewers') or []) %} (assigned){% endif %}"></i>
-                        <i data-lucide="combine" class="role-icon{% if roles.get('deduplication') == name %} role-active{% endif %}"
-                           data-role="deduplication" data-model="{{ name }}" title="Dedup{% if roles.get('deduplication') == name %} (assigned){% endif %}"></i>
-                        <i data-lucide="scale" class="role-icon{% if roles.get('normalization') == name %} role-active{% endif %}"
-                           data-role="normalization" data-model="{{ name }}" title="Normalization{% if roles.get('normalization') == name %} (assigned){% endif %}"></i>
-                        <i data-lucide="file-pen" class="role-icon{% if roles.get('revision') == name %} role-active{% endif %}"
-                           data-role="revision" data-model="{{ name }}" title="Revision{% if roles.get('revision') == name %} (assigned){% endif %}"></i>
-                        <i data-lucide="puzzle" class="role-icon{% if roles.get('integration_reviewer') == name %} role-active{% endif %}"
-                           data-role="integration_reviewer" data-model="{{ name }}" title="Integration{% if roles.get('integration_reviewer') == name %} (assigned){% endif %}"></i>
+                        <span class="role-icon{% if roles.get('author') == name %} role-active{% endif %}" data-role="author" data-model="{{ name }}" title="Author{% if roles.get('author') == name %} (assigned){% endif %}"><i data-lucide="pen-tool"></i></span>
+                        <span class="role-icon{% if name in (roles.get('reviewers') or []) %} role-active{% endif %}" data-role="reviewer" data-model="{{ name }}" title="Reviewer{% if name in (roles.get('reviewers') or []) %} (assigned){% endif %}"><i data-lucide="scan-eye"></i></span>
+                        <span class="role-icon{% if roles.get('deduplication') == name %} role-active{% endif %}" data-role="deduplication" data-model="{{ name }}" title="Dedup{% if roles.get('deduplication') == name %} (assigned){% endif %}"><i data-lucide="combine"></i></span>
+                        <span class="role-icon{% if roles.get('normalization') == name %} role-active{% endif %}" data-role="normalization" data-model="{{ name }}" title="Normalization{% if roles.get('normalization') == name %} (assigned){% endif %}"><i data-lucide="scale"></i></span>
+                        <span class="role-icon{% if roles.get('revision') == name %} role-active{% endif %}" data-role="revision" data-model="{{ name }}" title="Revision{% if roles.get('revision') == name %} (assigned){% endif %}"><i data-lucide="file-pen"></i></span>
+                        <span class="role-icon{% if roles.get('integration_reviewer') == name %} role-active{% endif %}" data-role="integration_reviewer" data-model="{{ name }}" title="Integration{% if roles.get('integration_reviewer') == name %} (assigned){% endif %}"><i data-lucide="puzzle"></i></span>
                     </span>
                 </summary>
                 <div class="model-card-body">

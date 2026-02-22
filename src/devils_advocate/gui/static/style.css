@@ -852,12 +852,20 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     align-items: center;
 }
 .role-icon {
-    width: 14px;
-    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
     color: var(--text-dim);
     opacity: 0.4;
     cursor: pointer;
     transition: all 0.15s;
+}
+.role-icon svg {
+    width: 14px;
+    height: 14px;
+    pointer-events: none;
 }
 .role-icon:hover {
     color: var(--text);
