@@ -155,6 +155,24 @@ class ReviewRunner:
 
             storage.log = hooked_log
 
+            # Emit metadata event with role→model mapping for live cost table
+            from ..config import get_models_by_role
+            roles = get_models_by_role(config)
+            role_meta: dict = {"mode": mode, "project": project, "roles": {}}
+            if roles.get("author"):
+                role_meta["roles"]["author"] = roles["author"].name
+            for i, r in enumerate(roles.get("reviewers", []), 1):
+                role_meta["roles"][f"reviewer_{i}"] = r.name
+            if roles.get("dedup"):
+                role_meta["roles"]["dedup"] = roles["dedup"].name
+            if roles.get("normalization"):
+                role_meta["roles"]["normalization"] = roles["normalization"].name
+            if roles.get("revision"):
+                role_meta["roles"]["revision"] = roles["revision"].name
+            self.emit_event(review_id, ProgressEvent(
+                event_type="metadata", phase="review_metadata", detail=role_meta,
+            ))
+
             self.emit_event(
                 review_id,
                 ProgressEvent(

@@ -92,7 +92,7 @@ async def run_spec_review(
     review_id = generate_review_id(content)
     storage.set_review_id(review_id)
     timestamp = datetime.now(timezone.utc).isoformat()
-    cost_tracker = CostTracker(max_cost=max_cost)
+    cost_tracker = CostTracker(max_cost=max_cost, _log_fn=storage.log)
     review_start_time = datetime.now(timezone.utc)
     ctx = ReviewContext(
         project=project,
@@ -184,8 +184,9 @@ async def run_spec_review(
                     storage,
                     system_prompt=spec_system_prompt,
                     point_parser=parse_spec_response,
+                    role_label=f"reviewer_{i+1}",
                 )
-                for r in active_reviewers
+                for i, r in enumerate(active_reviewers)
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 

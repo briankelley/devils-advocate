@@ -100,6 +100,7 @@ async def deduplicate_points(
             usage.get("output_tokens", 0),
             model.cost_per_1k_input,
             model.cost_per_1k_output,
+            role="dedup",
         )
 
     if log_fn:

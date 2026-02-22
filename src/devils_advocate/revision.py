@@ -244,6 +244,7 @@ async def run_revision(
         usage["output_tokens"],
         revision_model.cost_per_1k_input,
         revision_model.cost_per_1k_output,
+        role="revision",
     )
     console.print(
         f"  Revision model responded ({usage['output_tokens']} tokens)"
@@ -321,6 +322,7 @@ async def run_spec_revision(
         usage["output_tokens"],
         revision_model.cost_per_1k_input,
         revision_model.cost_per_1k_output,
+        role="revision",
     )
     console.print(
         f"  Revision model responded ({usage['output_tokens']} tokens)"

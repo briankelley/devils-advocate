@@ -91,7 +91,7 @@ async def run_plan_review(
     review_id = generate_review_id(content)
     storage.set_review_id(review_id)
     timestamp = datetime.now(timezone.utc).isoformat()
-    cost_tracker = CostTracker(max_cost=max_cost)
+    cost_tracker = CostTracker(max_cost=max_cost, _log_fn=storage.log)
     review_start_time = datetime.now(timezone.utc)
     ctx = ReviewContext(
         project=project,
@@ -182,8 +182,9 @@ async def run_plan_review(
                     review_id,
                     cost_tracker,
                     storage,
+                    role_label=f"reviewer_{i+1}",
                 )
-                for r in active_reviewers
+                for i, r in enumerate(active_reviewers)
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -283,6 +284,7 @@ async def run_plan_review(
                 author_usage["output_tokens"],
                 author.cost_per_1k_input,
                 author.cost_per_1k_output,
+                role="author",
             )
             console.print(
                 f"  Author responded ({author_usage['output_tokens']} tokens)"
@@ -333,6 +335,7 @@ async def run_plan_review(
                     cost_tracker,
                     storage,
                     review_id,
+                    reviewer_roles={r.name: f"reviewer_{i+1}" for i, r in enumerate(active_reviewers)},
                 )
             )
 

@@ -123,7 +123,7 @@ async def run_integration_review(
     review_id = generate_review_id(combined)
     storage.set_review_id(review_id)
     timestamp = datetime.now(timezone.utc).isoformat()
-    cost_tracker = CostTracker(max_cost=max_cost)
+    cost_tracker = CostTracker(max_cost=max_cost, _log_fn=storage.log)
     review_start_time = datetime.now(timezone.utc)
     ctx = ReviewContext(
         project=project,
@@ -186,6 +186,7 @@ async def run_integration_review(
                 usage["output_tokens"],
                 integ_reviewer.cost_per_1k_input,
                 integ_reviewer.cost_per_1k_output,
+                role="reviewer_1",
             )
             storage.save_intermediate(
                 review_id, "round1", f"{integ_reviewer.name}_raw.txt", text
@@ -199,6 +200,7 @@ async def run_integration_review(
                     normalization_model,
                     integ_reviewer.name,
                     log_fn=storage.log,
+                    cost_tracker=cost_tracker,
                 )
 
             if not points:
@@ -257,6 +259,7 @@ async def run_integration_review(
                 author_usage["output_tokens"],
                 author.cost_per_1k_input,
                 author.cost_per_1k_output,
+                role="author",
             )
             console.print(
                 f"  Author responded ({author_usage['output_tokens']} tokens)"
@@ -297,6 +300,7 @@ async def run_integration_review(
                     cost_tracker,
                     storage,
                     review_id,
+                    reviewer_roles={integ_reviewer.name: "reviewer_1"},
                 )
             )
 

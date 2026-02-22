@@ -394,6 +394,7 @@ async def _call_reviewer(
     storage: StorageManager,
     system_prompt: str | None = None,
     point_parser=None,
+    role_label: str = "reviewer",
 ) -> list[ReviewPoint]:
     """Call a single reviewer and return parsed points.
 
@@ -425,6 +426,7 @@ async def _call_reviewer(
         usage["output_tokens"],
         reviewer.cost_per_1k_input,
         reviewer.cost_per_1k_output,
+        role=role_label,
     )
     storage.log(
         f"Round 1: {reviewer.name} responded ({usage['output_tokens']} output tokens)"
@@ -443,7 +445,8 @@ async def _call_reviewer(
             f"  No structured points from {reviewer.name} -- trying LLM normalization"
         )
         points = await normalize_review_response(
-            client, text, normalization_model, reviewer.name, log_fn=storage.log
+            client, text, normalization_model, reviewer.name,
+            log_fn=storage.log, cost_tracker=cost_tracker,
         )
 
     return points
@@ -464,6 +467,7 @@ async def _run_round2_exchange(
     cost_tracker: CostTracker,
     storage: StorageManager,
     review_id: str,
+    reviewer_roles: dict[str, str] | None = None,
 ) -> tuple[list[RebuttalResponse], list[AuthorFinalResponse], str | None]:
     """Shared Round 2 exchange: reviewer rebuttals + author final response.
 
@@ -557,6 +561,7 @@ async def _run_round2_exchange(
             rebuttal_usage["output_tokens"],
             r.cost_per_1k_input,
             r.cost_per_1k_output,
+            role=reviewer_roles.get(r.name, "reviewer") if reviewer_roles else "reviewer",
         )
         storage.save_intermediate(
             review_id, "round2", f"{r.name}_rebuttal_raw.txt", rebuttal_raw
@@ -628,6 +633,7 @@ async def _run_round2_exchange(
                     final_usage["output_tokens"],
                     author.cost_per_1k_input,
                     author.cost_per_1k_output,
+                    role="author",
                 )
                 storage.save_intermediate(
                     review_id, "round2", "author_final_raw.txt", final_raw

@@ -36,6 +36,9 @@ class ProgressEvent:
 
 # Phase detection patterns (best-effort, matched against storage.log() corpus)
 _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
+    # Cost events (must be first — suppressed from console log)
+    (r"§cost role=(\S+) model=(.+?) cost=([\d.]+) total=([\d.]+)", "cost_update", {}),
+
     # Round 1 reviewer calls
     (r"Round 1: calling (.+)", "round1_calling", {}),
     (r"Round 1: (.+) responded \((\d+) output tokens\)", "round1_responded", {}),
@@ -79,6 +82,19 @@ def classify_log_message(msg: str) -> ProgressEvent:
     for pattern, phase, extra in _PHASE_PATTERNS:
         m = re.search(pattern, msg)
         if m:
+            # Cost events carry structured data and suppress console log output
+            if phase == "cost_update":
+                return ProgressEvent(
+                    event_type="cost",
+                    message="",
+                    phase=phase,
+                    detail={
+                        "role": m.group(1),
+                        "model": m.group(2),
+                        "cost": m.group(3),
+                        "total": m.group(4),
+                    },
+                )
             return ProgressEvent(
                 event_type="phase",
                 message=msg,

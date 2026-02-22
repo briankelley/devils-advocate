@@ -334,7 +334,7 @@ async def download_revised(request: Request, review_id: str):
     """Download the revised artifact."""
     storage = _get_gui_storage()
     review_dir = storage.reviews_dir / review_id
-    for name in ["revised-plan.md", "revised-diff.patch", "remediation-plan.md"]:
+    for name in ["revised-plan.md", "revised-diff.patch", "remediation-plan.md", "revised-spec-suggestions.md"]:
         path = review_dir / name
         if path.exists():
             return FileResponse(path, filename=name)

@@ -227,6 +227,7 @@ def parse_spec_dedup_response(
     """
     groups: list[ReviewGroup] = []
     idx_point_map = {i + 1: p for i, p in enumerate(all_points)}
+    claimed_indices: set[int] = set()
 
     blocks = re.split(r'(?=GROUP\s+\d+\s*:)', raw, flags=re.IGNORECASE)
 
@@ -259,21 +260,23 @@ def parse_spec_dedup_response(
         if not title and not description:
             continue
 
-        # Parse suggestion references
+        # Parse suggestion references (first claim wins)
         found_points: list[ReviewPoint] = []
         if suggestions_str:
             for num_match in re.finditer(r'(?:SUGGESTION\s+)?(\d+)', suggestions_str, re.IGNORECASE):
                 num = int(num_match.group(1))
-                if num in idx_point_map:
+                if num in idx_point_map and num not in claimed_indices:
                     found_points.append(idx_point_map[num])
+                    claimed_indices.add(num)
 
         if not found_points and title:
             # Keyword fallback
-            for _idx_key, p in idx_point_map.items():
-                if p.point_id not in [fp.point_id for g in groups for fp in g.points]:
+            for idx_key, p in idx_point_map.items():
+                if idx_key not in claimed_indices:
                     if any(word.lower() in (title + " " + (description or "")).lower()
                            for word in p.description.split()[:5]):
                         found_points.append(p)
+                        claimed_indices.add(idx_key)
                         break
 
         if not found_points:
@@ -298,9 +301,8 @@ def parse_spec_dedup_response(
         ))
 
     # Catch ungrouped points
-    grouped_ids = {p.point_id for g in groups for p in g.points}
-    for _orig_idx, p in idx_point_map.items():
-        if p.point_id not in grouped_ids and p.point_id.startswith("temp_"):
+    for idx_key, p in idx_point_map.items():
+        if idx_key not in claimed_indices:
             group_idx += 1
             group_id = ctx.make_group_id(group_idx)
             p.point_id = ctx.make_point_id(group_id, 1)
@@ -452,10 +454,12 @@ def parse_dedup_response(
     """Parse deduplication model response into ReviewGroup objects.
 
     Assigns final group and point IDs using ReviewContext.
+    Each point is assigned to at most one group (first match wins).
     """
     groups: list[ReviewGroup] = []
     # Build index-based point map (1-based, matching POINT N in dedup prompt)
     idx_point_map = {i + 1: p for i, p in enumerate(all_points)}
+    claimed_indices: set[int] = set()
 
     blocks = re.split(r'(?=GROUP\s+\d+\s*:)', raw, flags=re.IGNORECASE)
 
@@ -489,16 +493,18 @@ def parse_dedup_response(
         if points_str:
             for num_match in re.finditer(r'(?:POINT\s+)?(\d+)', points_str, re.IGNORECASE):
                 num = int(num_match.group(1))
-                if num in idx_point_map:
+                if num in idx_point_map and num not in claimed_indices:
                     found_points.append(idx_point_map[num])
+                    claimed_indices.add(num)
 
         # Fallback: keyword matching for ungrouped points
         if not found_points and concern:
-            for _idx_key, p in idx_point_map.items():
-                if p.point_id not in [fp.point_id for g in groups for fp in g.points]:
+            for idx_key, p in idx_point_map.items():
+                if idx_key not in claimed_indices:
                     if any(word.lower() in concern.lower()
                            for word in p.description.split()[:5]):
                         found_points.append(p)
+                        claimed_indices.add(idx_key)
                         break
 
         if not found_points:
@@ -522,9 +528,8 @@ def parse_dedup_response(
         ))
 
     # Catch any ungrouped points
-    grouped_ids = {p.point_id for g in groups for p in g.points}
-    for _orig_idx, p in idx_point_map.items():
-        if p.point_id not in grouped_ids and p.point_id.startswith("temp_"):
+    for idx_key, p in idx_point_map.items():
+        if idx_key not in claimed_indices:
             group_idx += 1
             group_id = ctx.make_group_id(group_idx)
             p.point_id = ctx.make_point_id(group_id, 1)
