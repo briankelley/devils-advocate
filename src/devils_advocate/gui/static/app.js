@@ -485,7 +485,8 @@ const dvad = {
     // ── Role Icons ──────────────────────────────────────────────────
     initRolePills() {
         const icons = document.querySelectorAll('.role-icon');
-        if (!icons.length) return;
+        if (!icons.length || this._rolePillsInitialized) return;
+        this._rolePillsInitialized = true;
 
         icons.forEach(icon => {
             icon.addEventListener('click', (e) => {
@@ -512,11 +513,20 @@ const dvad = {
                         }
                     }
                 } else {
-                    // Checkbox role (reviewer): toggle
+                    // Checkbox role (reviewer): toggle, max 2
                     icon.classList.toggle('role-active');
                     if (icon.classList.contains('role-active')) {
                         if (!icon.title.includes('(assigned)')) {
                             icon.title = icon.title + ' (assigned)';
+                        }
+                        // Cap at 2 reviewers: drop the oldest if over limit
+                        const active = Array.from(document.querySelectorAll('.role-icon[data-role="reviewer"].role-active'));
+                        if (active.length > 2) {
+                            const oldest = active.find(el => el !== icon);
+                            if (oldest) {
+                                oldest.classList.remove('role-active');
+                                oldest.title = oldest.title.replace(' (assigned)', '');
+                            }
                         }
                     } else {
                         icon.title = icon.title.replace(' (assigned)', '');
