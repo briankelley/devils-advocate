@@ -838,9 +838,12 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     align-items: center;
     justify-content: space-between;
     padding: var(--pad-md);
-    cursor: pointer;
+    cursor: default;
     list-style: none;
     user-select: none;
+}
+.model-card-header .model-name {
+    cursor: pointer;
 }
 .model-card-header::-webkit-details-marker { display: none; }
 .model-card-body {
@@ -855,12 +858,11 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
     color: var(--text-dim);
     opacity: 0.4;
     cursor: pointer;
     transition: all 0.15s;
+    padding: 2px;
 }
 .role-icon svg {
     width: 14px;
@@ -874,4 +876,39 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .role-icon.role-active {
     color: var(--green);
     opacity: 1;
+}
+.thinking-toggle {
+    cursor: pointer;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    transition: all 0.15s;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+}
+.thinking-toggle:hover {
+    border-color: var(--text-dim);
+}
+.thinking-toggle.thinking-on {
+    color: var(--green);
+    border-color: var(--green);
+}
+.settings-toggle {
+    cursor: pointer;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    transition: all 0.15s;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+}
+.settings-toggle:hover {
+    border-color: var(--text-dim);
+}
+.settings-toggle.settings-on {
+    color: var(--yellow);
+    border-color: var(--yellow);
+}
+.settings-section {
+    margin-top: var(--pad-sm);
 }

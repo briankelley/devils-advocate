@@ -31,8 +31,8 @@
             {% if config and sorted_models %}
             {% for name, m in sorted_models %}
             <details class="model-card-collapsible" data-model-name="{{ name }}">
-                <summary class="model-card-header">
-                    <span class="model-name">{{ name }}</span>
+                <summary class="model-card-header" onclick="event.preventDefault()">
+                    <span class="model-name" onclick="this.closest('details').toggleAttribute('open')">{{ name }}</span>
                     <span class="model-role-icons">
                         <span class="role-icon{% if roles.get('author') == name %} role-active{% endif %}" data-role="author" data-model="{{ name }}" title="Author{% if roles.get('author') == name %} (assigned){% endif %}"><i data-lucide="pen-tool"></i></span>
                         <span class="role-icon{% if name in (roles.get('reviewers') or []) %} role-active{% endif %}" data-role="reviewer" data-model="{{ name }}" title="Reviewer{% if name in (roles.get('reviewers') or []) %} (assigned){% endif %}"><i data-lucide="scan-eye"></i></span>
@@ -87,6 +87,11 @@
                             <span class="dim">use_completion_tokens: true</span>
                         </div>
                         {% endif %}
+                        <div class="field-row">
+                            <span class="field-label">thinking:</span>
+                            <span class="thinking-toggle{% if m.thinking %} thinking-on{% endif %}"
+                                  data-model="{{ name }}">{{ 'enabled' if m.thinking else 'disabled' }}</span>
+                        </div>
                     </div>
                 </div>
             </details>
@@ -116,6 +121,15 @@
                 <div class="role-summary-row"><span class="role-summary-label">Normalization:</span><span class="role-summary-value" id="rs-normalization">—</span></div>
                 <div class="role-summary-row"><span class="role-summary-label">Revision:</span><span class="role-summary-value" id="rs-revision">—</span></div>
                 <div class="role-summary-row"><span class="role-summary-label">Integration:</span><span class="role-summary-value" id="rs-integration_reviewer">—</span></div>
+            </div>
+            <h2 style="margin-top:12px">Development</h2>
+            <div class="settings-section">
+                <div class="field-row">
+                    <span class="field-label">live e2e tests:</span>
+                    <span class="settings-toggle{% if settings.get('live_testing') %} settings-on{% endif %}"
+                          data-key="live_testing">{{ 'enabled' if settings.get('live_testing') else 'disabled' }}</span>
+                    <span class="dim" style="margin-left:8px">run without -m live flag</span>
+                </div>
             </div>
         </div>
     </div>
@@ -147,6 +161,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // Re-init role icons after Lucide replaces <i> with <svg>
     dvad.initRolePills();
+    dvad.initThinkingToggle();
+    dvad.initSettingsToggle();
 });
 </script>
 {% endblock %}

@@ -432,6 +432,51 @@ async def set_model_timeout(request: Request):
     return JSONResponse({"status": "ok", "model_name": model_name, "timeout": timeout})
 
 
+@router.post("/config/model-thinking")
+async def set_model_thinking(request: Request):
+    """Toggle a model's thinking/reasoning setting."""
+    _check_csrf(request)
+    body = await request.json()
+    model_name = body.get("model_name", "")
+    thinking = body.get("thinking", False)
+
+    if not model_name:
+        raise HTTPException(status_code=400, detail="model_name is required")
+
+    from ..config import find_config
+
+    config_path_str = request.app.state.config_path
+    if config_path_str:
+        target = Path(config_path_str)
+    else:
+        try:
+            target = find_config()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Cannot determine config file path")
+
+    try:
+        from ruamel.yaml import YAML
+        ruamel = YAML()
+        ruamel.preserve_quotes = True
+        data = ruamel.load(target.read_text())
+
+        if "models" not in data or model_name not in data["models"]:
+            raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found in config")
+
+        data["models"][model_name]["thinking"] = bool(thinking)
+
+        from io import StringIO
+        stream = StringIO()
+        ruamel.dump(data, stream)
+        await asyncio.to_thread(StorageManager._atomic_write, target, stream.getvalue())
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update thinking: {exc}")
+
+    return JSONResponse({"status": "ok", "model_name": model_name, "thinking": bool(thinking)})
+
+
 @router.post("/config/model-max-tokens")
 async def set_model_max_tokens(request: Request):
     """Update a single model's max_output_tokens value in the config file."""
@@ -486,6 +531,48 @@ async def set_model_max_tokens(request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to update max_output_tokens: {exc}")
 
     return JSONResponse({"status": "ok", "model_name": model_name, "max_output_tokens": max_tokens})
+
+
+@router.post("/config/settings-toggle")
+async def set_settings_toggle(request: Request):
+    """Toggle a boolean flag in the settings block."""
+    _check_csrf(request)
+    body = await request.json()
+    key = body.get("key", "")
+    value = body.get("value", False)
+
+    valid_keys = {"live_testing"}
+    if key not in valid_keys:
+        raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")
+
+    config_path_str = request.app.state.config_path
+    if config_path_str:
+        target = Path(config_path_str)
+    else:
+        from ..config import find_config
+        try:
+            target = find_config()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Cannot determine config file path")
+
+    try:
+        from ruamel.yaml import YAML
+        from io import StringIO
+        ruamel = YAML()
+        ruamel.preserve_quotes = True
+        data = ruamel.load(target.read_text())
+        if "settings" not in data:
+            data["settings"] = {}
+        data["settings"][key] = bool(value)
+        stream = StringIO()
+        ruamel.dump(data, stream)
+        await asyncio.to_thread(StorageManager._atomic_write, target, stream.getvalue())
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update setting: {exc}")
+
+    return JSONResponse({"status": "ok", "key": key, "value": bool(value)})
 
 
 @router.post("/config/validate")

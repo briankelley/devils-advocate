@@ -38,6 +38,8 @@ const dvad = {
         this.initRolePills();
         this.initTimeoutEditing();
         this.initMaxTokenEditing();
+        this.initThinkingToggle();
+        this.initSettingsToggle();
     },
 
     // ── CSRF token ───────────────────────────────────────────────────
@@ -801,6 +803,58 @@ const dvad = {
                         span.textContent = currentVal;
                     }
                 });
+            });
+        });
+    },
+
+    // ── Thinking Toggle ─────────────────────────────────────────────
+    initThinkingToggle() {
+        document.querySelectorAll('.thinking-toggle').forEach(el => {
+            el.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const model = el.dataset.model;
+                const currentlyOn = el.classList.contains('thinking-on');
+                const newValue = !currentlyOn;
+
+                const resp = await fetch('/api/config/model-thinking', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-DVAD-Token': dvad.getToken(),
+                    },
+                    body: JSON.stringify({ model_name: model, thinking: newValue }),
+                });
+
+                if (resp.ok) {
+                    el.classList.toggle('thinking-on', newValue);
+                    el.textContent = newValue ? 'enabled' : 'disabled';
+                }
+            });
+        });
+    },
+
+    // ── Settings Toggle ──────────────────────────────────────────────
+    initSettingsToggle() {
+        document.querySelectorAll('.settings-toggle').forEach(el => {
+            el.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const key = el.dataset.key;
+                const currentlyOn = el.classList.contains('settings-on');
+                const newValue = !currentlyOn;
+
+                const resp = await fetch('/api/config/settings-toggle', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-DVAD-Token': dvad.getToken(),
+                    },
+                    body: JSON.stringify({ key, value: newValue }),
+                });
+
+                if (resp.ok) {
+                    el.classList.toggle('settings-on', newValue);
+                    el.textContent = newValue ? 'enabled' : 'disabled';
+                }
             });
         });
     },

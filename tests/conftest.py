@@ -1,6 +1,7 @@
 """Shared test fixtures."""
 
 import pytest
+import yaml as _yaml
 from datetime import datetime, timezone
 
 from devils_advocate.types import (
@@ -15,6 +16,37 @@ from devils_advocate.types import (
     ReviewGroup,
     ReviewPoint,
 )
+
+
+# ─── Live Test Gate ──────────────────────────────────────────────────────────
+
+
+def _is_live_testing_enabled() -> bool:
+    """Check models.yaml for settings.live_testing flag."""
+    try:
+        from devils_advocate.config import find_config
+        config_path = find_config()
+        with open(config_path) as f:
+            raw = _yaml.safe_load(f)
+        return bool(raw.get("settings", {}).get("live_testing", False))
+    except Exception:
+        return False
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-skip @pytest.mark.live tests unless explicitly opted in."""
+    markexpr = config.option.markexpr
+    if markexpr and "live" in markexpr:
+        return
+    if _is_live_testing_enabled():
+        return
+
+    skip_live = pytest.mark.skip(
+        reason="Live tests require: -m live flag, or settings.live_testing: true in models.yaml"
+    )
+    for item in items:
+        if "live" in item.keywords:
+            item.add_marker(skip_live)
 
 
 # ─── Factory Helpers ─────────────────────────────────────────────────────────

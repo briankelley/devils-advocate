@@ -231,6 +231,8 @@ def _infer_vendor(model) -> str:
         return "DeepSeek"
     if "api.moonshot.ai" in base_lower:
         return "Moonshot"
+    if "api.minimax.io" in base_lower or provider == "minimax":
+        return "MiniMax"
 
     # Fallback to provider name
     return provider.title()
@@ -256,6 +258,7 @@ async def config_page(request: Request):
         # Extract current roles
         raw = await asyncio.to_thread(_load_raw_yaml, config_file)
         roles_block = raw.get("roles", {})
+        settings_block = raw.get("settings", {})
 
         # Group models by vendor (derived from api_base or provider)
         models_by_provider: dict[str, list[tuple[str, object]]] = {}
@@ -285,6 +288,7 @@ async def config_page(request: Request):
         issues = [("error", str(exc))]
         model_names = []
         roles_block = {}
+        settings_block = {}
         models_by_provider = {}
         sorted_models = []
         env_file_path = ""
@@ -305,6 +309,7 @@ async def config_page(request: Request):
         "env_file_path": env_file_path,
         "env_file_exists": env_file_exists,
         "dvad_binary": dvad_binary,
+        "settings": settings_block,
         "csrf_token": request.app.state.csrf_token,
     })
 
