@@ -18,7 +18,7 @@ from rich.table import Table
 
 from devils_advocate import __version__
 from .config import find_config, load_config, validate_config, get_models_by_role
-from .orchestrator import run_plan_review, run_code_review, run_integration_review
+from .orchestrator import run_plan_review, run_code_review, run_integration_review, run_spec_review
 from .revision import run_revision
 from .storage import StorageManager
 from .types import (
@@ -47,9 +47,9 @@ def cli():
 @cli.command()
 @click.option(
     "--mode",
-    type=click.Choice(["plan", "code", "integration"]),
+    type=click.Choice(["plan", "code", "integration", "spec"]),
     required=True,
-    help="Review mode: plan, code, or integration",
+    help="Review mode: plan, code, integration, or spec",
 )
 @click.option(
     "--input",
@@ -93,7 +93,7 @@ def cli():
     help="Project directory (for integration mode spec discovery)",
 )
 def review(mode, input_path, spec_path, project, max_cost, dry_run, config_path, project_dir):
-    """Run an adversarial review."""
+    """Run a review."""
     try:
         config = load_config(Path(config_path) if config_path else None)
     except ConfigError as e:
@@ -111,10 +111,10 @@ def review(mode, input_path, spec_path, project, max_cost, dry_run, config_path,
             console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
 
-    if mode in ("plan", "code"):
+    if mode in ("plan", "code", "spec"):
         if not input_path:
             console.print(
-                "[red]Error:[/red] --input is required for plan and code reviews."
+                f"[red]Error:[/red] --input is required for {mode} reviews."
             )
             sys.exit(1)
         for p in input_path:
@@ -147,6 +147,9 @@ def review(mode, input_path, spec_path, project, max_cost, dry_run, config_path,
             max_cost=max_cost,
             dry_run=dry_run,
         )
+    elif mode == "spec":
+        input_files = [Path(p) for p in input_path]
+        main_coro = run_spec_review(config, input_files, project, max_cost, dry_run)
     else:
         sys.exit(1)
 

@@ -146,7 +146,8 @@ async def review_detail(request: Request, review_id: str):
     review_dir = storage.reviews_dir / review_id
     has_revised = (review_dir / "revised-plan.md").exists() or \
                   (review_dir / "revised-diff.patch").exists() or \
-                  (review_dir / "remediation-plan.md").exists()
+                  (review_dir / "remediation-plan.md").exists() or \
+                  (review_dir / "revised-spec-suggestions.md").exists()
     has_original = (review_dir / "original_content.txt").exists()
     has_report = (review_dir / "dvad-report.md").exists()
 
@@ -184,6 +185,7 @@ async def review_detail(request: Request, review_id: str):
         "has_overrides": has_overrides,
         "normalization_model": normalization_model,
         "revision_model": revision_model,
+        "review_mode": ledger.get("mode", "plan"),
         "csrf_token": request.app.state.csrf_token,
     })
 

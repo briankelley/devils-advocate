@@ -12,6 +12,7 @@
             <label class="mode-opt"><input type="radio" name="mode" value="plan" checked> plan</label>
             <label class="mode-opt"><input type="radio" name="mode" value="code"> code</label>
             <label class="mode-opt"><input type="radio" name="mode" value="integration"> integration</label>
+            <label class="mode-opt"><input type="radio" name="mode" value="spec"> spec</label>
         </div>
     </div>
 
@@ -82,6 +83,13 @@ document.addEventListener('DOMContentLoaded', function() {
             specRow.style.display = '';
             projectDirRow.style.display = 'none';
             fileHint.textContent = 'Exactly one file required for code mode';
+            inputRow.style.display = '';
+        } else if (mode === 'spec') {
+            inputFilesInput.multiple = true;
+            inputFilesInput.required = true;
+            specRow.style.display = 'none';
+            projectDirRow.style.display = 'none';
+            fileHint.textContent = 'Specification file(s) to enrich with suggestions';
             inputRow.style.display = '';
         } else {
             inputFilesInput.multiple = true;

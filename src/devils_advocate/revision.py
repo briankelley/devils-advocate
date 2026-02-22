@@ -12,7 +12,7 @@ from collections import defaultdict
 from .cost import check_context_window
 from .prompts import load_template
 from .providers import call_with_retry
-from .types import CostTracker, ModelConfig
+from .types import CostTracker, ModelConfig, ReviewGroup
 from .storage import StorageManager
 from .ui import console
 
@@ -24,6 +24,7 @@ _DELIMITERS = {
     "plan": ("=== REVISED PLAN ===", "=== END REVISED PLAN ==="),
     "code": ("=== UNIFIED DIFF ===", "=== END UNIFIED DIFF ==="),
     "integration": ("=== REMEDIATION PLAN ===", "=== END REMEDIATION PLAN ==="),
+    "spec": ("=== SPEC SUGGESTIONS ===", "=== END SPEC SUGGESTIONS ==="),
 }
 
 # Resolutions treated as actionable
@@ -119,6 +120,42 @@ def build_revision_context(ledger_data: dict) -> str:
     return "\n".join(sections)
 
 
+def build_spec_revision_context(groups: list[ReviewGroup], total_reviewers: int = 2) -> str:
+    """Build revision context for spec mode from deduped suggestion groups.
+
+    Formats all groups with their consensus counts, organized by theme,
+    for the spec revision LLM to compile into a themed suggestion report.
+    """
+    by_theme: dict[str, list[str]] = defaultdict(list)
+
+    for g in groups:
+        consensus = len(g.source_reviewers)
+        theme = g.combined_category or "other"
+
+        block_lines = [
+            f"  SUGGESTION GROUP {g.group_id}:",
+            f"    Title: {g.concern}",
+            f"    Consensus: {consensus} of {total_reviewers} reviewers",
+            f"    Contributors: {', '.join(g.source_reviewers)}",
+            f"    Details:",
+        ]
+        for p in g.points:
+            block_lines.append(f"      - [{p.reviewer}] {p.description}")
+            if p.location:
+                block_lines.append(f"        Context: {p.location}")
+
+        by_theme[theme].append("\n".join(block_lines))
+
+    sections = []
+    for theme, blocks in sorted(by_theme.items()):
+        theme_label = theme.replace("_", " ").title()
+        sections.append(f"=== THEME: {theme_label} ===")
+        sections.extend(blocks)
+        sections.append("")
+
+    return "\n".join(sections)
+
+
 def _extract_revision_strict(raw: str, mode: str) -> str:
     """Strict delimiter extractor for revision responses.
 
@@ -141,6 +178,7 @@ def build_revision_prompt(
         "plan": "revision-plan-instruct.txt",
         "code": "revision-code-instruct.txt",
         "integration": "revision-integration-instruct.txt",
+        "spec": "spec-revision-instruct.txt",
     }
     template_name = template_map.get(mode, template_map["plan"])
     return load_template(
@@ -220,6 +258,81 @@ async def run_revision(
 
     # Strict extraction
     extracted = _extract_revision_strict(raw, mode)
+    if not extracted:
+        console.print(
+            "  [yellow]Warning: Revision response missing canonical delimiters "
+            "— revised artifact not saved[/yellow]"
+        )
+        storage.log(
+            "Revision: extraction failed — canonical delimiters not found in response"
+        )
+        return ""
+
+    return extracted
+
+
+async def run_spec_revision(
+    client,
+    revision_model: ModelConfig,
+    original_content: str,
+    groups: list[ReviewGroup],
+    total_reviewers: int,
+    cost_tracker: CostTracker,
+    storage: StorageManager,
+    review_id: str,
+) -> str:
+    """Run the spec mode revision — compiles suggestions into a themed report.
+
+    Unlike run_revision(), this does not depend on governance decisions.
+    All suggestion groups are included unconditionally.
+    """
+    revision_context = build_spec_revision_context(groups, total_reviewers)
+
+    if not revision_context.strip():
+        console.print("  [dim]No suggestions to compile — skipping revision[/dim]")
+        storage.log("Revision: no suggestions — skipping")
+        return ""
+
+    prompt = build_revision_prompt("spec", original_content, revision_context)
+
+    fits, est, limit = check_context_window(revision_model, prompt)
+    if not fits:
+        console.print(
+            f"  [yellow]Warning: Revision prompt ({est} tokens) exceeds "
+            f"{revision_model.name} context ({limit}) — skipping revision[/yellow]"
+        )
+        storage.log(
+            f"Revision: prompt ({est} tokens) exceeds context ({limit}) — skipping"
+        )
+        return ""
+
+    storage.log(f"Revision: calling {revision_model.name}")
+    raw, usage = await call_with_retry(
+        client,
+        revision_model,
+        "",
+        prompt,
+        REVISION_MAX_OUTPUT_TOKENS,
+        log_fn=storage.log,
+    )
+    cost_tracker.add(
+        revision_model.name,
+        usage["input_tokens"],
+        usage["output_tokens"],
+        revision_model.cost_per_1k_input,
+        revision_model.cost_per_1k_output,
+    )
+    console.print(
+        f"  Revision model responded ({usage['output_tokens']} tokens)"
+    )
+    storage.log(
+        f"Revision: {revision_model.name} responded "
+        f"({usage['output_tokens']} output tokens)"
+    )
+
+    storage.save_intermediate(review_id, "revision", "revision_raw.txt", raw)
+
+    extracted = _extract_revision_strict(raw, "spec")
     if not extracted:
         console.print(
             "  [yellow]Warning: Revision response missing canonical delimiters "

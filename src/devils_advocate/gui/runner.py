@@ -190,6 +190,12 @@ class ReviewRunner:
                         dry_run=dry_run,
                         storage=storage,
                     )
+                elif mode == "spec":
+                    from ..orchestrator import run_spec_review
+                    result = await run_spec_review(
+                        config, input_files, project, max_cost, dry_run,
+                        storage=storage,
+                    )
                 else:
                     raise ValueError(f"Unknown mode: {mode}")
 

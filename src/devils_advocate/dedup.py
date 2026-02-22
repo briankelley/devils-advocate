@@ -6,9 +6,9 @@ import httpx
 
 from .types import CostTracker, ModelConfig, ReviewContext, ReviewGroup, ReviewPoint
 from .cost import check_context_window
-from .prompts import build_dedup_prompt
+from .prompts import build_dedup_prompt, build_spec_dedup_prompt
 from .providers import MAX_OUTPUT_TOKENS, call_with_retry
-from .parser import parse_dedup_response
+from .parser import parse_dedup_response, parse_spec_dedup_response
 
 
 def format_points_for_dedup(points: list[ReviewPoint]) -> str:
@@ -27,6 +27,20 @@ def format_points_for_dedup(points: list[ReviewPoint]) -> str:
     return "\n".join(lines)
 
 
+def format_suggestions_for_dedup(points: list[ReviewPoint]) -> str:
+    """Format spec suggestions into the text block expected by the spec dedup prompt."""
+    lines: list[str] = []
+    for i, p in enumerate(points, 1):
+        lines.append(f"SUGGESTION {i}:")
+        lines.append(f"REVIEWER: {p.reviewer}")
+        lines.append(f"THEME: {p.category}")
+        lines.append(f"DESCRIPTION: {p.description}")
+        if p.location:
+            lines.append(f"CONTEXT: {p.location}")
+        lines.append("")
+    return "\n".join(lines)
+
+
 async def deduplicate_points(
     client: httpx.AsyncClient,
     all_points: list[ReviewPoint],
@@ -34,13 +48,21 @@ async def deduplicate_points(
     ctx: ReviewContext,
     log_fn=None,
     cost_tracker: CostTracker | None = None,
+    mode: str = "plan",
 ) -> list[ReviewGroup]:
-    """Send all review points to the dedup model for grouping."""
+    """Send all review points to the dedup model for grouping.
+
+    When mode="spec", uses spec-specific formatting, prompt, and parser.
+    """
     if not all_points:
         return []
 
-    formatted = format_points_for_dedup(all_points)
-    prompt = build_dedup_prompt(formatted)
+    if mode == "spec":
+        formatted = format_suggestions_for_dedup(all_points)
+        prompt = build_spec_dedup_prompt(formatted)
+    else:
+        formatted = format_points_for_dedup(all_points)
+        prompt = build_dedup_prompt(formatted)
 
     fits, est, limit = check_context_window(model, prompt)
     if not fits:
@@ -86,4 +108,7 @@ async def deduplicate_points(
             f"({usage.get('output_tokens', 0)} output tokens)"
         )
 
+    if mode == "spec":
+        total_reviewers = len(set(p.reviewer for p in all_points))
+        return parse_spec_dedup_response(text, all_points, ctx, total_reviewers)
     return parse_dedup_response(text, all_points, ctx)

@@ -14,20 +14,24 @@
     </div>
     <div class="progress-phases" id="progress-phases">
         <div class="phase-item" data-phase="round1_calling">
-            <span class="phase-dot" id="dot-round1">&#9675;</span> Round 1: Reviewers
+            <span class="phase-dot" id="dot-round1">&#9675;</span> Reviewers
             <span id="round1-detail" class="phase-detail"></span>
         </div>
         <span class="phase-arrow">&rarr;</span>
-        <div class="phase-item" data-phase="round1_author">
-            <span class="phase-dot" id="dot-author">&#9675;</span> Round 1: Author Response
+        <div class="phase-item" data-phase="dedup">
+            <span class="phase-dot" id="dot-dedup">&#9675;</span> Dedup
         </div>
         <span class="phase-arrow">&rarr;</span>
-        <div class="phase-item" data-phase="round2">
-            <span class="phase-dot" id="dot-round2">&#9675;</span> Round 2 / Rebuttals
+        <div class="phase-item phase-adversarial" data-phase="round1_author">
+            <span class="phase-dot" id="dot-author">&#9675;</span> Author Response
         </div>
-        <span class="phase-arrow">&rarr;</span>
+        <span class="phase-arrow phase-adversarial">&rarr;</span>
+        <div class="phase-item phase-adversarial" data-phase="round2">
+            <span class="phase-dot" id="dot-round2">&#9675;</span> Rebuttals
+        </div>
+        <span class="phase-arrow phase-adversarial">&rarr;</span>
         <div class="phase-item" data-phase="governance">
-            <span class="phase-dot" id="dot-governance">&#9675;</span> Governance / Output
+            <span class="phase-dot" id="dot-governance">&#9675;</span> <span class="phase-label-text" id="final-phase-label">Governance / Output</span>
         </div>
     </div>
     <div class="log-container">
@@ -70,6 +74,17 @@
     </div>
 </div>
 
+{% if review_mode == 'spec' %}
+<div class="pipeline-rail">
+    <div class="pipeline-step done" id="pipe-round1"><span class="step-dot"></span><span class="step-label">Reviewers</span></div>
+    <div class="pipeline-step done" id="pipe-dedup"><span class="step-dot"></span><span class="step-label">Dedup</span></div>
+    {% if has_revised %}
+    <div class="pipeline-step done" id="pipe-revision"><span class="step-dot"></span><span class="step-label">Suggestions</span></div>
+    {% elif has_original %}
+    <div class="pipeline-step pending" id="pipe-revision"><span class="step-dot"></span><span class="step-label">Suggestions</span></div>
+    {% endif %}
+</div>
+{% else %}
 <div class="pipeline-rail">
     <div class="pipeline-step done" id="pipe-round1"><span class="step-dot"></span><span class="step-label">Round 1 — Reviewers</span></div>
     <div class="pipeline-step done" id="pipe-author"><span class="step-dot"></span><span class="step-label">Round 1 — Author</span></div>
@@ -84,7 +99,16 @@
     <div class="pipeline-step pending" id="pipe-revision"><span class="step-dot"></span><span class="step-label">Revision</span></div>
     {% endif %}
 </div>
+{% endif %}
 
+{% if review_mode == 'spec' %}
+{# Spec Summary Strip #}
+<div class="summary-strip">
+    <span class="summary-tag tag-accepted">Suggestion Groups: {{ ledger.get('summary', {}).get('total_groups', 0) }}</span>
+    <span class="summary-tag tag-accepted">Multi-Consensus: {{ ledger.get('summary', {}).get('multi_consensus', 0) }}</span>
+    <span class="summary-tag tag-dismissed">Single Source: {{ ledger.get('summary', {}).get('single_source', 0) }}</span>
+</div>
+{% else %}
 {# Summary Strip #}
 <div class="summary-strip">
     <span class="summary-tag tag-accepted">Auto-Accepted: {{ auto_accepted|length }}</span>
@@ -93,6 +117,7 @@
     <span class="summary-tag tag-overridden">Overridden: {{ overridden|length }}</span>
 </div>
 <div class="overrides-banner" id="overrides-banner">All escalations resolved — ready for revision</div>
+{% endif %}
 
 {# Escalated Items #}
 {% if escalated %}

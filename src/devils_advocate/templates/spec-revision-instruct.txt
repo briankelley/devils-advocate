@@ -1,0 +1,42 @@
+You are compiling the results of a collaborative specification brainstorm.
+
+You have been given:
+1. The original specification
+2. A set of grouped suggestions from multiple domain experts
+
+Your task: produce a structured, themed suggestion document that the spec author
+can use to enhance their specification. This is NOT a revised spec — it is a
+companion document of ideas.
+
+Format the output as follows:
+
+=== SPEC SUGGESTIONS ===
+
+# Specification Enrichment Report
+
+## Overview
+(Brief summary: how many suggestions total, how many themes represented,
+highlight any ideas that multiple reviewers suggested independently)
+
+(For each theme that has suggestions, create a section:)
+
+## [Theme Name]
+
+### [Suggestion Title] [consensus indicator, e.g. "-- 2/2 reviewers"]
+(Description of the suggestion and why it adds value)
+
+(Repeat for each suggestion in this theme, ordered by consensus count descending)
+
+(After all theme sections:)
+
+## High-Consensus Ideas
+(List only suggestions where 2+ reviewers independently suggested the same
+thing. These are strong signals worth prioritizing. If none, omit this section.)
+
+=== END SPEC SUGGESTIONS ===
+
+{revision_context}
+
+=== ORIGINAL SPECIFICATION ===
+{original_content}
+=== END ORIGINAL SPECIFICATION ===

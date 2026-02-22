@@ -42,6 +42,23 @@ _CATEGORY_MAP = {
     "other": "other",
 }
 
+_THEME_MAP = {
+    "ux": "ux", "user_experience": "ux", "usability": "ux",
+    "features": "features", "feature": "features", "functionality": "features",
+    "integrations": "integrations", "integration": "integrations",
+    "data_model": "data_model", "data model": "data_model", "data": "data_model",
+    "monetization": "monetization", "revenue": "monetization", "pricing": "monetization",
+    "accessibility": "accessibility", "a11y": "accessibility",
+    "performance_ux": "performance_ux", "performance ux": "performance_ux",
+    "content": "content",
+    "social": "social", "community": "social",
+    "platform": "platform",
+    "security_privacy": "security_privacy", "security privacy": "security_privacy",
+    "security": "security_privacy", "privacy": "security_privacy",
+    "onboarding": "onboarding",
+    "other": "other",
+}
+
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -53,6 +70,11 @@ def _normalize_severity(raw: str) -> str:
 def _normalize_category(raw: str) -> str:
     key = raw.strip().lower().replace("-", "_").replace(" ", "_")
     return _CATEGORY_MAP.get(key, _CATEGORY_MAP.get(key.split("_")[0], "other"))
+
+
+def _normalize_theme(raw: str) -> str:
+    key = raw.strip().lower().replace("-", "_").replace(" ", "_")
+    return _THEME_MAP.get(key, _THEME_MAP.get(key.split("_")[0], "other"))
 
 
 def _extract_multiline_field(text: str, field_name: str, next_fields: list) -> str:
@@ -127,6 +149,171 @@ def parse_review_response(
         ))
 
     return points
+
+
+# ─── Spec Response Parsing ──────────────────────────────────────────────────
+
+
+def parse_spec_response(
+    raw: str,
+    reviewer_name: str,
+    start_index: int = 0,
+) -> list[ReviewPoint]:
+    """Parse SUGGESTION N: formatted responses into ReviewPoints.
+
+    Maps spec suggestion fields into ReviewPoint:
+      theme -> category, title+description -> description, context -> location
+    """
+    points = []
+
+    # Strip reasoning delimiters
+    raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL | re.IGNORECASE)
+    raw = re.sub(r'<reasoning>.*?</reasoning>', '', raw, flags=re.DOTALL | re.IGNORECASE)
+
+    # Split into blocks by SUGGESTION headers
+    blocks = re.split(r'(?=SUGGESTION\s+#?\d+\s*:?)', raw, flags=re.IGNORECASE)
+
+    idx = start_index
+    for block in blocks:
+        if not block.strip():
+            continue
+
+        theme = _extract_multiline_field(
+            block, "THEME",
+            ["TITLE", "DESCRIPTION", "CONTEXT"],
+        )
+        title = _extract_multiline_field(
+            block, "TITLE",
+            ["DESCRIPTION", "CONTEXT"],
+        )
+        description = _extract_multiline_field(
+            block, "DESCRIPTION",
+            ["CONTEXT", "SUGGESTION"],
+        )
+        context = _extract_multiline_field(
+            block, "CONTEXT",
+            ["SUGGESTION"],
+        )
+
+        if not description and not title:
+            continue
+
+        idx += 1
+        # Combine title and description for the ReviewPoint description field
+        full_desc = f"{title}: {description}" if title and description else (title or description)
+        points.append(ReviewPoint(
+            point_id=f"temp_{idx:03d}",
+            reviewer=reviewer_name,
+            severity="info",  # Suggestions don't have severity
+            category=_normalize_theme(theme) if theme else "other",
+            description=full_desc,
+            recommendation="",  # Not applicable for suggestions
+            location=context or "",
+        ))
+
+    return points
+
+
+def parse_spec_dedup_response(
+    raw: str,
+    all_points: list[ReviewPoint],
+    ctx: ReviewContext,
+    total_reviewers: int = 2,
+) -> list[ReviewGroup]:
+    """Parse spec dedup response into ReviewGroup objects.
+
+    Maps spec dedup fields: theme -> combined_category, title -> concern,
+    consensus -> source_reviewers.
+    """
+    groups: list[ReviewGroup] = []
+    idx_point_map = {i + 1: p for i, p in enumerate(all_points)}
+
+    blocks = re.split(r'(?=GROUP\s+\d+\s*:)', raw, flags=re.IGNORECASE)
+
+    group_idx = 0
+    for block in blocks:
+        if not block.strip():
+            continue
+
+        theme = _extract_multiline_field(
+            block, "THEME",
+            ["TITLE", "DESCRIPTION", "CONSENSUS", "SUGGESTIONS"],
+        )
+        title = _extract_multiline_field(
+            block, "TITLE",
+            ["DESCRIPTION", "CONSENSUS", "SUGGESTIONS"],
+        )
+        description = _extract_multiline_field(
+            block, "DESCRIPTION",
+            ["CONSENSUS", "SUGGESTIONS"],
+        )
+        consensus = _extract_multiline_field(
+            block, "CONSENSUS",
+            ["SUGGESTIONS", "GROUP"],
+        )
+        suggestions_str = _extract_multiline_field(
+            block, "SUGGESTIONS",
+            ["GROUP"],
+        )
+
+        if not title and not description:
+            continue
+
+        # Parse suggestion references
+        found_points: list[ReviewPoint] = []
+        if suggestions_str:
+            for num_match in re.finditer(r'(?:SUGGESTION\s+)?(\d+)', suggestions_str, re.IGNORECASE):
+                num = int(num_match.group(1))
+                if num in idx_point_map:
+                    found_points.append(idx_point_map[num])
+
+        if not found_points and title:
+            # Keyword fallback
+            for _idx_key, p in idx_point_map.items():
+                if p.point_id not in [fp.point_id for g in groups for fp in g.points]:
+                    if any(word.lower() in (title + " " + (description or "")).lower()
+                           for word in p.description.split()[:5]):
+                        found_points.append(p)
+                        break
+
+        if not found_points:
+            continue
+
+        group_idx += 1
+        group_id = ctx.make_group_id(group_idx)
+
+        for pi, p in enumerate(found_points, 1):
+            p.point_id = ctx.make_point_id(group_id, pi)
+
+        reviewers = list(set(p.reviewer for p in found_points))
+        concern = f"{title}: {description}" if title and description else (title or description or "")
+
+        groups.append(ReviewGroup(
+            group_id=group_id,
+            concern=concern,
+            points=found_points,
+            combined_severity="info",
+            combined_category=_normalize_theme(theme) if theme else "other",
+            source_reviewers=reviewers,
+        ))
+
+    # Catch ungrouped points
+    grouped_ids = {p.point_id for g in groups for p in g.points}
+    for _orig_idx, p in idx_point_map.items():
+        if p.point_id not in grouped_ids and p.point_id.startswith("temp_"):
+            group_idx += 1
+            group_id = ctx.make_group_id(group_idx)
+            p.point_id = ctx.make_point_id(group_id, 1)
+            groups.append(ReviewGroup(
+                group_id=group_id,
+                concern=p.description,
+                points=[p],
+                combined_severity="info",
+                combined_category=p.category,
+                source_reviewers=[p.reviewer],
+            ))
+
+    return groups
 
 
 # ─── GUID Resolution ────────────────────────────────────────────────────────
@@ -357,8 +544,13 @@ def parse_dedup_response(
 
 
 def extract_revised_output(raw: str, mode: str) -> str:
-    """Extract revised plan, unified diff, or remediation plan from author response."""
-    if mode == "plan":
+    """Extract revised plan, unified diff, remediation plan, or spec suggestions from response."""
+    if mode == "spec":
+        m = re.search(
+            r'=== SPEC SUGGESTIONS ===(.*?)=== END SPEC SUGGESTIONS ===',
+            raw, re.DOTALL,
+        )
+    elif mode == "plan":
         m = re.search(
             r'=== REVISED PLAN ===(.*?)=== END REVISED PLAN ===',
             raw, re.DOTALL,

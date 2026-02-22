@@ -51,7 +51,7 @@ async def start_review(request: Request):
     if not project:
         raise HTTPException(status_code=400, detail="Project name is required")
 
-    if mode not in ("plan", "code", "integration"):
+    if mode not in ("plan", "code", "integration", "spec"):
         raise HTTPException(status_code=400, detail=f"Invalid mode: {mode}")
 
     max_cost = None
@@ -90,9 +90,9 @@ async def start_review(request: Request):
         input_files.append(dest)
 
     # Mode-aware validation
-    if mode == "plan" and not input_files:
+    if mode in ("plan", "spec") and not input_files:
         shutil.rmtree(tmpdir, ignore_errors=True)
-        raise HTTPException(status_code=400, detail="Plan mode requires at least one input file")
+        raise HTTPException(status_code=400, detail=f"{mode.title()} mode requires at least one input file")
     if mode == "code":
         if len(input_files) != 1:
             shutil.rmtree(tmpdir, ignore_errors=True)

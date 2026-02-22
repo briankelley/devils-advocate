@@ -151,6 +151,18 @@ const dvad = {
                     logOutput.scrollTop = logOutput.scrollHeight;
                 }
 
+                // Detect spec mode from the initial review_start event
+                if (ev.phase === 'review_start' && ev.message && ev.message.includes('spec review')) {
+                    this._specMode = true;
+                    // Hide adversarial pipeline phases
+                    document.querySelectorAll('.phase-adversarial').forEach(el => {
+                        el.style.display = 'none';
+                    });
+                    // Rename the final phase label
+                    const finalLabel = document.getElementById('final-phase-label');
+                    if (finalLabel) finalLabel.textContent = 'Suggestions';
+                }
+
                 // Update phase dots
                 if (ev.phase) {
                     this._updatePhase(ev.phase, seenPhases);
@@ -182,11 +194,24 @@ const dvad = {
     },
 
     _updatePhase(phase, seenPhases) {
+        // Detect spec mode from initial review_start event or phase-adversarial visibility
+        if (!this._specMode && phase === 'review_start') {
+            // Check if adversarial phases are hidden (spec mode hides them via CSS class)
+            const adversarialEls = document.querySelectorAll('.phase-adversarial');
+            // Will be determined on next phase event
+        }
+        if (phase === 'dedup_calling' || phase === 'dedup_responded') {
+            // If dedup phases fire, check if spec mode (no author phase expected)
+            this._specMode = this._specMode || !document.getElementById('dot-author');
+        }
+
         const phaseMap = {
             'review_start': 'dot-round1',
             'round1_calling': 'dot-round1',
             'round1_responded': 'dot-round1',
             'normalization': 'dot-round1',
+            'dedup_calling': 'dot-dedup',
+            'dedup_responded': 'dot-dedup',
             'round1_author': 'dot-author',
             'round2_skip': 'dot-round2',
             'round2_skip_reviewer': 'dot-round2',
@@ -208,8 +233,9 @@ const dvad = {
         const dotId = phaseMap[phase];
         if (!dotId) return;
 
-        // Mark previous phases as done
-        const dotOrder = ['dot-round1', 'dot-author', 'dot-round2', 'dot-governance'];
+        // Use appropriate dot order based on which dots exist in the DOM
+        const fullOrder = ['dot-round1', 'dot-dedup', 'dot-author', 'dot-round2', 'dot-governance'];
+        const dotOrder = fullOrder.filter(id => document.getElementById(id));
         const currentIdx = dotOrder.indexOf(dotId);
 
         for (let i = 0; i < dotOrder.length; i++) {

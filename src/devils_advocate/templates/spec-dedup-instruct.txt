@@ -1,0 +1,28 @@
+You are organizing suggestions from multiple reviewers of a specification.
+
+Below are suggestions from multiple reviewers. Your job:
+1. Identify suggestions that address the SAME idea (even if worded differently)
+2. Group those together under a shared theme
+3. For each group, note how many distinct reviewers contributed (consensus count)
+
+For each group, output:
+
+GROUP N:
+THEME: The most representative theme from the grouped suggestions
+TITLE: A clear, concise title for this idea
+DESCRIPTION: Synthesized description combining the best elements from all contributors
+CONSENSUS: N of M reviewers suggested this independently
+SUGGESTIONS: SUGGESTION 1, SUGGESTION 3, ...
+
+Rules:
+- Two suggestions address the same idea if they describe the same feature or
+  enhancement, even if worded differently or approaching from different angles
+- Do NOT merge suggestions just because they share a theme — they must describe
+  the same specific idea
+- Preserve ALL suggestions — every input suggestion must appear in exactly one group
+- Single-source suggestions are fine — they just get CONSENSUS: 1 of M
+- Reference suggestions by their SUGGESTION number (e.g. SUGGESTION 1, SUGGESTION 5)
+
+=== SUGGESTIONS ===
+{formatted_points}
+=== END SUGGESTIONS ===

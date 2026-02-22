@@ -42,6 +42,10 @@ _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     (r"No structured points from (.+) -- trying LLM normalization", "normalization", {}),
     (r"Round 1: sending grouped feedback to author", "round1_author", {}),
 
+    # Dedup
+    (r"Deduplication: sending (.+) (?:points|suggestions) to (.+)", "dedup_calling", {}),
+    (r"Deduplication: (.+) responded \((\d+) output tokens\)", "dedup_responded", {}),
+
     # Round 2
     (r"Round 2: all groups accepted by author -- skipping", "round2_skip", {}),
     (r"Round 2: (.+) has no contested groups -- skipping", "round2_skip_reviewer", {}),

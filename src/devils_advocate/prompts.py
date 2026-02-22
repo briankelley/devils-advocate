@@ -160,3 +160,38 @@ def build_integration_prompt(files_content: str, spec: str) -> str:
     )
 
 
+# ─── Spec Mode Prompts ──────────────────────────────────────────────────────
+
+_spec_reviewer_system_cache: str | None = None
+
+
+def get_spec_reviewer_system_prompt() -> str:
+    """Lazy-loaded spec reviewer system prompt from template."""
+    global _spec_reviewer_system_cache
+    if _spec_reviewer_system_cache is None:
+        _spec_reviewer_system_cache = load_template("spec-reviewer-system.txt")
+    return _spec_reviewer_system_cache
+
+
+def build_spec_review_prompt(content: str) -> str:
+    """Build the spec mode reviewer instruction prompt."""
+    return load_template("spec-reviewer-instruct.txt", content=content)
+
+
+def build_spec_dedup_prompt(formatted_points: str) -> str:
+    """Build the spec mode dedup prompt."""
+    return load_template("spec-dedup-instruct.txt", formatted_points=formatted_points)
+
+
+def build_spec_revision_prompt(
+    original_content: str,
+    revision_context: str,
+) -> str:
+    """Build the spec mode revision prompt."""
+    return load_template(
+        "spec-revision-instruct.txt",
+        original_content=original_content,
+        revision_context=revision_context,
+    )
+
+

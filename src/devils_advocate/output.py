@@ -16,6 +16,9 @@ from .types import (
 
 def generate_report(result: ReviewResult) -> str:
     """Generate human-readable dvad-report.md."""
+    if result.mode == "spec":
+        return _generate_spec_report(result)
+
     lines = ["# Devil's Advocate Review Report", ""]
     lines.append(f"**Mode:** {result.mode.title()} Review")
     lines.append(f"**Input:** `{result.input_file}`")
@@ -267,3 +270,100 @@ def generate_ledger(result: ReviewResult) -> dict:
             "breakdown": {k: round(v, 6) for k, v in result.cost.breakdown().items()},
         },
     }
+
+
+# ─── Spec Report Generator ────────────────────────────────────────────────
+
+
+def _generate_spec_report(result: ReviewResult) -> str:
+    """Generate spec-mode report — themed suggestion list with consensus indicators."""
+    lines = ["# Specification Enrichment Report", ""]
+    lines.append(f"**Mode:** Spec Review (Collaborative Ideation)")
+    lines.append(f"**Input:** `{result.input_file}`")
+    lines.append(f"**Project:** {result.project}")
+    lines.append(f"**Date:** {result.timestamp}")
+    lines.append(f"**Review ID:** `{result.review_id}`")
+    lines.append(f"**Reviewer Models:** {', '.join(result.reviewer_models)}")
+    lines.append(f"**Dedup Model:** {result.dedup_model}")
+    lines.append(f"**Total Cost:** ${result.cost.total_usd:.4f}")
+    lines.append("")
+
+    # Summary
+    s = result.summary
+    total_reviewers = len(result.reviewer_models)
+    lines.append("## Summary")
+    lines.append("")
+    lines.append(f"- **Total Suggestions:** {s.get('total_points', 0)}")
+    lines.append(f"- **Suggestion Groups:** {s.get('total_groups', 0)}")
+    lines.append(f"- **Multi-Reviewer Consensus:** {s.get('multi_consensus', 0)}")
+    lines.append(f"- **Single Source:** {s.get('single_source', 0)}")
+    lines.append("")
+
+    # Group suggestions by theme
+    by_theme: dict[str, list] = {}
+    for g in result.groups:
+        theme = (g.combined_category or "other").replace("_", " ").title()
+        by_theme.setdefault(theme, []).append(g)
+
+    # Sort themes alphabetically, but put "Other" last
+    theme_order = sorted(k for k in by_theme if k != "Other")
+    if "Other" in by_theme:
+        theme_order.append("Other")
+
+    for theme in theme_order:
+        groups = by_theme[theme]
+        lines.append(f"## {theme}")
+        lines.append("")
+        # Sort by consensus count descending
+        groups.sort(key=lambda g: len(g.source_reviewers), reverse=True)
+        for g in groups:
+            consensus = len(g.source_reviewers)
+            if consensus > 1:
+                indicator = f" -- {consensus}/{total_reviewers} reviewers"
+            else:
+                indicator = ""
+            lines.append(f"### {g.concern[:120]}{indicator}")
+            lines.append("")
+            for p in g.points:
+                lines.append(f"- **{p.reviewer}:** {p.description}")
+                if p.location:
+                    lines.append(f"  - *Context:* {p.location}")
+            lines.append("")
+
+    # High-consensus section
+    high_consensus = [g for g in result.groups if len(g.source_reviewers) > 1]
+    if high_consensus:
+        lines.append("## High-Consensus Ideas")
+        lines.append("")
+        lines.append(
+            "The following suggestions were independently raised by multiple reviewers, "
+            "indicating strong signal:"
+        )
+        lines.append("")
+        for g in high_consensus:
+            consensus = len(g.source_reviewers)
+            lines.append(
+                f"- **{g.concern[:120]}** "
+                f"({consensus}/{total_reviewers} reviewers: "
+                f"{', '.join(g.source_reviewers)})"
+            )
+        lines.append("")
+
+    # Revised output (suggestion report from revision LLM)
+    if result.revised_output:
+        lines.append("## Compiled Suggestion Report")
+        lines.append("")
+        lines.append(result.revised_output)
+        lines.append("")
+
+    # Cost breakdown
+    lines.append("## Cost Breakdown")
+    lines.append("")
+    lines.append("| Model | Cost (USD) |")
+    lines.append("|---|---|")
+    for model, cost in result.cost.breakdown().items():
+        lines.append(f"| {model} | ${cost:.4f} |")
+    lines.append(f"| **Total** | **${result.cost.total_usd:.4f}** |")
+    lines.append("")
+
+    return "\n".join(lines)

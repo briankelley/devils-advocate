@@ -392,18 +392,29 @@ async def _call_reviewer(
     review_id: str,
     cost_tracker: CostTracker,
     storage: StorageManager,
+    system_prompt: str | None = None,
+    point_parser=None,
 ) -> list[ReviewPoint]:
     """Call a single reviewer and return parsed points.
 
     If ``parse_review_response`` yields no points, falls back to LLM
     normalization using *normalization_model* (Bug 4 fix: this is NOT the
     author model).
+
+    Parameters
+    ----------
+    system_prompt : str | None
+        Override the default reviewer system prompt. Used by spec mode.
+    point_parser : callable | None
+        Override the default ``parse_review_response`` parser. When provided,
+        called as ``point_parser(text, reviewer.name)`` instead of the default.
     """
     storage.log(f"Round 1: calling {reviewer.name}")
+    sys_prompt = system_prompt if system_prompt is not None else get_reviewer_system_prompt()
     text, usage = await call_with_retry(
         client,
         reviewer,
-        get_reviewer_system_prompt(),
+        sys_prompt,
         prompt,
         MAX_OUTPUT_TOKENS,
         log_fn=storage.log,
@@ -423,7 +434,8 @@ async def _call_reviewer(
     storage.save_intermediate(review_id, "round1", f"{reviewer.name}_raw.txt", text)
 
     # Parse
-    points = parse_review_response(text, reviewer.name)
+    parser_fn = point_parser if point_parser is not None else parse_review_response
+    points = parser_fn(text, reviewer.name)
 
     # LLM normalization fallback if no points extracted
     if not points:
