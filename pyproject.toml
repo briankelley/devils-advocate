@@ -38,6 +38,9 @@ dvad = "devils_advocate.cli:cli"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "live: e2e tests that make real API calls (select with '-m live')",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/devils_advocate"]
