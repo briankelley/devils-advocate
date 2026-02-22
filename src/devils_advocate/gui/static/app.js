@@ -171,7 +171,7 @@ const dvad = {
                         el.style.display = 'none';
                     });
                     document.querySelectorAll('.bc-spec-only').forEach(el => {
-                        el.style.display = '';
+                        el.classList.remove('bc-spec-only');
                     });
                     const reviewersLabel = document.getElementById('reviewers-phase-label');
                     if (reviewersLabel) reviewersLabel.textContent = 'REVIEWERS';
@@ -246,7 +246,7 @@ const dvad = {
                 el.style.display = 'none';
             });
             document.querySelectorAll('.bc-spec-only').forEach(el => {
-                el.style.display = '';
+                el.classList.remove('bc-spec-only');
             });
             const reviewersLabel = document.getElementById('reviewers-phase-label');
             if (reviewersLabel) reviewersLabel.textContent = 'REVIEWERS';
@@ -490,6 +490,7 @@ const dvad = {
         icons.forEach(icon => {
             icon.addEventListener('click', (e) => {
                 e.stopPropagation();
+                e.preventDefault();
                 const model = icon.dataset.model;
                 const role = icon.dataset.role;
                 const isActive = icon.classList.contains('role-active');
