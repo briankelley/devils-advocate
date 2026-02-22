@@ -237,6 +237,7 @@ async def run_revision(
         prompt,
         REVISION_MAX_OUTPUT_TOKENS,
         log_fn=storage.log,
+        mode="revision",
     )
     cost_tracker.add(
         revision_model.name,
@@ -315,6 +316,7 @@ async def run_spec_revision(
         prompt,
         REVISION_MAX_OUTPUT_TOKENS,
         log_fn=storage.log,
+        mode="revision",
     )
     cost_tracker.add(
         revision_model.name,

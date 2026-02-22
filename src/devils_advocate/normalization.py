@@ -24,6 +24,7 @@ async def normalize_review_response(
     start_index: int = 0,
     log_fn=None,
     cost_tracker: CostTracker | None = None,
+    mode: str = "",
 ) -> list[ReviewPoint]:
     """LLM normalization fallback: send raw response to a model for structured extraction."""
     prompt = build_normalization_prompt(raw)
@@ -33,6 +34,7 @@ async def normalize_review_response(
     try:
         text, usage = await call_with_retry(
             client, model, "", prompt, MAX_OUTPUT_TOKENS, log_fn=log_fn,
+            mode=mode or "normalization",
         )
         if cost_tracker:
             cost_tracker.add(

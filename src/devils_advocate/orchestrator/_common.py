@@ -395,6 +395,7 @@ async def _call_reviewer(
     system_prompt: str | None = None,
     point_parser=None,
     role_label: str = "reviewer",
+    mode: str = "",
 ) -> list[ReviewPoint]:
     """Call a single reviewer and return parsed points.
 
@@ -419,6 +420,7 @@ async def _call_reviewer(
         prompt,
         MAX_OUTPUT_TOKENS,
         log_fn=storage.log,
+        mode=mode,
     )
     cost_tracker.add(
         reviewer.name,
@@ -447,6 +449,7 @@ async def _call_reviewer(
         points = await normalize_review_response(
             client, text, normalization_model, reviewer.name,
             log_fn=storage.log, cost_tracker=cost_tracker,
+            mode=mode or "normalization",
         )
 
     return points
@@ -539,6 +542,7 @@ async def _run_round2_exchange(
                 rebuttal_prompt,
                 MAX_OUTPUT_TOKENS,
                 log_fn=storage.log,
+                mode=mode,
             )
         )
 
@@ -626,6 +630,7 @@ async def _run_round2_exchange(
                     final_prompt,
                     AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
                     log_fn=storage.log,
+                    mode=mode,
                 )
                 cost_tracker.add(
                     author.name,

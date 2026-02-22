@@ -179,6 +179,7 @@ async def run_integration_review(
                 prompt,
                 MAX_OUTPUT_TOKENS,
                 log_fn=storage.log,
+                mode="integration",
             )
             cost_tracker.add(
                 integ_reviewer.name,
@@ -201,6 +202,7 @@ async def run_integration_review(
                     integ_reviewer.name,
                     log_fn=storage.log,
                     cost_tracker=cost_tracker,
+                    mode="integration",
                 )
 
             if not points:
@@ -252,6 +254,7 @@ async def run_integration_review(
                 round1_author_prompt,
                 AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
                 log_fn=storage.log,
+                mode="integration",
             )
             cost_tracker.add(
                 author.name,

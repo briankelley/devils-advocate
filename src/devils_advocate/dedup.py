@@ -91,6 +91,7 @@ async def deduplicate_points(
 
     text, usage = await call_with_retry(
         client, model, "", prompt, MAX_OUTPUT_TOKENS, log_fn=log_fn,
+        mode="dedup",
     )
 
     if cost_tracker is not None:

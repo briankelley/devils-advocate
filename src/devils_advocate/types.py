@@ -89,6 +89,7 @@ class ModelConfig:
     cost_per_1k_output: float | None = None
     timeout: int = 120
     use_completion_tokens: bool = False
+    thinking: bool = False
 
     @property
     def api_key(self) -> str:

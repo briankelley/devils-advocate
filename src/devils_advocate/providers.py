@@ -1,4 +1,4 @@
-"""LLM API providers (Anthropic, OpenAI-compatible) with retry logic.
+"""LLM API providers (Anthropic, OpenAI-compatible, MiniMax) with retry logic.
 
 Uses httpx directly rather than vendor SDKs to avoid SDK version lock-in
 and keep the dependency footprint minimal.
@@ -23,6 +23,18 @@ REVISION_MAX_OUTPUT_TOKENS = 64000
 DEFAULT_TIMEOUT = 120
 DEFAULT_MAX_RETRIES = 3
 
+# Mode-dependent thinking budgets for Anthropic extended thinking
+_ANTHROPIC_THINKING_BUDGETS = {
+    "spec": 4096,
+    "plan": 10000,
+    "code": 10000,
+    "integration": 10000,
+    "revision": 16000,
+    "dedup": 4096,
+    "normalization": 4096,
+    "": 8192,
+}
+
 
 # ─── Provider Implementations ────────────────────────────────────────────────
 
@@ -33,6 +45,7 @@ async def call_anthropic(
     system_prompt: str,
     user_prompt: str,
     max_tokens: int = MAX_OUTPUT_TOKENS,
+    mode: str = "",
 ) -> tuple:
     """Call the Anthropic Messages API. Returns (response_text, usage_dict)."""
     headers = {
@@ -47,6 +60,13 @@ async def call_anthropic(
     }
     if system_prompt:
         body["system"] = system_prompt
+
+    # Thinking / reasoning support
+    if model.thinking:
+        budget = _ANTHROPIC_THINKING_BUDGETS.get(mode, 8192)
+        thinking_type = "adaptive" if "opus-4-6" in model.model_id else "enabled"
+        body["thinking"] = {"type": thinking_type, "budget_tokens": budget}
+        body["max_tokens"] = body["max_tokens"] + budget
 
     resp = await client.post(
         ANTHROPIC_API_URL, json=body, headers=headers, timeout=model.timeout
@@ -70,6 +90,7 @@ async def call_openai_compatible(
     system_prompt: str,
     user_prompt: str,
     max_tokens: int = MAX_OUTPUT_TOKENS,
+    mode: str = "",
 ) -> tuple:
     """Call an OpenAI-compatible chat completions API. Returns (response_text, usage_dict)."""
     url = f"{model.api_base.rstrip('/')}/chat/completions"
@@ -88,6 +109,15 @@ async def call_openai_compatible(
     else:
         body["max_tokens"] = max_tokens
 
+    # Thinking / reasoning support
+    if model.thinking:
+        base = (model.api_base or "").lower()
+        if "api.openai.com" in base:
+            effort = "medium" if mode == "spec" else "high"
+            body["reasoning_effort"] = effort
+        elif "moonshot" in base:
+            body["thinking"] = {"type": "enabled"}
+
     resp = await client.post(url, json=body, headers=headers, timeout=model.timeout)
     resp.raise_for_status()
     data = resp.json()
@@ -97,9 +127,51 @@ async def call_openai_compatible(
     if choices:
         msg = choices[0].get("message", {})
         text = msg.get("content", "") or ""
-        # DeepSeek reasoner fallback
-        if not text and msg.get("reasoning_content"):
-            text = msg["reasoning_content"]
+        # reasoning_content is internal CoT — never use as response text
+
+    usage = data.get("usage", {})
+    return text, {
+        "input_tokens": usage.get("prompt_tokens", 0),
+        "output_tokens": usage.get("completion_tokens", 0),
+    }
+
+
+async def call_minimax(
+    client: httpx.AsyncClient,
+    model: ModelConfig,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = MAX_OUTPUT_TOKENS,
+    mode: str = "",
+) -> tuple:
+    """Call MiniMax native chatcompletion_v2 API. Returns (response_text, usage_dict)."""
+    url = f"{model.api_base.rstrip('/')}/v1/text/chatcompletion_v2"
+    headers = {
+        "Authorization": f"Bearer {model.api_key}",
+        "Content-Type": "application/json",
+    }
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": user_prompt})
+
+    body: dict = {
+        "model": model.model_id,
+        "messages": messages,
+        "max_tokens": max_tokens,
+    }
+    if model.thinking:
+        body["reasoning_split"] = True
+
+    resp = await client.post(url, json=body, headers=headers, timeout=model.timeout)
+    resp.raise_for_status()
+    data = resp.json()
+
+    text = ""
+    choices = data.get("choices", [])
+    if choices:
+        msg = choices[0].get("message", {})
+        text = msg.get("content", "") or ""
 
     usage = data.get("usage", {})
     return text, {
@@ -117,12 +189,15 @@ async def call_model(
     system_prompt: str,
     user_prompt: str,
     max_tokens: int = MAX_OUTPUT_TOKENS,
+    mode: str = "",
 ) -> tuple:
     """Unified dispatcher. Returns (response_text, usage_dict)."""
     if model.provider == "anthropic":
-        return await call_anthropic(client, model, system_prompt, user_prompt, max_tokens)
+        return await call_anthropic(client, model, system_prompt, user_prompt, max_tokens, mode)
+    elif model.provider == "minimax":
+        return await call_minimax(client, model, system_prompt, user_prompt, max_tokens, mode)
     else:
-        return await call_openai_compatible(client, model, system_prompt, user_prompt, max_tokens)
+        return await call_openai_compatible(client, model, system_prompt, user_prompt, max_tokens, mode)
 
 
 # ─── Retry Engine ────────────────────────────────────────────────────────────
@@ -136,12 +211,13 @@ async def call_with_retry(
     max_tokens: int = MAX_OUTPUT_TOKENS,
     max_retries: int = DEFAULT_MAX_RETRIES,
     log_fn=None,
+    mode: str = "",
 ) -> tuple:
     """Wrap call_model with exponential backoff + jitter, respects Retry-After."""
     last_exc = None
     for attempt in range(max_retries + 1):
         try:
-            return await call_model(client, model, system_prompt, user_prompt, max_tokens)
+            return await call_model(client, model, system_prompt, user_prompt, max_tokens, mode)
         except httpx.HTTPStatusError as e:
             last_exc = e
             status = e.response.status_code

@@ -137,6 +137,7 @@ async def run_code_review(
                     cost_tracker,
                     storage,
                     role_label=f"reviewer_{i+1}",
+                    mode="code",
                 )
                 for i, r in enumerate(active_reviewers)
             ]
@@ -220,6 +221,7 @@ async def run_code_review(
                 round1_author_prompt,
                 AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
                 log_fn=storage.log,
+                mode="code",
             )
             cost_tracker.add(
                 author.name,

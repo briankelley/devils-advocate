@@ -185,6 +185,7 @@ async def run_spec_review(
                     system_prompt=spec_system_prompt,
                     point_parser=parse_spec_response,
                     role_label=f"reviewer_{i+1}",
+                    mode="spec",
                 )
                 for i, r in enumerate(active_reviewers)
             ]

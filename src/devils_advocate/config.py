@@ -101,6 +101,7 @@ def load_config(path: Path | None = None) -> dict:
             cost_per_1k_output=cfg.get("cost_per_1k_output"),
             timeout=cfg.get("timeout", DEFAULT_TIMEOUT),
             use_completion_tokens=cfg.get("use_completion_tokens", False),
+            thinking=cfg.get("thinking", False),
         )
 
     # Assign roles from the top-level 'roles' block
