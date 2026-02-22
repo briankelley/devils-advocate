@@ -308,21 +308,44 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     color: var(--text);
 }
 
-/* ── Progress View ──────────────────────────────────────────────────── */
+/* ── Running View ──────────────────────────────────────────────────── */
 
-.progress-container { max-width: 700px; }
-.progress-phases { margin: var(--pad-md) 0; }
-.phase-item {
-    padding: var(--pad-xs) var(--pad-sm);
+.running-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: var(--pad-md) 0;
+}
+.running-title h1 { font-size: 16px; font-weight: 400; }
+
+.live-cost-table {
+    font-family: var(--font-mono);
     font-size: 12px;
+    line-height: 1.8;
+    text-align: right;
+}
+.cost-row { display: flex; justify-content: flex-end; gap: var(--pad-md); }
+.cost-role { color: var(--text-dim); min-width: 120px; text-align: right; }
+.cost-model { color: var(--accent); min-width: 200px; text-align: left; }
+.cost-value { min-width: 90px; text-align: right; }
+.cost-total-value { color: var(--green); }
+.cost-divider { border-top: 1px solid var(--border); margin: 2px 0; padding: 0; min-height: 1px; }
+
+.progress-breadcrumb {
     display: flex;
     align-items: center;
     gap: var(--pad-sm);
+    padding: var(--pad-md) 0;
+    border-top: 1px solid var(--border);
+    margin-top: var(--pad-md);
 }
+.bc-step { display: flex; align-items: center; gap: 6px; }
+.bc-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.bc-arrow { color: var(--text-dim); font-size: 14px; }
+
 .phase-dot { font-size: 14px; width: 16px; text-align: center; }
 .phase-dot.active { color: var(--accent); }
 .phase-dot.done { color: var(--green); }
-.phase-detail { color: var(--text-dim); font-size: 10px; margin-left: var(--pad-sm); }
 
 .log-container {
     margin-top: var(--pad-md);
@@ -716,14 +739,7 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 }
 .cost-breakdown-row span:last-child { color: var(--yellow); }
 
-/* ── Progress Arrows (Phase View) ─────────────────────────────────── */
-
-.phase-arrow {
-    color: var(--text-dim);
-    font-size: 14px;
-    padding: 0 var(--pad-xs);
-    user-select: none;
-}
+/* ── Progress Arrows (Phase View — legacy, kept for detail view) ──── */
 
 @keyframes step-pulse {
     0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(122, 159, 181, 0.4); }
@@ -733,6 +749,8 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .phase-dot.active {
     animation: step-pulse 2s ease-in-out infinite;
 }
+
+.bc-spec-only { display: none; }
 
 /* ── Overrides Completion Banner ──────────────────────────────────── */
 
@@ -771,6 +789,15 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     margin: 4px 0;
 }
 
+.completed-cost-table {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.8;
+    text-align: right;
+}
+.completed-cost-table .cost-role { min-width: 100px; }
+.completed-cost-table .cost-model { min-width: 160px; }
+
 /* ── Collapsible Card Body ────────────────────────────────────────── */
 
 .card-collapsible {
@@ -796,4 +823,47 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .card-collapsible[open] > .card-expand-toggle::before { transform: rotate(90deg); }
 .card-collapsible-body {
     padding-top: var(--pad-sm);
+}
+
+/* ── Collapsible Model Cards (Config) ────────────────────────────── */
+
+.model-card-collapsible {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    margin-bottom: var(--pad-sm);
+}
+.model-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--pad-md);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+.model-card-header::-webkit-details-marker { display: none; }
+.model-card-body {
+    padding: 0 var(--pad-md) var(--pad-md);
+}
+.model-role-icons {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.role-icon {
+    width: 14px;
+    height: 14px;
+    color: var(--text-dim);
+    opacity: 0.4;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.role-icon:hover {
+    color: var(--text);
+    opacity: 0.8;
+}
+.role-icon.role-active {
+    color: var(--green);
+    opacity: 1;
 }

@@ -154,6 +154,9 @@ async def review_detail(request: Request, review_id: str):
     # Cost breakdown for tooltip
     cost_breakdown = ledger.get("cost", {}).get("breakdown", {})
 
+    # Per-role costs from ledger (used after config resolution below)
+    role_costs = ledger.get("cost", {}).get("role_costs", {})
+
     # Whether any overrides have been applied
     has_overrides = len(overridden) > 0
 
@@ -168,6 +171,23 @@ async def review_detail(request: Request, review_id: str):
     except Exception:
         normalization_model = "\u2014"
         revision_model = "\u2014"
+
+    # Build per-role cost rows for the completed cost table
+    role_cost_rows: list[tuple[str, str, float]] = []
+    if ledger.get("author_model"):
+        role_cost_rows.append(("author", ledger["author_model"], role_costs.get("author", 0.0)))
+    reviewer_models = ledger.get("reviewer_models", [])
+    for i, rv in enumerate(reviewer_models, 1):
+        role_key = f"reviewer_{i}"
+        label = f"reviewer {i}" if len(reviewer_models) > 1 else "reviewer"
+        role_cost_rows.append((label, rv, role_costs.get(role_key, 0.0)))
+    if ledger.get("dedup_model"):
+        role_cost_rows.append(("dedup", ledger["dedup_model"], role_costs.get("dedup", 0.0)))
+    if normalization_model != "\u2014":
+        role_cost_rows.append(("normalization", normalization_model, role_costs.get("normalization", 0.0)))
+    if revision_model != "\u2014" and role_costs.get("revision", 0.0) > 0:
+        role_cost_rows.append(("revision", revision_model, role_costs.get("revision", 0.0)))
+    total_cost = ledger.get("cost", {}).get("total_usd", 0.0)
 
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "review_detail.html", {
@@ -186,6 +206,8 @@ async def review_detail(request: Request, review_id: str):
         "normalization_model": normalization_model,
         "revision_model": revision_model,
         "review_mode": ledger.get("mode", "plan"),
+        "role_cost_rows": role_cost_rows,
+        "total_cost": total_cost,
         "csrf_token": request.app.state.csrf_token,
     })
 
@@ -247,6 +269,9 @@ async def config_page(request: Request):
             )
         models_by_provider = dict(sorted(models_by_provider.items()))
 
+        # Flat alphabetical list for collapsible card layout
+        sorted_models = sorted(all_models.items(), key=lambda x: x[0].lower())
+
         # .env file path
         env_file_path = str(Path(config_file).parent / ".env")
         env_file_exists = Path(env_file_path).is_file()
@@ -261,6 +286,7 @@ async def config_page(request: Request):
         model_names = []
         roles_block = {}
         models_by_provider = {}
+        sorted_models = []
         env_file_path = ""
         env_file_exists = False
         dvad_binary = "(not found in PATH)"
@@ -275,6 +301,7 @@ async def config_page(request: Request):
         "roles": roles_block,
         "all_models": config.get("all_models", {}) if config else {},
         "models_by_provider": models_by_provider,
+        "sorted_models": sorted_models,
         "env_file_path": env_file_path,
         "env_file_exists": env_file_exists,
         "dvad_binary": dvad_binary,

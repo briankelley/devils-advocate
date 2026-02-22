@@ -28,15 +28,27 @@
     <div class="config-layout">
         <div class="config-panel">
             <h2>Models</h2>
-            {% if config and models_by_provider %}
-            {% for provider, model_list in models_by_provider.items() %}
-            <details class="provider-group" open>
-                <summary class="provider-header">{{ provider|title }} <span class="provider-count">({{ model_list|length }})</span></summary>
-                {% for name, m in model_list %}
-                <div class="model-card" data-model-name="{{ name }}">
-                    <div class="model-header">
-                        <span class="model-name">{{ name }}</span>
-                    </div>
+            {% if config and sorted_models %}
+            {% for name, m in sorted_models %}
+            <details class="model-card-collapsible" data-model-name="{{ name }}">
+                <summary class="model-card-header">
+                    <span class="model-name">{{ name }}</span>
+                    <span class="model-role-icons">
+                        <i data-lucide="pen-tool" class="role-icon{% if roles.get('author') == name %} role-active{% endif %}"
+                           data-role="author" data-model="{{ name }}" title="Author{% if roles.get('author') == name %} (assigned){% endif %}"></i>
+                        <i data-lucide="scan-eye" class="role-icon{% if name in (roles.get('reviewers') or []) %} role-active{% endif %}"
+                           data-role="reviewer" data-model="{{ name }}" title="Reviewer{% if name in (roles.get('reviewers') or []) %} (assigned){% endif %}"></i>
+                        <i data-lucide="combine" class="role-icon{% if roles.get('deduplication') == name %} role-active{% endif %}"
+                           data-role="deduplication" data-model="{{ name }}" title="Dedup{% if roles.get('deduplication') == name %} (assigned){% endif %}"></i>
+                        <i data-lucide="scale" class="role-icon{% if roles.get('normalization') == name %} role-active{% endif %}"
+                           data-role="normalization" data-model="{{ name }}" title="Normalization{% if roles.get('normalization') == name %} (assigned){% endif %}"></i>
+                        <i data-lucide="file-pen" class="role-icon{% if roles.get('revision') == name %} role-active{% endif %}"
+                           data-role="revision" data-model="{{ name }}" title="Revision{% if roles.get('revision') == name %} (assigned){% endif %}"></i>
+                        <i data-lucide="puzzle" class="role-icon{% if roles.get('integration_reviewer') == name %} role-active{% endif %}"
+                           data-role="integration_reviewer" data-model="{{ name }}" title="Integration{% if roles.get('integration_reviewer') == name %} (assigned){% endif %}"></i>
+                    </span>
+                </summary>
+                <div class="model-card-body">
                     <div class="model-fields">
                         <div class="field-row">
                             <span class="field-label">provider:</span>
@@ -81,17 +93,8 @@
                             <span class="dim">use_completion_tokens: true</span>
                         </div>
                         {% endif %}
-                        <div class="model-roles">
-                            <span class="role-pill{% if roles.get('author') == name %} active{% endif %}" data-role="author" data-model="{{ name }}">author</span>
-                            <span class="role-pill{% if name in (roles.get('reviewers') or []) %} active{% endif %}" data-role="reviewer" data-model="{{ name }}" title="To use the same model twice as reviewer, create a second entry in the YAML with a different name">reviewer</span>
-                            <span class="role-pill{% if roles.get('deduplication') == name %} active{% endif %}" data-role="deduplication" data-model="{{ name }}">dedup</span>
-                            <span class="role-pill{% if roles.get('integration_reviewer') == name %} active{% endif %}" data-role="integration_reviewer" data-model="{{ name }}">integration</span>
-                            <span class="role-pill{% if roles.get('normalization') == name %} active{% endif %}" data-role="normalization" data-model="{{ name }}">normalization</span>
-                            <span class="role-pill{% if roles.get('revision') == name %} active{% endif %}" data-role="revision" data-model="{{ name }}">revision</span>
-                        </div>
                     </div>
                 </div>
-                {% endfor %}
             </details>
             {% endfor %}
             {% else %}
@@ -142,4 +145,14 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+    // Re-init role icons after Lucide replaces <i> with <svg>
+    dvad.initRolePills();
+});
+</script>
 {% endblock %}

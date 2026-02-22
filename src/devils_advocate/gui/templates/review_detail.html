@@ -4,40 +4,53 @@
 
 {% if status == 'running' %}
 {# ── Progress View ───────────────────────────────────────────────────── #}
-<div class="page-header">
-    <h1>Review In Progress</h1>
-    <span class="badge badge-running">Running</span>
+<div class="running-header">
+    <div class="running-title">
+        <h1>dvad-gui <span class="dim">|</span>
+            <span id="review-mode-label">review</span>
+            <span class="dim">|</span>
+            <span class="mono">{{ review_id }}</span></h1>
+    </div>
+    <div class="live-cost-table" id="live-cost-table">
+        <!-- populated by review_metadata SSE event -->
+    </div>
 </div>
-<div class="progress-container">
-    <div class="review-meta">
-        <span class="mono">{{ review_id }}</span>
+
+<div class="progress-breadcrumb" id="progress-phases">
+    <div class="bc-step">
+        <span class="phase-dot" id="dot-reviewers">&#9679;</span>
+        <span class="bc-label" id="reviewers-phase-label">ROUND 1 — REVIEWERS</span>
     </div>
-    <div class="progress-phases" id="progress-phases">
-        <div class="phase-item" data-phase="round1_calling">
-            <span class="phase-dot" id="dot-round1">&#9675;</span> Reviewers
-            <span id="round1-detail" class="phase-detail"></span>
-        </div>
-        <span class="phase-arrow">&rarr;</span>
-        <div class="phase-item" data-phase="dedup">
-            <span class="phase-dot" id="dot-dedup">&#9675;</span> Dedup
-        </div>
-        <span class="phase-arrow">&rarr;</span>
-        <div class="phase-item phase-adversarial" data-phase="round1_author">
-            <span class="phase-dot" id="dot-author">&#9675;</span> Author Response
-        </div>
-        <span class="phase-arrow phase-adversarial">&rarr;</span>
-        <div class="phase-item phase-adversarial" data-phase="round2">
-            <span class="phase-dot" id="dot-round2">&#9675;</span> Rebuttals
-        </div>
-        <span class="phase-arrow phase-adversarial">&rarr;</span>
-        <div class="phase-item" data-phase="governance">
-            <span class="phase-dot" id="dot-governance">&#9675;</span> <span class="phase-label-text" id="final-phase-label">Governance / Output</span>
-        </div>
+    <span class="bc-arrow">&rarr;</span>
+    <div class="bc-step bc-spec-only">
+        <span class="phase-dot" id="dot-dedup">&#9675;</span>
+        <span class="bc-label">DEDUP</span>
     </div>
-    <div class="log-container">
-        <div class="log-header">Log</div>
-        <div class="log-output" id="log-output"></div>
+    <span class="bc-arrow bc-spec-only">&rarr;</span>
+    <div class="bc-step phase-adversarial">
+        <span class="phase-dot" id="dot-author">&#9675;</span>
+        <span class="bc-label">ROUND 1 — AUTHOR</span>
     </div>
+    <span class="bc-arrow phase-adversarial">&rarr;</span>
+    <div class="bc-step phase-adversarial">
+        <span class="phase-dot" id="dot-rebuttals">&#9675;</span>
+        <span class="bc-label">ROUND 2 — REBUTTALS</span>
+    </div>
+    <span class="bc-arrow phase-adversarial">&rarr;</span>
+    <div class="bc-step phase-adversarial">
+        <span class="phase-dot" id="dot-governance">&#9675;</span>
+        <span class="bc-label">GOVERNANCE</span>
+    </div>
+    <span class="bc-arrow">&rarr;</span>
+    <div class="bc-step">
+        <span class="phase-dot" id="dot-revision">&#9675;</span>
+        <span class="bc-label" id="final-phase-label">REVISION</span>
+    </div>
+</div>
+
+<div class="log-container">
+    <div class="log-header">Log</div>
+    <div class="log-output" id="log-output"></div>
 </div>
 
 {% else %}
@@ -51,26 +64,20 @@
         <span class="dim">|</span>
         <span class="mono">{{ review_id[:20] }}</span>
     </h1>
-    <div>
-        <span class="cost-badge">${{ "%.6f"|format(ledger.get('cost', {}).get('total_usd', 0)) }}</span>
-        <hr class="cost-separator">
-        <div class="cost-roles">
-            <div class="cost-roles-row"><span>author:</span><span>{{ ledger.get('author_model', '—') }}</span></div>
-            {% for rv in ledger.get('reviewer_models', []) %}
-            <div class="cost-roles-row"><span>reviewer{% if ledger.get('reviewer_models', [])|length > 1 %} {{ loop.index }}{% endif %}:</span><span>{{ rv }}</span></div>
-            {% endfor %}
-            <div class="cost-roles-row"><span>dedup:</span><span>{{ ledger.get('dedup_model', '—') }}</span></div>
-            <div class="cost-roles-row"><span>normalization:</span><span>{{ normalization_model }}</span></div>
-            <div class="cost-roles-row"><span>revision:</span><span>{{ revision_model }}</span></div>
+    <div class="completed-cost-table">
+        {% for role_name, model_name, role_cost in role_cost_rows %}
+        <div class="cost-row">
+            <span class="cost-role">{{ role_name }}:</span>
+            <span class="cost-model">{{ model_name }}</span>
+            <span class="cost-value">${{ "%.6f"|format(role_cost) }}</span>
         </div>
-        {% if cost_breakdown %}
-        <hr class="cost-separator">
-        <div class="cost-breakdown">
-            {% for model, amount in cost_breakdown.items() %}
-            <div class="cost-breakdown-row"><span>{{ model }}</span><span>${{ "%.6f"|format(amount) }}</span></div>
-            {% endfor %}
+        {% endfor %}
+        <div class="cost-row cost-divider"></div>
+        <div class="cost-row">
+            <span class="cost-role"></span>
+            <span class="cost-model"></span>
+            <span class="cost-value cost-total-value">${{ "%.6f"|format(total_cost) }}</span>
         </div>
-        {% endif %}
     </div>
 </div>
 

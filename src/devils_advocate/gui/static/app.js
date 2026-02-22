@@ -142,25 +142,41 @@ const dvad = {
             try {
                 const ev = JSON.parse(e.data);
 
-                // Append to log
+                // Handle metadata event (role→model mapping for cost table)
+                if (ev.type === 'metadata') {
+                    this._handleMetadata(ev.detail);
+                    return;
+                }
+
+                // Handle cost event (update cost table, suppress from log)
+                if (ev.type === 'cost') {
+                    this._handleCostUpdate(ev.detail);
+                    return;
+                }
+
+                // Append to log (all other events with a message)
                 if (ev.message && logOutput) {
                     const line = document.createElement('div');
                     const ts = ev.timestamp ? `[${ev.timestamp}] ` : '';
                     line.textContent = ts + ev.message;
                     logOutput.appendChild(line);
-                    logOutput.scrollTop = logOutput.scrollHeight;
+                    const scrollParent = logOutput.parentElement;
+                    if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
                 }
 
                 // Detect spec mode from the initial review_start event
                 if (ev.phase === 'review_start' && ev.message && ev.message.includes('spec review')) {
                     this._specMode = true;
-                    // Hide adversarial pipeline phases
                     document.querySelectorAll('.phase-adversarial').forEach(el => {
                         el.style.display = 'none';
                     });
-                    // Rename the final phase label
+                    document.querySelectorAll('.bc-spec-only').forEach(el => {
+                        el.style.display = '';
+                    });
+                    const reviewersLabel = document.getElementById('reviewers-phase-label');
+                    if (reviewersLabel) reviewersLabel.textContent = 'REVIEWERS';
                     const finalLabel = document.getElementById('final-phase-label');
-                    if (finalLabel) finalLabel.textContent = 'Suggestions';
+                    if (finalLabel) finalLabel.textContent = 'SUGGESTIONS';
                 }
 
                 // Update phase dots
@@ -187,54 +203,108 @@ const dvad = {
         };
 
         source.onerror = () => {
-            // SSE connection lost — wait and try reloading
             source.close();
             setTimeout(() => window.location.reload(), 3000);
         };
     },
 
-    _updatePhase(phase, seenPhases) {
-        // Detect spec mode from initial review_start event or phase-adversarial visibility
-        if (!this._specMode && phase === 'review_start') {
-            // Check if adversarial phases are hidden (spec mode hides them via CSS class)
-            const adversarialEls = document.querySelectorAll('.phase-adversarial');
-            // Will be determined on next phase event
-        }
-        if (phase === 'dedup_calling' || phase === 'dedup_responded') {
-            // If dedup phases fire, check if spec mode (no author phase expected)
-            this._specMode = this._specMode || !document.getElementById('dot-author');
+    _handleMetadata(detail) {
+        if (!detail) return;
+
+        // Set mode label
+        const modeLabel = document.getElementById('review-mode-label');
+        if (modeLabel && detail.mode) {
+            modeLabel.textContent = detail.mode + ' review';
         }
 
+        // Build cost table from roles
+        const table = document.getElementById('live-cost-table');
+        if (!table || !detail.roles) return;
+
+        const roles = detail.roles;
+        let html = '';
+        for (const [role, model] of Object.entries(roles)) {
+            const label = role.replace(/_/g, ' ');
+            html += `<div class="cost-row">` +
+                `<span class="cost-role">${label}:</span>` +
+                `<span class="cost-model">${model}</span>` +
+                `<span class="cost-value" id="cost-${role}">$0.000000</span>` +
+                `</div>`;
+        }
+        html += `<div class="cost-row cost-divider"></div>`;
+        html += `<div class="cost-row">` +
+            `<span class="cost-role"></span>` +
+            `<span class="cost-model"></span>` +
+            `<span class="cost-value cost-total-value" id="cost-total">$0.000000</span>` +
+            `</div>`;
+        table.innerHTML = html;
+
+        // Spec mode: hide adversarial phases, show spec-only steps
+        if (detail.mode === 'spec') {
+            this._specMode = true;
+            document.querySelectorAll('.phase-adversarial').forEach(el => {
+                el.style.display = 'none';
+            });
+            document.querySelectorAll('.bc-spec-only').forEach(el => {
+                el.style.display = '';
+            });
+            const reviewersLabel = document.getElementById('reviewers-phase-label');
+            if (reviewersLabel) reviewersLabel.textContent = 'REVIEWERS';
+            const finalLabel = document.getElementById('final-phase-label');
+            if (finalLabel) finalLabel.textContent = 'SUGGESTIONS';
+        }
+    },
+
+    _roleCosts: {},
+
+    _handleCostUpdate(detail) {
+        if (!detail) return;
+        const role = detail.role;
+        const callCost = parseFloat(detail.cost) || 0;
+
+        // Accumulate per-role cost
+        this._roleCosts[role] = (this._roleCosts[role] || 0) + callCost;
+
+        const costEl = document.getElementById('cost-' + role);
+        if (costEl) {
+            costEl.textContent = '$' + this._roleCosts[role].toFixed(6);
+        }
+        const totalEl = document.getElementById('cost-total');
+        if (totalEl) {
+            totalEl.textContent = '$' + parseFloat(detail.total).toFixed(6);
+        }
+    },
+
+    _updatePhase(phase, seenPhases) {
         const phaseMap = {
-            'review_start': 'dot-round1',
-            'round1_calling': 'dot-round1',
-            'round1_responded': 'dot-round1',
-            'normalization': 'dot-round1',
+            'review_start': 'dot-reviewers',
+            'round1_calling': 'dot-reviewers',
+            'round1_responded': 'dot-reviewers',
+            'normalization': 'dot-reviewers',
             'dedup_calling': 'dot-dedup',
             'dedup_responded': 'dot-dedup',
             'round1_author': 'dot-author',
-            'round2_skip': 'dot-round2',
-            'round2_skip_reviewer': 'dot-round2',
-            'round2_skip_context': 'dot-round2',
-            'round2_rebuttal_failed': 'dot-round2',
-            'round2_author_failed': 'dot-round2',
+            'round2_skip': 'dot-rebuttals',
+            'round2_skip_reviewer': 'dot-rebuttals',
+            'round2_skip_context': 'dot-rebuttals',
+            'round2_rebuttal_failed': 'dot-rebuttals',
+            'round2_author_failed': 'dot-rebuttals',
             'governance_catastrophic': 'dot-governance',
             'governance_complete': 'dot-governance',
             'cost_warning': null,
             'cost_exceeded': null,
-            'revision_calling': 'dot-governance',
-            'revision_responded': 'dot-governance',
-            'revision_skip': 'dot-governance',
-            'revision_skip_context': 'dot-governance',
-            'revision_extraction_failed': 'dot-governance',
-            'revision_failed': 'dot-governance',
+            'revision_calling': 'dot-revision',
+            'revision_responded': 'dot-revision',
+            'revision_skip': 'dot-revision',
+            'revision_skip_context': 'dot-revision',
+            'revision_extraction_failed': 'dot-revision',
+            'revision_failed': 'dot-revision',
         };
 
         const dotId = phaseMap[phase];
         if (!dotId) return;
 
-        // Use appropriate dot order based on which dots exist in the DOM
-        const fullOrder = ['dot-round1', 'dot-dedup', 'dot-author', 'dot-round2', 'dot-governance'];
+        const fullOrder = ['dot-reviewers', 'dot-dedup', 'dot-author', 'dot-rebuttals', 'dot-governance', 'dot-revision'];
         const dotOrder = fullOrder.filter(id => document.getElementById(id));
         const currentIdx = dotOrder.indexOf(dotId);
 
@@ -412,32 +482,44 @@ const dvad = {
         }
     },
 
-    // ── Role Pills ───────────────────────────────────────────────────
+    // ── Role Icons ──────────────────────────────────────────────────
     initRolePills() {
-        const pills = document.querySelectorAll('.role-pill');
-        if (!pills.length) return;
+        const icons = document.querySelectorAll('.role-icon');
+        if (!icons.length) return;
 
-        pills.forEach(pill => {
-            pill.addEventListener('click', () => {
-                const model = pill.dataset.model;
-                const role = pill.dataset.role;
-                const isActive = pill.classList.contains('active');
+        icons.forEach(icon => {
+            icon.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const model = icon.dataset.model;
+                const role = icon.dataset.role;
+                const isActive = icon.classList.contains('role-active');
 
                 // Radio roles: only one model per role (except reviewer which is multi)
                 const radioRoles = ['author', 'deduplication', 'integration_reviewer', 'normalization', 'revision'];
 
                 if (radioRoles.includes(role)) {
-                    // Deactivate all other pills for this role
-                    document.querySelectorAll(`.role-pill[data-role="${role}"]`).forEach(p => {
-                        p.classList.remove('active');
+                    // Deactivate all other icons for this role
+                    document.querySelectorAll(`.role-icon[data-role="${role}"]`).forEach(p => {
+                        p.classList.remove('role-active');
+                        p.title = p.title.replace(' (assigned)', '');
                     });
-                    // Activate this one (unless toggling off — radio roles always need one)
+                    // Activate this one (unless toggling off)
                     if (!isActive) {
-                        pill.classList.add('active');
+                        icon.classList.add('role-active');
+                        if (!icon.title.includes('(assigned)')) {
+                            icon.title = icon.title + ' (assigned)';
+                        }
                     }
                 } else {
                     // Checkbox role (reviewer): toggle
-                    pill.classList.toggle('active');
+                    icon.classList.toggle('role-active');
+                    if (icon.classList.contains('role-active')) {
+                        if (!icon.title.includes('(assigned)')) {
+                            icon.title = icon.title + ' (assigned)';
+                        }
+                    } else {
+                        icon.title = icon.title.replace(' (assigned)', '');
+                    }
                 }
 
                 this._markRolesDirty();
@@ -456,9 +538,9 @@ const dvad = {
         const summary = document.getElementById('role-summary');
         if (!summary) return;
 
-        // Scan all active pills
+        // Scan all active role icons
         const roles = {};
-        document.querySelectorAll('.role-pill.active').forEach(pill => {
+        document.querySelectorAll('.role-icon.role-active').forEach(pill => {
             const model = pill.dataset.model;
             const role = pill.dataset.role;
             if (role === 'reviewer') {
@@ -525,9 +607,9 @@ const dvad = {
         const roles = {};
         const reviewers = [];
 
-        document.querySelectorAll('.role-pill.active').forEach(pill => {
-            const model = pill.dataset.model;
-            const role = pill.dataset.role;
+        document.querySelectorAll('.role-icon.role-active').forEach(icon => {
+            const model = icon.dataset.model;
+            const role = icon.dataset.role;
 
             if (role === 'reviewer') {
                 reviewers.push(model);

@@ -157,6 +157,8 @@ class CostTracker:
     max_cost: float | None = None
     warned_80: bool = False
     exceeded: bool = False
+    role_costs: dict = field(default_factory=dict)
+    _log_fn: Any = field(default=None, repr=False)
 
     def add(
         self,
@@ -165,6 +167,7 @@ class CostTracker:
         output_tokens: int,
         cost_input: float | None,
         cost_output: float | None,
+        role: str = "",
     ) -> None:
         cost = 0.0
         if cost_input is not None and cost_output is not None:
@@ -179,6 +182,16 @@ class CostTracker:
             "cost_usd": round(cost, 6),
         })
         self.total_usd += cost
+
+        if role:
+            self.role_costs[role] = self.role_costs.get(role, 0.0) + cost
+
+        # Emit structured cost event for GUI consumption
+        if self._log_fn and role:
+            self._log_fn(
+                f"§cost role={role} model={model_name} "
+                f"cost={cost:.6f} total={self.total_usd:.6f}"
+            )
 
         # Update cost guardrail flags when a budget is set
         if self.max_cost is not None:
