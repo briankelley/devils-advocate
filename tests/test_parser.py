@@ -3,8 +3,8 @@
 import pytest
 from datetime import datetime, timezone
 
+from devils_advocate.ids import resolve_guid
 from devils_advocate.parser import (
-    _resolve_guid,
     extract_revised_output,
     parse_author_final_response,
     parse_author_response,
@@ -311,14 +311,14 @@ class TestResolveGuid:
         """Exact GUID match returns the group_id."""
         guid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         group = make_review_group(group_id="grp_001", guid=guid)
-        assert _resolve_guid(guid, [group]) == "grp_001"
+        assert resolve_guid(guid, [group]) == "grp_001"
 
     def test_extracted_uuid_from_noise(self):
         """UUID extracted from surrounding text."""
         guid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         group = make_review_group(group_id="grp_001", guid=guid)
         noisy = f"GROUP 3 [{guid}]"
-        assert _resolve_guid(noisy, [group]) == "grp_001"
+        assert resolve_guid(noisy, [group]) == "grp_001"
 
     def test_fuzzy_match_1_char_diff(self):
         """Fuzzy match with 1 character difference."""
@@ -326,7 +326,7 @@ class TestResolveGuid:
         group = make_review_group(group_id="grp_001", guid=guid)
         # Change one character: 'a' -> 'b' in the first octet
         fuzzy = "b1b2c3d4-e5f6-7890-abcd-ef1234567890"
-        assert _resolve_guid(fuzzy, [group]) == "grp_001"
+        assert resolve_guid(fuzzy, [group]) == "grp_001"
 
     def test_fuzzy_match_2_char_diff(self):
         """Fuzzy match with 2 character differences."""
@@ -334,14 +334,14 @@ class TestResolveGuid:
         group = make_review_group(group_id="grp_001", guid=guid)
         # Change exactly two characters: pos 0 (a->b) and pos 1 (1->2)
         fuzzy = "b2b2c3d4-e5f6-7890-abcd-ef1234567890"
-        assert _resolve_guid(fuzzy, [group]) == "grp_001"
+        assert resolve_guid(fuzzy, [group]) == "grp_001"
 
     def test_no_match_returns_none(self):
         """Completely different GUID returns None."""
         guid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         group = make_review_group(group_id="grp_001", guid=guid)
         unrelated = "ffffffff-ffff-ffff-ffff-ffffffffffff"
-        assert _resolve_guid(unrelated, [group]) is None
+        assert resolve_guid(unrelated, [group]) is None
 
 
 # ─── TestParseRebuttalResponse ──────────────────────────────────────────────

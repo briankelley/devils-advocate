@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 
 from ..storage import StorageManager
+from ._helpers import get_gui_storage
 from .progress import ProgressEvent
 
 router = APIRouter()
@@ -19,10 +20,6 @@ router = APIRouter()
 # Limits
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_FILES = 25
-
-
-def _get_gui_storage() -> StorageManager:
-    return StorageManager(Path.home())
 
 
 def _check_csrf(request: Request) -> None:
@@ -198,7 +195,7 @@ async def review_progress(request: Request, review_id: str):
 @router.get("/review/{review_id}")
 async def get_review_json(request: Request, review_id: str):
     """Return review ledger as JSON."""
-    storage = _get_gui_storage()
+    storage = get_gui_storage()
     ledger = await asyncio.to_thread(storage.load_review, review_id)
     if ledger is None:
         raise HTTPException(status_code=404, detail="Review not found")
@@ -225,7 +222,7 @@ async def override_group(request: Request, review_id: str):
     if not group_id:
         raise HTTPException(status_code=400, detail="group_id is required")
 
-    storage = _get_gui_storage()
+    storage = get_gui_storage()
     try:
         await asyncio.to_thread(
             storage.update_point_override, review_id, group_id, resolution
@@ -247,7 +244,7 @@ async def revise_review(request: Request, review_id: str):
     """Generate a revised artifact from a completed review."""
     _check_csrf(request)
 
-    storage = _get_gui_storage()
+    storage = get_gui_storage()
     ledger = await asyncio.to_thread(storage.load_review, review_id)
     if ledger is None:
         raise HTTPException(status_code=404, detail="Review not found")
@@ -322,7 +319,7 @@ async def revise_review(request: Request, review_id: str):
 @router.get("/review/{review_id}/report")
 async def download_report(request: Request, review_id: str):
     """Download dvad-report.md."""
-    storage = _get_gui_storage()
+    storage = get_gui_storage()
     path = storage.reviews_dir / review_id / "dvad-report.md"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Report not found")
@@ -332,7 +329,7 @@ async def download_report(request: Request, review_id: str):
 @router.get("/review/{review_id}/revised")
 async def download_revised(request: Request, review_id: str):
     """Download the revised artifact."""
-    storage = _get_gui_storage()
+    storage = get_gui_storage()
     review_dir = storage.reviews_dir / review_id
     for name in ["revised-plan.md", "revised-diff.patch", "remediation-plan.md", "revised-spec-suggestions.md"]:
         path = review_dir / name

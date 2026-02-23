@@ -12,6 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from ..storage import StorageManager
+from ._helpers import get_gui_storage
 
 router = APIRouter()
 
@@ -20,17 +21,12 @@ _review_cache: dict = {"data": None, "expires": 0}
 _CACHE_TTL = 5  # seconds
 
 
-def _get_gui_storage() -> StorageManager:
-    """Instantiate a read-oriented storage with a stable project_dir."""
-    return StorageManager(Path.home())
-
-
 def _list_reviews_cached() -> list[dict]:
     """List reviews with a short TTL cache to avoid re-reading on rapid refresh."""
     now = time.time()
     if _review_cache["data"] is not None and now < _review_cache["expires"]:
         return _review_cache["data"]
-    storage = _get_gui_storage()
+    storage = get_gui_storage()
     reviews = storage.list_reviews()
     _review_cache["data"] = reviews
     _review_cache["expires"] = now + _CACHE_TTL
@@ -91,7 +87,7 @@ async def review_detail(request: Request, review_id: str):
         })
 
     # Load from storage
-    storage = _get_gui_storage()
+    storage = get_gui_storage()
     ledger = await asyncio.to_thread(storage.load_review, review_id)
 
     if ledger is None:

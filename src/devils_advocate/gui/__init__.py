@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 
 def create_app(config_path: str | None = None):
     """Create and return the FastAPI application."""

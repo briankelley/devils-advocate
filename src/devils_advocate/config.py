@@ -31,6 +31,81 @@ def _load_dotenv(config_path: Path) -> None:
             os.environ[key] = value
 
 
+def init_config() -> tuple[str, Path]:
+    """Create ~/.config/devils-advocate/ with an example models.yaml.
+
+    Returns ("exists", path) if already present, ("created", path) if newly created.
+    """
+    config_dir = Path.home() / ".config" / "devils-advocate"
+    config_file = config_dir / "models.yaml"
+
+    if config_file.exists():
+        return "exists", config_file
+
+    config_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(config_dir, 0o700)
+
+    example = """\
+# Devil's Advocate configuration
+# API keys must be set via environment variables; do not put secrets in this file.
+
+models:
+  # Author model -- generates responses and revisions
+  claude-sonnet:
+    provider: anthropic
+    model_id: claude-sonnet-4-20250514
+    api_key_env: ANTHROPIC_API_KEY
+    context_window: 200000
+    cost_per_1k_input: 0.003
+    cost_per_1k_output: 0.015
+    timeout: 180
+
+  # Reviewer 1
+  gpt-4o:
+    provider: openai
+    model_id: gpt-4o
+    api_key_env: OPENAI_API_KEY
+    api_base: https://api.openai.com/v1
+    context_window: 128000
+    cost_per_1k_input: 0.005
+    cost_per_1k_output: 0.015
+
+  # Reviewer 2
+  gemini-pro:
+    provider: openai
+    model_id: gemini-2.0-flash
+    api_key_env: GOOGLE_API_KEY
+    api_base: https://generativelanguage.googleapis.com/v1beta/openai
+    context_window: 1000000
+    cost_per_1k_input: 0.0001
+    cost_per_1k_output: 0.0004
+
+  # Dedup / normalization model
+  claude-haiku:
+    provider: anthropic
+    model_id: claude-3-5-haiku-20241022
+    api_key_env: ANTHROPIC_API_KEY
+    context_window: 200000
+    cost_per_1k_input: 0.0008
+    cost_per_1k_output: 0.004
+
+roles:
+  author: claude-sonnet
+  reviewers:
+    - gpt-4o
+    - gemini-pro
+  deduplication: claude-haiku
+  integration_reviewer: gpt-4o
+  # normalization: claude-haiku  # optional; defaults to deduplication model
+  # revision: claude-sonnet  # optional; defaults to author model
+"""
+
+    config_file.write_text(example)
+    os.chmod(config_file, 0o600)
+
+    return "created", config_file
+
+
 def find_config(explicit: Path | None = None) -> Path:
     """Locate models.yaml using a priority search order.
 

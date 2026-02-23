@@ -75,9 +75,10 @@ Updated plan content with security fixes and performance improvements applied.
 # ---------------------------------------------------------------------------
 
 
-def _make_config(monkeypatch):
+def _make_config(monkeypatch, tmp_path):
     """Build a valid config dict for run_plan_review with all required roles."""
     monkeypatch.setenv("TEST_KEY", "fake-key")
+    monkeypatch.setenv("DVAD_HOME", str(tmp_path / "dvad-data"))
 
     author = ModelConfig(
         name="author",
@@ -138,9 +139,9 @@ def _make_config(monkeypatch):
 
 
 @pytest.fixture
-def plan_config(monkeypatch):
+def plan_config(monkeypatch, tmp_path):
     """Return a fully-configured config dict with env vars set."""
-    return _make_config(monkeypatch)
+    return _make_config(monkeypatch, tmp_path)
 
 
 @pytest.fixture
@@ -249,17 +250,15 @@ async def test_successful_plan_review_e2e(plan_config, plan_file, tmp_path):
     # Revised output stays empty -- canonical artifact is the separate file
     assert result.revised_output == ""
 
-    # Verify storage artifacts were written
-    dvad_data = Path.home() / ".local" / "share" / "devils-advocate"
-    reviews_dir = dvad_data / "reviews"
-    # The review_id directory should exist with a report and ledger
+    # Verify storage artifacts were written (DVAD_HOME points to tmp_path/dvad-data)
+    reviews_dir = tmp_path / "dvad-data" / "reviews"
     review_dirs = list(reviews_dir.glob("*_review"))
-    assert len(review_dirs) >= 1
-    latest_review = sorted(review_dirs)[-1]
-    assert (latest_review / "dvad-report.md").exists()
-    assert (latest_review / "review-ledger.json").exists()
-    assert (latest_review / "original_content.txt").exists()
-    assert (latest_review / "revised-plan.md").exists()
+    assert len(review_dirs) == 1
+    review_dir = review_dirs[0]
+    assert (review_dir / "dvad-report.md").exists()
+    assert (review_dir / "review-ledger.json").exists()
+    assert (review_dir / "original_content.txt").exists()
+    assert (review_dir / "revised-plan.md").exists()
 
 
 # ---------------------------------------------------------------------------

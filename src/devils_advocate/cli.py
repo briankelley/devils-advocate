@@ -17,7 +17,7 @@ from rich.markdown import Markdown
 from rich.table import Table
 
 from devils_advocate import __version__
-from .config import find_config, load_config, validate_config, get_models_by_role
+from .config import find_config, init_config, load_config, validate_config, get_models_by_role
 from .orchestrator import run_plan_review, run_code_review, run_integration_review, run_spec_review
 from .revision import run_revision
 from .storage import StorageManager
@@ -274,7 +274,15 @@ def history(project, review_id, config_path, project_dir):
 def config_cmd(show, do_init, config_path):
     """Show, validate, or initialize configuration."""
     if do_init:
-        _init_config()
+        status, path = init_config()
+        if status == "exists":
+            console.print(
+                f"[yellow]Config already exists:[/yellow] {path}\n"
+                "  Edit it directly or delete it to regenerate."
+            )
+        else:
+            console.print(f"[green]Config created:[/green] {path}")
+            console.print("  Edit the file to configure your models and API keys.")
         return
 
     if not show:
@@ -337,83 +345,6 @@ def config_cmd(show, do_init, config_path):
             console.print(f"  {tag}: {msg}")
     else:
         console.print("\n[green]Configuration is valid.[/green]")
-
-
-def _init_config() -> None:
-    """Create ~/.config/devils-advocate/ with an example models.yaml."""
-    config_dir = Path.home() / ".config" / "devils-advocate"
-    config_file = config_dir / "models.yaml"
-
-    if config_file.exists():
-        console.print(
-            f"[yellow]Config already exists:[/yellow] {config_file}\n"
-            "  Edit it directly or delete it to regenerate."
-        )
-        return
-
-    config_dir.mkdir(parents=True, exist_ok=True)
-    os.chmod(config_dir, 0o700)
-
-    example = """\
-# Devil's Advocate configuration
-# API keys must be set via environment variables; do not put secrets in this file.
-
-models:
-  # Author model -- generates responses and revisions
-  claude-sonnet:
-    provider: anthropic
-    model_id: claude-sonnet-4-20250514
-    api_key_env: ANTHROPIC_API_KEY
-    context_window: 200000
-    cost_per_1k_input: 0.003
-    cost_per_1k_output: 0.015
-    timeout: 180
-
-  # Reviewer 1
-  gpt-4o:
-    provider: openai
-    model_id: gpt-4o
-    api_key_env: OPENAI_API_KEY
-    api_base: https://api.openai.com/v1
-    context_window: 128000
-    cost_per_1k_input: 0.005
-    cost_per_1k_output: 0.015
-
-  # Reviewer 2
-  gemini-pro:
-    provider: openai
-    model_id: gemini-2.0-flash
-    api_key_env: GOOGLE_API_KEY
-    api_base: https://generativelanguage.googleapis.com/v1beta/openai
-    context_window: 1000000
-    cost_per_1k_input: 0.0001
-    cost_per_1k_output: 0.0004
-
-  # Dedup / normalization model
-  claude-haiku:
-    provider: anthropic
-    model_id: claude-3-5-haiku-20241022
-    api_key_env: ANTHROPIC_API_KEY
-    context_window: 200000
-    cost_per_1k_input: 0.0008
-    cost_per_1k_output: 0.004
-
-roles:
-  author: claude-sonnet
-  reviewers:
-    - gpt-4o
-    - gemini-pro
-  deduplication: claude-haiku
-  integration_reviewer: gpt-4o
-  # normalization: claude-haiku  # optional; defaults to deduplication model
-  # revision: claude-sonnet  # optional; defaults to author model
-"""
-
-    config_file.write_text(example)
-    os.chmod(config_file, 0o600)
-
-    console.print(f"[green]Config created:[/green] {config_file}")
-    console.print("  Edit the file to configure your models and API keys.")
 
 
 # ─── override ─────────────────────────────────────────────────────────────────

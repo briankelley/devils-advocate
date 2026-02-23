@@ -11,6 +11,17 @@ from .types import (
 )
 
 
+def _build_lookup_maps(result: ReviewResult) -> tuple[dict, dict, dict, dict]:
+    """Build group_id lookup dicts for decisions, responses, rebuttals, and finals."""
+    decision_map = {d.group_id: d for d in result.governance_decisions}
+    response_map = {ar.group_id: ar for ar in result.author_responses}
+    rebuttal_map: dict = {}
+    for rb in result.rebuttals:
+        rebuttal_map.setdefault(rb.group_id, []).append(rb)
+    final_map = {af.group_id: af for af in result.author_final_responses}
+    return decision_map, response_map, rebuttal_map, final_map
+
+
 # ─── Report Generator ───────────────────────────────────────────────────────
 
 
@@ -45,14 +56,7 @@ def generate_report(result: ReviewResult) -> str:
     lines.append("")
 
     # Decision map
-    decision_map = {d.group_id: d for d in result.governance_decisions}
-    response_map = {ar.group_id: ar for ar in result.author_responses}
-
-    rebuttal_map: dict = {}
-    for rb in result.rebuttals:
-        rebuttal_map.setdefault(rb.group_id, []).append(rb)
-
-    final_response_map = {af.group_id: af for af in result.author_final_responses}
+    decision_map, response_map, rebuttal_map, final_response_map = _build_lookup_maps(result)
 
     # Escalated items first
     escalated = [
@@ -207,13 +211,7 @@ def _format_group_section(
 
 def generate_ledger(result: ReviewResult) -> dict:
     """Generate review-ledger.json structure."""
-    decision_map = {d.group_id: d for d in result.governance_decisions}
-    response_map = {ar.group_id: ar for ar in result.author_responses}
-
-    rebuttal_map: dict = {}
-    for rb in result.rebuttals:
-        rebuttal_map.setdefault(rb.group_id, []).append(rb)
-    final_map = {af.group_id: af for af in result.author_final_responses}
+    decision_map, response_map, rebuttal_map, final_map = _build_lookup_maps(result)
 
     points_out: list[dict] = []
     for group in result.groups:

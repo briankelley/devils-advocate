@@ -11,7 +11,6 @@ import httpx
 from rich.panel import Panel
 
 from ..types import (
-    APIError,
     CostTracker,
     ReviewContext,
     ReviewPoint,
