@@ -39,6 +39,7 @@ class ReviewRunner:
         project_dir: Path | None = None,
         max_cost: float | None = None,
         dry_run: bool = False,
+        file_manifest: dict | None = None,
     ) -> str:
         """Start a background review. Returns review_id. Raises HTTPException(409) if busy."""
         from fastapi import HTTPException
@@ -87,6 +88,7 @@ class ReviewRunner:
                 dry_run=dry_run,
                 queue=queue,
                 buffered=buffered,
+                file_manifest=file_manifest,
             )
         )
         return review_id
@@ -131,6 +133,7 @@ class ReviewRunner:
         dry_run: bool,
         queue: asyncio.Queue,
         buffered: list[dict],
+        file_manifest: dict | None = None,
     ) -> None:
         """Execute the review orchestrator in a background task."""
         tmpdir = None
@@ -144,6 +147,20 @@ class ReviewRunner:
             actual_project_dir = project_dir or Path.home()
             storage = StorageManager(actual_project_dir)
             storage.set_review_id(review_id)
+
+            # Save file manifest and input copies
+            if file_manifest:
+                import json as _json
+                manifest_path = storage.reviews_dir / review_id / "input_files_manifest.json"
+                manifest_path.parent.mkdir(parents=True, exist_ok=True)
+                StorageManager._atomic_write(manifest_path, _json.dumps(file_manifest, indent=2))
+
+                for file_info in file_manifest.get("files", []):
+                    if file_info.get("copied"):
+                        src = Path(file_info["original_path"])
+                        if src.exists():
+                            dest = storage.reviews_dir / review_id / f"input_{src.name}"
+                            StorageManager._atomic_write(dest, src.read_text())
 
             # Monkey-patch storage.log to also emit progress events
             original_log = storage.log

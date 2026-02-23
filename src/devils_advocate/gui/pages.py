@@ -50,6 +50,8 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
     start = (page - 1) * per_page
     page_reviews = reviews[start:start + per_page]
 
+    dvad_binary = shutil.which("dvad") or "(not found in PATH)"
+
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "dashboard.html", {
         "reviews": page_reviews,
@@ -57,17 +59,16 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
         "total_pages": total_pages,
         "total": total,
         "show_test": show_test,
+        "dvad_binary": dvad_binary,
         "csrf_token": request.app.state.csrf_token,
     })
 
 
-@router.get("/review/new", response_class=HTMLResponse)
-async def new_review_form(request: Request):
-    """New review form page."""
-    templates = request.app.state.templates
-    return templates.TemplateResponse(request, "new_review.html", {
-        "csrf_token": request.app.state.csrf_token,
-    })
+@router.get("/review/new")
+async def new_review_redirect():
+    """Redirect legacy new review URL to dashboard."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/", status_code=302)
 
 
 @router.get("/review/{review_id}", response_class=HTMLResponse)
@@ -138,8 +139,17 @@ async def review_detail(request: Request, review_id: str):
         else:
             escalated.append(group_info)
 
-    # Check for revised artifacts
+    # Load file manifest
     review_dir = storage.reviews_dir / review_id
+    manifest_path = review_dir / "input_files_manifest.json"
+    input_files_manifest = []
+    if manifest_path.exists():
+        try:
+            input_files_manifest = json.loads(manifest_path.read_text()).get("files", [])
+        except Exception:
+            pass
+
+    # Check for revised artifacts
     has_revised = (review_dir / "revised-plan.md").exists() or \
                   (review_dir / "revised-diff.patch").exists() or \
                   (review_dir / "remediation-plan.md").exists() or \
@@ -204,6 +214,7 @@ async def review_detail(request: Request, review_id: str):
         "review_mode": ledger.get("mode", "plan"),
         "role_cost_rows": role_cost_rows,
         "total_cost": total_cost,
+        "input_files_manifest": input_files_manifest,
         "csrf_token": request.app.state.csrf_token,
     })
 
@@ -277,6 +288,23 @@ async def config_page(request: Request):
 
         # dvad binary path
         dvad_binary = shutil.which("dvad") or "(not found in PATH)"
+
+        # Directory paths
+        storage = StorageManager(Path.home())
+        data_dir = str(storage.data_dir)
+        reviews_dir = str(storage.reviews_dir)
+        logs_dir = str(storage.logs_dir)
+
+        import importlib.resources
+        templates_dir = str(importlib.resources.files("devils_advocate") / "templates")
+
+        # Model vendors + thinking maps for JS
+        model_vendors = {}
+        model_thinking = {}
+        for name, m in all_models.items():
+            model_vendors[name] = _infer_vendor(m)
+            model_thinking[name] = bool(getattr(m, "thinking", False))
+
     except Exception as exc:
         config = None
         config_file = ""
@@ -290,6 +318,12 @@ async def config_page(request: Request):
         env_file_path = ""
         env_file_exists = False
         dvad_binary = "(not found in PATH)"
+        data_dir = ""
+        reviews_dir = ""
+        logs_dir = ""
+        templates_dir = ""
+        model_vendors = {}
+        model_thinking = {}
 
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "config.html", {
@@ -305,6 +339,12 @@ async def config_page(request: Request):
         "env_file_path": env_file_path,
         "env_file_exists": env_file_exists,
         "dvad_binary": dvad_binary,
+        "data_dir": data_dir,
+        "reviews_dir": reviews_dir,
+        "logs_dir": logs_dir,
+        "templates_dir": templates_dir,
+        "model_vendors": model_vendors,
+        "model_thinking": model_thinking,
         "settings": settings_block,
         "csrf_token": request.app.state.csrf_token,
     })

@@ -3,9 +3,118 @@
 {% block content %}
 <div class="page-header">
     <h1>Reviews <span class="dim">({{ total }})</span></h1>
-    <a href="/review/new" class="btn btn-accent">New Review</a>
 </div>
 
+{# ── Mode Selector Cards ───────────────────────────────────────────── #}
+<div class="mode-cards">
+    <label class="mode-card mode-card--spec">
+        <input type="radio" name="mode" value="spec">
+        <div class="mode-card-inner">
+            <span class="mode-card-name">specification</span>
+            <p class="mode-card-desc">Enrich specification documents with multi-reviewer suggestions</p>
+            <div class="mode-card-meta">
+                <div><strong>requires:</strong> spec file(s) in txt or md format</div>
+                <div><strong>returns:</strong> revised spec with all suggestions from all reviewers</div>
+            </div>
+        </div>
+    </label>
+    <label class="mode-card mode-card--code">
+        <input type="radio" name="mode" value="code">
+        <div class="mode-card-inner">
+            <span class="mode-card-name">code</span>
+            <p class="mode-card-desc">Review code diffs and patches with adversarial analysis</p>
+            <div class="mode-card-meta">
+                <div><strong>requires:</strong> exactly one code file</div>
+                <div><strong>returns:</strong> revised diff patch</div>
+            </div>
+        </div>
+    </label>
+    <label class="mode-card mode-card--integration">
+        <input type="radio" name="mode" value="integration">
+        <div class="mode-card-inner">
+            <span class="mode-card-name">integration</span>
+            <p class="mode-card-desc">Review integration concerns across system components</p>
+            <div class="mode-card-meta">
+                <div><strong>requires:</strong> optional files + project directory</div>
+                <div><strong>returns:</strong> remediation plan</div>
+            </div>
+        </div>
+    </label>
+    <label class="mode-card mode-card--plan">
+        <input type="radio" name="mode" value="plan" checked>
+        <div class="mode-card-inner">
+            <span class="mode-card-name">plan</span>
+            <p class="mode-card-desc">Adversarial review of implementation plans with author rebuttals</p>
+            <div class="mode-card-meta">
+                <div><strong>requires:</strong> plan file + reference files</div>
+                <div><strong>returns:</strong> revised plan with incorporated feedback</div>
+            </div>
+        </div>
+    </label>
+</div>
+
+{# ── Review Settings Box ──────────────────────────────────────────── #}
+<div class="review-settings">
+    <form id="review-form" enctype="multipart/form-data">
+        <input type="hidden" name="mode" id="review-mode" value="plan">
+
+        <div class="settings-grid">
+            <div class="form-row">
+                <label for="project">Project</label>
+                <input type="text" id="project" name="project" required class="input" placeholder="project-name">
+            </div>
+
+            <div class="form-row" id="input-files-row">
+                <label>Required Files</label>
+                <input type="file" id="input_files" name="input_files" multiple class="input-file">
+                <span class="field-hint" id="file-hint">Plan file + up to 5 reference files</span>
+            </div>
+
+            <div class="form-row" id="spec-row" style="display:none">
+                <label for="spec_file">Spec File <span class="dim">(optional)</span></label>
+                <input type="file" id="spec_file" name="spec_file" class="input-file">
+            </div>
+
+            <div class="form-row" id="project-dir-row" style="display:none">
+                <label for="project_dir">Project Directory <span class="dim">(optional)</span></label>
+                <input type="text" id="project_dir" name="project_dir" class="input" placeholder="/path/to/project">
+            </div>
+
+            <div class="form-row">
+                <label for="max_cost">Max Cost <span class="dim">(optional)</span></label>
+                <input type="number" id="max_cost" name="max_cost" step="0.01" min="0" class="input input-sm" placeholder="$0.00">
+            </div>
+
+            <div class="form-row">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="dry_run" id="dry_run"> Dry run
+                </label>
+            </div>
+        </div>
+
+        <div class="review-settings-footer">
+            <button type="submit" class="btn btn-accent" id="submit-btn">New Review</button>
+        </div>
+
+        <div id="form-error" class="error-msg" style="display:none"></div>
+    </form>
+</div>
+
+{# ── Interstitial — Command Preview ───────────────────────────────── #}
+<div class="interstitial" id="interstitial" style="display:none">
+    <h3>Review Command</h3>
+    <p class="dim">Copy this command to run from a terminal, or click "Run Review" to execute via the GUI.</p>
+    <div class="command-preview">
+        <pre id="command-preview-text"></pre>
+        <button class="btn btn-sm" onclick="dvad.copyCommand()">Copy</button>
+    </div>
+    <div class="interstitial-actions">
+        <button class="btn" onclick="dvad.cancelInterstitial()">Back</button>
+        <button class="btn btn-accent" id="run-review-btn" onclick="dvad.executeReview()">Run Review</button>
+    </div>
+</div>
+
+{# ── Reviews Table ─────────────────────────────────────────────────── #}
 <div class="filter-bar">
     <input type="text" id="project-filter" placeholder="Filter by project..." class="input-sm">
     <label class="checkbox-label" style="margin-left:12px">
@@ -59,4 +168,10 @@
     {% endif %}
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var dvadBinary = {{ dvad_binary|tojson }};
+</script>
 {% endblock %}

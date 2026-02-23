@@ -45,20 +45,24 @@ body {
 }
 
 .nav-brand {
-    font-family: var(--font-mono);
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--accent);
+    display: flex;
+    align-items: center;
     text-decoration: none;
+    gap: 0;
 }
+.nav-logo { height: 20px; width: auto; margin-right: 6px; vertical-align: middle; }
+.nav-title { font-size: 13px; font-weight: 600; color: var(--text); }
 
-.nav-links { display: flex; gap: var(--pad-md); }
+.nav-links { display: flex; gap: var(--pad-md); margin-left: auto; }
 .nav-links a {
     color: var(--text-dim);
     text-decoration: none;
-    padding: var(--pad-xs) var(--pad-sm);
+    padding: var(--pad-sm);
+    display: inline-flex;
+    align-items: center;
 }
 .nav-links a:hover { color: var(--text); }
+.nav-links svg { width: 16px; height: 16px; }
 
 /* ── Layout ─────────────────────────────────────────────────────────── */
 
@@ -912,3 +916,112 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .settings-section {
     margin-top: var(--pad-sm);
 }
+
+/* ── Mode Cards ──────────────────────────────────────────────────── */
+
+.mode-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--pad-md); margin-bottom: var(--pad-lg); }
+.mode-card {
+    display: block; cursor: pointer;
+    background: var(--bg-card); border: 2px solid var(--border);
+    border-radius: 3px; padding: var(--pad-md);
+    transition: border-color 0.15s;
+}
+.mode-card input[type="radio"] { display: inline; margin-right: 4px; }
+.mode-card-name { font-size: 16px; font-weight: 600; }
+.mode-card-desc { font-size: 11px; color: var(--text-dim); margin: 4px 0; line-height: 1.4; }
+.mode-card-meta { font-size: 10px; color: var(--text-dim); margin-top: 6px; }
+.mode-card-meta strong { color: var(--text); }
+.mode-card:has(input:checked) { border-color: inherit; }
+.mode-card--spec:has(input:checked) { border-color: var(--green); }
+.mode-card--code:has(input:checked) { border-color: var(--yellow); }
+.mode-card--integration:has(input:checked) { border-color: var(--yellow); }
+.mode-card--plan:has(input:checked) { border-color: var(--red); }
+
+/* ── Review Settings Box ─────────────────────────────────────────── */
+
+.review-settings {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 3px; padding: var(--pad-lg);
+    margin-bottom: var(--pad-lg);
+}
+.review-settings-footer { display: flex; justify-content: flex-end; margin-top: var(--pad-md); }
+
+/* ── Interstitial ────────────────────────────────────────────────── */
+
+.interstitial {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 3px; padding: var(--pad-lg);
+    margin-bottom: var(--pad-lg);
+}
+.interstitial h3 { font-size: 14px; margin-bottom: var(--pad-sm); }
+.command-preview {
+    background: #252830;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: var(--pad-md);
+    margin: var(--pad-md) 0;
+    position: relative;
+}
+.command-preview pre {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text);
+    margin: 0;
+}
+.command-preview .btn { position: absolute; top: var(--pad-sm); right: var(--pad-sm); }
+.interstitial-actions { display: flex; gap: var(--pad-sm); justify-content: flex-end; }
+
+/* ── File Manifest (Review Detail) ───────────────────────────────── */
+
+.file-manifest { font-size: 11px; }
+.manifest-row {
+    display: flex;
+    align-items: center;
+    gap: var(--pad-md);
+    padding: var(--pad-xs) 0;
+    border-bottom: 1px solid #363a44;
+}
+.manifest-type { flex-shrink: 0; }
+.manifest-name { flex-shrink: 0; font-weight: 600; }
+.manifest-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.manifest-git { flex-shrink: 0; font-size: 10px; }
+
+/* ── Role Summary Vendor + CoT columns ───────────────────────────── */
+
+.role-summary-icon, .role-summary-cot {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px;
+}
+.role-summary-icon svg, .role-summary-cot svg { width: 14px; height: 14px; }
+.role-summary-icon { color: var(--text-dim); opacity: 0.6; }
+.role-summary-cot { color: var(--text-dim); opacity: 0.4; }
+.role-summary-cot.cot-active { color: var(--red); opacity: 1; }
+
+/* ── Thinking Icon (Model Card Header) ───────────────────────────── */
+
+.thinking-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-dim); opacity: 0.3;
+    padding: 2px; cursor: not-allowed;
+    transition: all 0.15s;
+}
+.thinking-icon svg { width: 14px; height: 14px; pointer-events: none; }
+.thinking-icon.thinking-eligible { cursor: pointer; opacity: 0.5; }
+.thinking-icon.thinking-eligible:hover { opacity: 0.8; }
+.thinking-icon.thinking-active { color: var(--red); opacity: 1; cursor: pointer; }
+
+/* ── Role Descriptions ───────────────────────────────────────────── */
+
+.role-descriptions { margin-top: var(--pad-md); font-size: 11px; }
+.role-descriptions summary { color: var(--text-dim); cursor: pointer; font-size: 11px; }
+.role-descriptions summary:hover { color: var(--text); }
+.role-desc-list { padding: var(--pad-sm) var(--pad-md); line-height: 1.8; }
+.role-desc-list strong { color: var(--text); }
+
+/* ── Config Paths ────────────────────────────────────────────────── */
+
+.config-paths { line-height: 1.8; }
+.path-row { display: flex; gap: var(--pad-sm); }

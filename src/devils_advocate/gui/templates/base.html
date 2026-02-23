@@ -6,20 +6,23 @@
     <title>{% block title %}Devil's Advocate{% endblock %}</title>
     <link rel="stylesheet" href="/static/style.css">
     <meta name="csrf-token" content="{{ csrf_token }}">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </head>
 <body>
     <nav class="topnav">
-        <a href="/" class="nav-brand">dvad</a>
+        <a href="/" class="nav-brand">
+            <img src="/static/brand/vectorized-dvad-color-white.svg" class="nav-logo" alt="dvad">
+            <span class="nav-title">Devil's Advocate</span>
+        </a>
         <div class="nav-links">
-            <a href="/">Dashboard</a>
-            <a href="/review/new">New Review</a>
-            <a href="/config">Config</a>
+            <a href="/config" title="Settings"><i data-lucide="settings"></i></a>
         </div>
     </nav>
     <main>
         {% block content %}{% endblock %}
     </main>
     <script src="/static/app.js"></script>
+    <script>document.addEventListener('DOMContentLoaded', () => { if (typeof lucide !== 'undefined') lucide.createIcons(); });</script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

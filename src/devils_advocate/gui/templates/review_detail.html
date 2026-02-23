@@ -126,6 +126,27 @@
 <div class="overrides-banner" id="overrides-banner">All escalations resolved — ready for revision</div>
 {% endif %}
 
+{# Submitted Files #}
+{% if input_files_manifest %}
+<section class="review-section">
+    <h2>Submitted Files</h2>
+    <div class="file-manifest">
+        {% for f in input_files_manifest %}
+        <div class="manifest-row">
+            <span class="manifest-type badge badge-cat">{{ f.type }}</span>
+            <span class="manifest-name mono">{{ f.filename }}</span>
+            <span class="manifest-path dim truncate" title="{{ f.original_path }}">{{ f.original_path }}</span>
+            {% if f.git_status == "tracked" %}
+            <span class="manifest-git mono" title="{{ f.git_hash }}">{{ f.git_hash }}</span>
+            {% else %}
+            <span class="manifest-git dim">git: not tracked</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
 {# Escalated Items #}
 {% if escalated %}
 <section class="review-section">

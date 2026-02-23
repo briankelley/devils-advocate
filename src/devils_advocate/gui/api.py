@@ -25,6 +25,22 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_FILES = 25
 
 
+def _get_git_info(filepath: Path) -> dict:
+    """Get git commit hash for a file, or 'not tracked'."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%H", "--", str(filepath)],
+            capture_output=True, text=True, timeout=5,
+            cwd=str(filepath.parent),
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return {"git_hash": result.stdout.strip()[:12], "git_status": "tracked"}
+    except Exception:
+        pass
+    return {"git_hash": None, "git_status": "not tracked"}
+
+
 def _check_csrf(request: Request) -> None:
     """Validate CSRF token on mutating requests."""
     expected = request.app.state.csrf_token
@@ -145,6 +161,30 @@ async def start_review(request: Request):
 
     project_dir = Path(project_dir_str) if project_dir_str else None
 
+    # Build input files manifest
+    manifest = {"files": []}
+    for f in input_files:
+        entry = {
+            "original_path": str(f),
+            "filename": f.name,
+            "type": "plan" if mode in ("plan", "spec") else "code",
+            "size_bytes": f.stat().st_size,
+            "copied": mode in ("plan", "spec"),
+        }
+        entry.update(_get_git_info(f))
+        manifest["files"].append(entry)
+
+    if spec_path:
+        entry = {
+            "original_path": str(spec_path),
+            "filename": spec_path.name,
+            "type": "spec",
+            "size_bytes": spec_path.stat().st_size,
+            "copied": True,
+        }
+        entry.update(_get_git_info(spec_path))
+        manifest["files"].append(entry)
+
     runner = request.app.state.runner
     config_path = request.app.state.config_path
 
@@ -157,6 +197,7 @@ async def start_review(request: Request):
         project_dir=project_dir,
         max_cost=max_cost,
         dry_run=dry_run,
+        file_manifest=manifest,
     )
 
     return JSONResponse({"review_id": review_id})

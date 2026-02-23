@@ -6,6 +6,17 @@ const dvad = {
     _pendingRoles: {},
     _sortState: { col: null, asc: true },
 
+    // ── Vendor icon mapping ──────────────────────────────────────────
+    VENDOR_ICONS: {
+        'Anthropic': 'gem',
+        'OpenAI': 'sparkles',
+        'Google': 'globe',
+        'xAI': 'zap',
+        'DeepSeek': 'compass',
+        'Moonshot': 'moon',
+        'MiniMax': 'box',
+    },
+
     // ── Table row click navigation ───────────────────────────────────
     init() {
         document.querySelectorAll('.clickable-row').forEach(row => {
@@ -36,10 +47,171 @@ const dvad = {
 
         this.initSorting();
         this.initRolePills();
+        this.initNewReviewForm();
         this.initTimeoutEditing();
         this.initMaxTokenEditing();
         this.initThinkingToggle();
         this.initSettingsToggle();
+    },
+
+    // ── New Review Form (Dashboard) ─────────────────────────────────
+    _formData: null,
+
+    initNewReviewForm() {
+        const form = document.getElementById('review-form');
+        if (!form) return;
+
+        const modeCards = document.querySelectorAll('.mode-card input[name="mode"]');
+        const hiddenMode = document.getElementById('review-mode');
+
+        // Sync mode cards to hidden field
+        modeCards.forEach(radio => {
+            radio.addEventListener('change', () => {
+                hiddenMode.value = radio.value;
+                this.updateModeUI();
+            });
+        });
+        this.updateModeUI();
+
+        // Form submit → show interstitial
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this._formData = new FormData(form);
+            this.showInterstitial();
+        });
+    },
+
+    updateModeUI() {
+        const mode = document.querySelector('input[name="mode"]:checked')?.value || 'plan';
+        const inputFilesInput = document.getElementById('input_files');
+        const specRow = document.getElementById('spec-row');
+        const projectDirRow = document.getElementById('project-dir-row');
+        const fileHint = document.getElementById('file-hint');
+        const inputRow = document.getElementById('input-files-row');
+
+        if (!inputFilesInput) return;
+
+        if (mode === 'plan') {
+            inputFilesInput.multiple = true;
+            inputFilesInput.required = true;
+            specRow.style.display = 'none';
+            projectDirRow.style.display = 'none';
+            fileHint.textContent = 'Plan file + up to 5 reference files';
+            inputRow.style.display = '';
+        } else if (mode === 'code') {
+            inputFilesInput.multiple = false;
+            inputFilesInput.required = true;
+            specRow.style.display = '';
+            projectDirRow.style.display = 'none';
+            fileHint.textContent = 'Exactly one file required for code mode';
+            inputRow.style.display = '';
+        } else if (mode === 'spec') {
+            inputFilesInput.multiple = true;
+            inputFilesInput.required = true;
+            specRow.style.display = 'none';
+            projectDirRow.style.display = 'none';
+            fileHint.textContent = 'Specification file(s) to enrich with suggestions';
+            inputRow.style.display = '';
+        } else {
+            // integration
+            inputFilesInput.multiple = true;
+            inputFilesInput.required = false;
+            specRow.style.display = '';
+            projectDirRow.style.display = '';
+            fileHint.textContent = 'Input files are optional for integration mode';
+            inputRow.style.display = '';
+        }
+    },
+
+    buildCommand() {
+        const mode = document.getElementById('review-mode')?.value || 'plan';
+        const project = document.getElementById('project')?.value || '';
+        const binary = (typeof dvadBinary !== 'undefined') ? dvadBinary : 'dvad';
+
+        let parts = [binary, 'review', '--mode', mode, '--project', project];
+
+        const inputFiles = document.getElementById('input_files')?.files || [];
+        for (let i = 0; i < inputFiles.length; i++) {
+            parts.push('--input', inputFiles[i].name);
+        }
+
+        const specFile = document.getElementById('spec_file')?.files?.[0];
+        if (specFile) {
+            parts.push('--spec', specFile.name);
+        }
+
+        const projectDir = document.getElementById('project_dir')?.value?.trim();
+        if (projectDir) {
+            parts.push('--project-dir', projectDir);
+        }
+
+        const maxCost = document.getElementById('max_cost')?.value?.trim();
+        if (maxCost) {
+            parts.push('--max-cost', maxCost);
+        }
+
+        if (document.getElementById('dry_run')?.checked) {
+            parts.push('--dry-run');
+        }
+
+        return parts.join(' \\\n    ');
+    },
+
+    showInterstitial() {
+        const cmd = this.buildCommand();
+        document.getElementById('command-preview-text').textContent = cmd;
+        document.getElementById('interstitial').style.display = '';
+        document.querySelector('.review-settings').style.display = 'none';
+        document.querySelector('.mode-cards').style.display = 'none';
+    },
+
+    cancelInterstitial() {
+        document.getElementById('interstitial').style.display = 'none';
+        document.querySelector('.review-settings').style.display = '';
+        document.querySelector('.mode-cards').style.display = '';
+    },
+
+    copyCommand() {
+        const text = document.getElementById('command-preview-text')?.textContent || '';
+        navigator.clipboard.writeText(text);
+    },
+
+    executeReview() {
+        if (!this._formData) return;
+
+        const runBtn = document.getElementById('run-review-btn');
+        const errorDiv = document.getElementById('form-error');
+        if (runBtn) { runBtn.disabled = true; runBtn.textContent = 'Starting...'; }
+        if (errorDiv) errorDiv.style.display = 'none';
+
+        const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+        fetch('/api/review/start', {
+            method: 'POST',
+            headers: {'X-DVAD-Token': token},
+            body: this._formData,
+        })
+        .then(r => r.json().then(data => ({ok: r.ok, data})))
+        .then(({ok, data}) => {
+            if (ok && data.review_id) {
+                window.location.href = '/review/' + data.review_id;
+            } else {
+                if (errorDiv) {
+                    errorDiv.textContent = data.detail || 'Failed to start review';
+                    errorDiv.style.display = '';
+                }
+                if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Run Review'; }
+                this.cancelInterstitial();
+            }
+        })
+        .catch(err => {
+            if (errorDiv) {
+                errorDiv.textContent = 'Network error: ' + err.message;
+                errorDiv.style.display = '';
+            }
+            if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Run Review'; }
+            this.cancelInterstitial();
+        });
     },
 
     // ── CSRF token ───────────────────────────────────────────────────
@@ -599,6 +771,66 @@ const dvad = {
                 rv2.className = 'role-summary-value';
             }
         }
+
+        // Update vendor icons + brain icons in role summary
+        this._updateRoleSummaryIcons(roles);
+
+        // Update thinking icon eligibility on model cards
+        this._updateThinkingEligibility();
+    },
+
+    _updateRoleSummaryIcons(roles) {
+        if (typeof modelVendors === 'undefined' || typeof modelThinking === 'undefined') return;
+
+        const roleKeys = [
+            { key: 'author', prefix: 'author' },
+            { key: 'reviewer1', prefix: 'reviewer1', get: (r) => r.reviewers?.[0] },
+            { key: 'reviewer2', prefix: 'reviewer2', get: (r) => r.reviewers?.[1] },
+            { key: 'deduplication', prefix: 'deduplication' },
+            { key: 'normalization', prefix: 'normalization' },
+            { key: 'revision', prefix: 'revision' },
+            { key: 'integration_reviewer', prefix: 'integration_reviewer' },
+        ];
+
+        roleKeys.forEach(({ key, prefix, get }) => {
+            const model = get ? get(roles) : roles[key];
+            const iconEl = document.getElementById('rsi-' + prefix);
+            const cotEl = document.getElementById('rsc-' + prefix);
+
+            if (iconEl) {
+                if (model && modelVendors[model]) {
+                    const iconName = this.VENDOR_ICONS[modelVendors[model]] || 'cpu';
+                    iconEl.innerHTML = `<i data-lucide="${iconName}"></i>`;
+                    iconEl.title = modelVendors[model];
+                } else {
+                    iconEl.innerHTML = '<i data-lucide="cpu"></i>';
+                    iconEl.title = '';
+                }
+            }
+            if (cotEl) {
+                if (model && modelThinking[model]) {
+                    cotEl.classList.add('cot-active');
+                } else {
+                    cotEl.classList.remove('cot-active');
+                }
+            }
+        });
+
+        // Re-render lucide icons
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
+
+    _updateThinkingEligibility() {
+        document.querySelectorAll('.thinking-icon').forEach(icon => {
+            const model = icon.dataset.model;
+            const hasActiveRole = document.querySelector(`.role-icon.role-active[data-model="${model}"]`);
+            if (hasActiveRole) {
+                icon.classList.add('thinking-eligible');
+            } else {
+                icon.classList.remove('thinking-eligible');
+                icon.classList.remove('thinking-active');
+            }
+        });
     },
 
     async saveRoleAssignments() {
@@ -809,11 +1041,15 @@ const dvad = {
 
     // ── Thinking Toggle ─────────────────────────────────────────────
     initThinkingToggle() {
-        document.querySelectorAll('.thinking-toggle').forEach(el => {
+        document.querySelectorAll('.thinking-icon').forEach(el => {
             el.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const model = el.dataset.model;
-                const currentlyOn = el.classList.contains('thinking-on');
+
+                // Only allow toggle if model has an active role
+                if (!el.classList.contains('thinking-eligible') && !el.classList.contains('thinking-active')) return;
+
+                const currentlyOn = el.classList.contains('thinking-active');
                 const newValue = !currentlyOn;
 
                 const resp = await fetch('/api/config/model-thinking', {
@@ -826,8 +1062,14 @@ const dvad = {
                 });
 
                 if (resp.ok) {
-                    el.classList.toggle('thinking-on', newValue);
-                    el.textContent = newValue ? 'enabled' : 'disabled';
+                    el.classList.toggle('thinking-active', newValue);
+                    el.title = 'Chain of Thought: ' + (newValue ? 'enabled' : 'disabled');
+                    // Update modelThinking map if available
+                    if (typeof modelThinking !== 'undefined') {
+                        modelThinking[model] = newValue;
+                    }
+                    // Update brain icons in role summary
+                    this._updateRoleSummary();
                 }
             });
         });

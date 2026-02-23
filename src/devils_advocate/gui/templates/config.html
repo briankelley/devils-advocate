@@ -6,16 +6,14 @@
 </div>
 
 <div class="config-meta">
-    <span class="dim">Config file:</span> <span class="mono">{{ config_file }}</span>
-    <br>
-    <span class="dim">.env file:</span> <span class="mono">{{ env_file_path }}</span>
-    {% if env_file_exists %}
-    <span class="key-status key-set">exists</span>
-    {% else %}
-    <span class="key-status key-missing">NOT FOUND</span>
-    {% endif %}
-    <br>
-    <span class="dim">Binary:</span> <span class="mono">{{ dvad_binary }}</span>
+    <div class="config-paths">
+        <div class="path-row"><span class="dim">Binary:</span> <span class="mono">{{ dvad_binary }}</span></div>
+        <div class="path-row"><span class="dim">Config:</span> <span class="mono">{{ config_file }}</span></div>
+        <div class="path-row"><span class="dim">Data:</span> <span class="mono">{{ data_dir }}</span></div>
+        <div class="path-row"><span class="dim">Reviews:</span> <span class="mono">{{ reviews_dir }}</span></div>
+        <div class="path-row"><span class="dim">Logs:</span> <span class="mono">{{ logs_dir }}</span></div>
+        <div class="path-row"><span class="dim">Templates:</span> <span class="mono">{{ templates_dir }}</span></div>
+    </div>
 </div>
 
 <div class="tab-bar">
@@ -40,6 +38,11 @@
                         <span class="role-icon{% if roles.get('normalization') == name %} role-active{% endif %}" data-role="normalization" data-model="{{ name }}" title="Normalization{% if roles.get('normalization') == name %} (assigned){% endif %}"><i data-lucide="scale"></i></span>
                         <span class="role-icon{% if roles.get('revision') == name %} role-active{% endif %}" data-role="revision" data-model="{{ name }}" title="Revision{% if roles.get('revision') == name %} (assigned){% endif %}"><i data-lucide="file-pen"></i></span>
                         <span class="role-icon{% if roles.get('integration_reviewer') == name %} role-active{% endif %}" data-role="integration_reviewer" data-model="{{ name }}" title="Integration{% if roles.get('integration_reviewer') == name %} (assigned){% endif %}"><i data-lucide="puzzle"></i></span>
+                        <span class="thinking-icon{% if m.thinking %} thinking-active{% endif %}"
+                              data-model="{{ name }}"
+                              title="Chain of Thought: {{ 'enabled' if m.thinking else 'disabled' }}">
+                            <i data-lucide="brain"></i>
+                        </span>
                     </span>
                 </summary>
                 <div class="model-card-body">
@@ -87,11 +90,6 @@
                             <span class="dim">use_completion_tokens: true</span>
                         </div>
                         {% endif %}
-                        <div class="field-row">
-                            <span class="field-label">thinking:</span>
-                            <span class="thinking-toggle{% if m.thinking %} thinking-on{% endif %}"
-                                  data-model="{{ name }}">{{ 'enabled' if m.thinking else 'disabled' }}</span>
-                        </div>
                     </div>
                 </div>
             </details>
@@ -114,13 +112,61 @@
             </div>
             <h2 style="margin-top:12px">Role Assignments</h2>
             <div class="role-summary" id="role-summary">
-                <div class="role-summary-row"><span class="role-summary-label">Author:</span><span class="role-summary-value" id="rs-author">—</span></div>
-                <div class="role-summary-row"><span class="role-summary-label">Reviewer 1:</span><span class="role-summary-value" id="rs-reviewer1">—</span></div>
-                <div class="role-summary-row"><span class="role-summary-label">Reviewer 2:</span><span class="role-summary-value" id="rs-reviewer2">—</span></div>
-                <div class="role-summary-row"><span class="role-summary-label">Dedup:</span><span class="role-summary-value" id="rs-deduplication">—</span></div>
-                <div class="role-summary-row"><span class="role-summary-label">Normalization:</span><span class="role-summary-value" id="rs-normalization">—</span></div>
-                <div class="role-summary-row"><span class="role-summary-label">Revision:</span><span class="role-summary-value" id="rs-revision">—</span></div>
-                <div class="role-summary-row"><span class="role-summary-label">Integration:</span><span class="role-summary-value" id="rs-integration_reviewer">—</span></div>
+                <div class="role-summary-row">
+                    <span class="role-summary-icon" id="rsi-author"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-cot" id="rsc-author"><i data-lucide="brain"></i></span>
+                    <span class="role-summary-label">Author:</span>
+                    <span class="role-summary-value" id="rs-author">—</span>
+                </div>
+                <div class="role-summary-row">
+                    <span class="role-summary-icon" id="rsi-reviewer1"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-cot" id="rsc-reviewer1"><i data-lucide="brain"></i></span>
+                    <span class="role-summary-label">Reviewer 1:</span>
+                    <span class="role-summary-value" id="rs-reviewer1">—</span>
+                </div>
+                <div class="role-summary-row">
+                    <span class="role-summary-icon" id="rsi-reviewer2"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-cot" id="rsc-reviewer2"><i data-lucide="brain"></i></span>
+                    <span class="role-summary-label">Reviewer 2:</span>
+                    <span class="role-summary-value" id="rs-reviewer2">—</span>
+                </div>
+                <div class="role-summary-row">
+                    <span class="role-summary-icon" id="rsi-deduplication"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-cot" id="rsc-deduplication"><i data-lucide="brain"></i></span>
+                    <span class="role-summary-label">Dedup:</span>
+                    <span class="role-summary-value" id="rs-deduplication">—</span>
+                </div>
+                <div class="role-summary-row">
+                    <span class="role-summary-icon" id="rsi-normalization"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-cot" id="rsc-normalization"><i data-lucide="brain"></i></span>
+                    <span class="role-summary-label">Normalization:</span>
+                    <span class="role-summary-value" id="rs-normalization">—</span>
+                </div>
+                <div class="role-summary-row">
+                    <span class="role-summary-icon" id="rsi-revision"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-cot" id="rsc-revision"><i data-lucide="brain"></i></span>
+                    <span class="role-summary-label">Revision:</span>
+                    <span class="role-summary-value" id="rs-revision">—</span>
+                </div>
+                <div class="role-summary-row">
+                    <span class="role-summary-icon" id="rsi-integration_reviewer"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-cot" id="rsc-integration_reviewer"><i data-lucide="brain"></i></span>
+                    <span class="role-summary-label">Integration:</span>
+                    <span class="role-summary-value" id="rs-integration_reviewer">—</span>
+                </div>
+            </div>
+            <div class="role-descriptions">
+                <details>
+                    <summary class="dim">What do these roles do?</summary>
+                    <div class="role-desc-list">
+                        <div><strong>Author:</strong> Generates initial responses to reviewer findings and produces revised artifacts</div>
+                        <div><strong>Reviewer (x2):</strong> Independently analyzes input for issues, risks, and improvements</div>
+                        <div><strong>Dedup:</strong> Consolidates overlapping findings from multiple reviewers into groups</div>
+                        <div><strong>Normalization:</strong> Standardizes severity levels and categories across grouped findings</div>
+                        <div><strong>Revision:</strong> Creates the final revised artifact incorporating accepted feedback</div>
+                        <div><strong>Integration:</strong> Reviews cross-system integration concerns and component interactions</div>
+                    </div>
+                </details>
             </div>
             <h2 style="margin-top:12px">Development</h2>
             <div class="settings-section">
@@ -153,7 +199,10 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+    var modelVendors = {{ model_vendors|tojson }};
+    var modelThinking = {{ model_thinking|tojson }};
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     if (typeof lucide !== 'undefined') {
