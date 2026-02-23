@@ -669,28 +669,17 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     font-style: italic;
 }
 
-/* ── Editable Max Tokens ──────────────────────────────────────────── */
+/* ── Editable Inline Fields (timeout, max tokens) ────────────────── */
 
+.editable-timeout,
 .editable-max-tokens {
     border-bottom: 1px dashed var(--text-dim);
     cursor: text;
     padding-bottom: 1px;
     transition: border-color 0.15s, color 0.15s;
 }
+.editable-timeout:hover,
 .editable-max-tokens:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-}
-
-/* ── Editable Timeout ──────────────────────────────────────────────── */
-
-.editable-timeout {
-    border-bottom: 1px dashed var(--text-dim);
-    cursor: text;
-    padding-bottom: 1px;
-    transition: border-color 0.15s, color 0.15s;
-}
-.editable-timeout:hover {
     border-color: var(--accent);
     color: var(--accent);
 }
@@ -881,22 +870,7 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     color: var(--green);
     opacity: 1;
 }
-.thinking-toggle {
-    cursor: pointer;
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-size: 10px;
-    transition: all 0.15s;
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-}
-.thinking-toggle:hover {
-    border-color: var(--text-dim);
-}
-.thinking-toggle.thinking-on {
-    color: var(--green);
-    border-color: var(--green);
-}
+.thinking-toggle,
 .settings-toggle {
     cursor: pointer;
     padding: 1px 6px;
@@ -906,8 +880,13 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     color: var(--text-dim);
     border: 1px solid var(--border);
 }
+.thinking-toggle:hover,
 .settings-toggle:hover {
     border-color: var(--text-dim);
+}
+.thinking-toggle.thinking-on {
+    color: var(--green);
+    border-color: var(--green);
 }
 .settings-toggle.settings-on {
     color: var(--yellow);

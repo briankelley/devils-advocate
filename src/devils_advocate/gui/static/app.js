@@ -355,17 +355,7 @@ const dvad = {
 
                 // Detect spec mode from the initial review_start event
                 if (ev.phase === 'review_start' && ev.message && ev.message.includes('spec review')) {
-                    this._specMode = true;
-                    document.querySelectorAll('.phase-adversarial').forEach(el => {
-                        el.style.display = 'none';
-                    });
-                    document.querySelectorAll('.bc-spec-only').forEach(el => {
-                        el.classList.remove('bc-spec-only');
-                    });
-                    const reviewersLabel = document.getElementById('reviewers-phase-label');
-                    if (reviewersLabel) reviewersLabel.textContent = 'REVIEWERS';
-                    const finalLabel = document.getElementById('final-phase-label');
-                    if (finalLabel) finalLabel.textContent = 'SUGGESTIONS';
+                    this._applySpecMode();
                 }
 
                 // Update phase dots
@@ -430,17 +420,7 @@ const dvad = {
 
         // Spec mode: hide adversarial phases, show spec-only steps
         if (detail.mode === 'spec') {
-            this._specMode = true;
-            document.querySelectorAll('.phase-adversarial').forEach(el => {
-                el.style.display = 'none';
-            });
-            document.querySelectorAll('.bc-spec-only').forEach(el => {
-                el.classList.remove('bc-spec-only');
-            });
-            const reviewersLabel = document.getElementById('reviewers-phase-label');
-            if (reviewersLabel) reviewersLabel.textContent = 'REVIEWERS';
-            const finalLabel = document.getElementById('final-phase-label');
-            if (finalLabel) finalLabel.textContent = 'SUGGESTIONS';
+            this._applySpecMode();
         }
     },
 
@@ -462,6 +442,21 @@ const dvad = {
         if (totalEl) {
             totalEl.textContent = '$' + parseFloat(detail.total).toFixed(6);
         }
+    },
+
+    _applySpecMode() {
+        if (this._specMode) return;
+        this._specMode = true;
+        document.querySelectorAll('.phase-adversarial').forEach(el => {
+            el.style.display = 'none';
+        });
+        document.querySelectorAll('.bc-spec-only').forEach(el => {
+            el.classList.remove('bc-spec-only');
+        });
+        const reviewersLabel = document.getElementById('reviewers-phase-label');
+        if (reviewersLabel) reviewersLabel.textContent = 'REVIEWERS';
+        const finalLabel = document.getElementById('final-phase-label');
+        if (finalLabel) finalLabel.textContent = 'SUGGESTIONS';
     },
 
     _updatePhase(phase, seenPhases) {
@@ -904,71 +899,9 @@ const dvad = {
         }
     },
 
-    // ── Inline Timeout Editing ───────────────────────────────────────
-    initTimeoutEditing() {
-        document.querySelectorAll('.editable-timeout').forEach(span => {
-            span.addEventListener('click', () => {
-                if (span.querySelector('input')) return; // Already editing
-                const currentVal = span.textContent.trim();
-                const modelName = span.dataset.model;
-
-                const input = document.createElement('input');
-                input.type = 'number';
-                input.min = '10';
-                input.max = '7200';
-                input.value = currentVal;
-                input.className = 'timeout-input';
-
-                span.textContent = '';
-                span.appendChild(input);
-                input.focus();
-                input.select();
-
-                const commit = async () => {
-                    const newVal = parseInt(input.value);
-                    if (isNaN(newVal) || newVal < 10 || newVal > 7200) {
-                        span.textContent = currentVal;
-                        return;
-                    }
-
-                    span.textContent = newVal;
-
-                    try {
-                        const resp = await fetch('/api/config/model-timeout', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-DVAD-Token': this.getToken(),
-                            },
-                            body: JSON.stringify({ model_name: modelName, timeout: newVal }),
-                        });
-                        if (!resp.ok) {
-                            const data = await resp.json();
-                            alert(data.detail || 'Failed to update timeout');
-                            span.textContent = currentVal;
-                        }
-                    } catch (err) {
-                        alert('Network error: ' + err.message);
-                        span.textContent = currentVal;
-                    }
-                };
-
-                input.addEventListener('blur', commit);
-                input.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        input.blur();
-                    } else if (e.key === 'Escape') {
-                        span.textContent = currentVal;
-                    }
-                });
-            });
-        });
-    },
-
-    // ── Inline Max Token Editing ────────────────────────────────────
-    initMaxTokenEditing() {
-        document.querySelectorAll('.editable-max-tokens').forEach(span => {
+    // ── Inline Number Editing (shared by timeout + max tokens) ────────
+    _initInlineEditor(selector, { min, max, endpoint, bodyKey, placeholder, emptyValue }) {
+        document.querySelectorAll(selector).forEach(span => {
             span.addEventListener('click', () => {
                 if (span.querySelector('input')) return;
                 const currentVal = span.textContent.trim();
@@ -976,11 +909,11 @@ const dvad = {
 
                 const input = document.createElement('input');
                 input.type = 'number';
-                input.min = '1';
-                input.max = '1000000';
-                input.value = currentVal === 'unset' ? '' : currentVal;
+                input.min = String(min);
+                input.max = String(max);
+                input.value = (emptyValue && currentVal === emptyValue) ? '' : currentVal;
                 input.className = 'timeout-input';
-                input.placeholder = 'unset';
+                if (placeholder) input.placeholder = placeholder;
 
                 span.textContent = '';
                 span.appendChild(input);
@@ -989,23 +922,25 @@ const dvad = {
 
                 const commit = async () => {
                     const rawVal = input.value.trim();
-                    if (rawVal === '') {
-                        span.textContent = 'unset';
-                        // Send null to clear
+
+                    // Handle empty → null (for clearable fields like max_output_tokens)
+                    if (emptyValue && rawVal === '') {
+                        span.textContent = emptyValue;
                         try {
-                            await fetch('/api/config/model-max-tokens', {
+                            await fetch(endpoint, {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
                                     'X-DVAD-Token': this.getToken(),
                                 },
-                                body: JSON.stringify({ model_name: modelName, max_output_tokens: null }),
+                                body: JSON.stringify({ model_name: modelName, [bodyKey]: null }),
                             });
                         } catch (err) { /* ignore */ }
                         return;
                     }
+
                     const newVal = parseInt(rawVal);
-                    if (isNaN(newVal) || newVal < 1 || newVal > 1000000) {
+                    if (isNaN(newVal) || newVal < min || newVal > max) {
                         span.textContent = currentVal;
                         return;
                     }
@@ -1013,17 +948,17 @@ const dvad = {
                     span.textContent = newVal;
 
                     try {
-                        const resp = await fetch('/api/config/model-max-tokens', {
+                        const resp = await fetch(endpoint, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'X-DVAD-Token': this.getToken(),
                             },
-                            body: JSON.stringify({ model_name: modelName, max_output_tokens: newVal }),
+                            body: JSON.stringify({ model_name: modelName, [bodyKey]: newVal }),
                         });
                         if (!resp.ok) {
                             const data = await resp.json();
-                            alert(data.detail || 'Failed to update max output tokens');
+                            alert(data.detail || `Failed to update ${bodyKey}`);
                             span.textContent = currentVal;
                         }
                     } catch (err) {
@@ -1034,14 +969,28 @@ const dvad = {
 
                 input.addEventListener('blur', commit);
                 input.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        input.blur();
-                    } else if (e.key === 'Escape') {
-                        span.textContent = currentVal;
-                    }
+                    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                    else if (e.key === 'Escape') { span.textContent = currentVal; }
                 });
             });
+        });
+    },
+
+    initTimeoutEditing() {
+        this._initInlineEditor('.editable-timeout', {
+            min: 10, max: 7200,
+            endpoint: '/api/config/model-timeout',
+            bodyKey: 'timeout',
+        });
+    },
+
+    initMaxTokenEditing() {
+        this._initInlineEditor('.editable-max-tokens', {
+            min: 1, max: 1000000,
+            endpoint: '/api/config/model-max-tokens',
+            bodyKey: 'max_output_tokens',
+            placeholder: 'unset',
+            emptyValue: 'unset',
         });
     },
 

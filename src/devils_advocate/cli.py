@@ -568,6 +568,7 @@ def gui_cmd(port, host, config_path, allow_nonlocal):
     import socket
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((host, port))
     except OSError:
         console.print(f"[red]Error:[/red] Port {port} is already in use.")
