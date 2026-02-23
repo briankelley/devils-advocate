@@ -188,35 +188,26 @@ def build_revision_prompt(
     )
 
 
-async def run_revision(
+async def _run_revision_core(
     client,
     revision_model: ModelConfig,
     original_content: str,
-    ledger_data: dict,
+    revision_context: str,
     mode: str,
     cost_tracker: CostTracker,
     storage: StorageManager,
     review_id: str,
 ) -> str:
-    """Run the isolated revision LLM call.
+    """Shared revision implementation: build prompt, call LLM, extract result.
 
-    Returns the extracted revised artifact, or empty string if revision
-    is not needed or extraction fails. Callers should wrap this in
-    try/except — revision failure is non-fatal.
+    Both ``run_revision`` and ``run_spec_revision`` delegate here after
+    building their mode-specific context and performing early-exit checks.
+
+    Returns the extracted revised artifact, or empty string if the context
+    window is exceeded or extraction fails.
     """
-    # Build context from ledger
-    revision_context = build_revision_context(ledger_data)
-
-    # Check for actionable findings
-    if "=== ACCEPTED FINDINGS" not in revision_context:
-        console.print("  [dim]No actionable findings — skipping revision[/dim]")
-        storage.log("Revision: no actionable findings — skipping")
-        return ""
-
-    # Build prompt
     prompt = build_revision_prompt(mode, original_content, revision_context)
 
-    # Context window check
     fits, est, limit = check_context_window(revision_model, prompt)
     if not fits:
         console.print(
@@ -228,7 +219,6 @@ async def run_revision(
         )
         return ""
 
-    # Call LLM
     storage.log(f"Revision: calling {revision_model.name}")
     raw, usage = await call_with_retry(
         client,
@@ -255,10 +245,8 @@ async def run_revision(
         f"({usage['output_tokens']} output tokens)"
     )
 
-    # Always save raw response
     storage.save_intermediate(review_id, "revision", "revision_raw.txt", raw)
 
-    # Strict extraction
     extracted = _extract_revision_strict(raw, mode)
     if not extracted:
         console.print(
@@ -271,6 +259,35 @@ async def run_revision(
         return ""
 
     return extracted
+
+
+async def run_revision(
+    client,
+    revision_model: ModelConfig,
+    original_content: str,
+    ledger_data: dict,
+    mode: str,
+    cost_tracker: CostTracker,
+    storage: StorageManager,
+    review_id: str,
+) -> str:
+    """Run the isolated revision LLM call.
+
+    Returns the extracted revised artifact, or empty string if revision
+    is not needed or extraction fails. Callers should wrap this in
+    try/except — revision failure is non-fatal.
+    """
+    revision_context = build_revision_context(ledger_data)
+
+    if "=== ACCEPTED FINDINGS" not in revision_context:
+        console.print("  [dim]No actionable findings — skipping revision[/dim]")
+        storage.log("Revision: no actionable findings — skipping")
+        return ""
+
+    return await _run_revision_core(
+        client, revision_model, original_content, revision_context,
+        mode, cost_tracker, storage, review_id,
+    )
 
 
 async def run_spec_revision(
@@ -295,56 +312,7 @@ async def run_spec_revision(
         storage.log("Revision: no suggestions — skipping")
         return ""
 
-    prompt = build_revision_prompt("spec", original_content, revision_context)
-
-    fits, est, limit = check_context_window(revision_model, prompt)
-    if not fits:
-        console.print(
-            f"  [yellow]Warning: Revision prompt ({est} tokens) exceeds "
-            f"{revision_model.name} context ({limit}) — skipping revision[/yellow]"
-        )
-        storage.log(
-            f"Revision: prompt ({est} tokens) exceeds context ({limit}) — skipping"
-        )
-        return ""
-
-    storage.log(f"Revision: calling {revision_model.name}")
-    raw, usage = await call_with_retry(
-        client,
-        revision_model,
-        "",
-        prompt,
-        REVISION_MAX_OUTPUT_TOKENS,
-        log_fn=storage.log,
-        mode="revision",
+    return await _run_revision_core(
+        client, revision_model, original_content, revision_context,
+        "spec", cost_tracker, storage, review_id,
     )
-    cost_tracker.add(
-        revision_model.name,
-        usage["input_tokens"],
-        usage["output_tokens"],
-        revision_model.cost_per_1k_input,
-        revision_model.cost_per_1k_output,
-        role="revision",
-    )
-    console.print(
-        f"  Revision model responded ({usage['output_tokens']} tokens)"
-    )
-    storage.log(
-        f"Revision: {revision_model.name} responded "
-        f"({usage['output_tokens']} output tokens)"
-    )
-
-    storage.save_intermediate(review_id, "revision", "revision_raw.txt", raw)
-
-    extracted = _extract_revision_strict(raw, "spec")
-    if not extracted:
-        console.print(
-            "  [yellow]Warning: Revision response missing canonical delimiters "
-            "— revised artifact not saved[/yellow]"
-        )
-        storage.log(
-            "Revision: extraction failed — canonical delimiters not found in response"
-        )
-        return ""
-
-    return extracted
