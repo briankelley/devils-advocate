@@ -1,0 +1,38 @@
+APPLICATION SPECIFICATION
+Board Foot Calculator for Android
+
+Overview
+
+A single-screen Android application that helps woodworkers calculate the board footage and total cost of lumber purchases. The user sets a price per board foot, enters the dimensions of a piece of wood, and the app returns the board footage and total cost. Multiple pieces can be added to a running total.
+
+
+Definitions
+
+One board foot equals a volume of 144 cubic inches, or equivalently a piece of wood 12 inches long, 12 inches wide, and 1 inch thick. The formula is: board feet = (length in inches x width in inches x thickness in inches) / 144.
+
+
+Screen Layout
+
+The application consists of a single activity with the following elements arranged vertically.
+
+1. A text input labeled "Price per Board Foot ($)" where the user enters a dollar amount. This value persists until the user changes it.
+
+2. A dimensions entry group containing three text inputs arranged horizontally, labeled "Length (in)", "Width (in)", and "Thickness (in)". All values are in inches.
+
+3. A button labeled "Calculate" that computes the board footage and cost for the entered dimensions and adds the result to the list below.
+
+4. A results area showing the most recent calculation as a single line in the format: L x W x T = X.XX bf | $X.XX
+
+5. A running total section displaying the cumulative board footage and cumulative cost across all calculated pieces, in the format: Total: X.XX bf | $X.XX
+
+6. A button labeled "Clear All" that resets the running total and clears the results area. The price per board foot is not cleared.
+
+
+Behavior
+
+All numeric inputs accept decimal values. If any dimension field is empty or zero when Calculate is pressed, the app displays a brief toast message reading "Enter all dimensions" and performs no calculation. If the price field is empty or zero, the app displays a toast reading "Set a price per board foot" and performs no calculation. Board footage values are rounded to two decimal places. Cost values are rounded to two decimal places.
+
+
+Technical Requirements
+
+Target Android API level 33 or higher. Use Kotlin. Use a single Activity with no fragments. Use View-based layout defined in XML. No external dependencies beyond the standard Android SDK. No data persistence between app sessions.
