@@ -113,43 +113,43 @@
             <h2 style="margin-top:12px">Role Assignments</h2>
             <div class="role-summary" id="role-summary">
                 <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-author"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-icon" id="rsi-author"><i data-lucide="pen-tool"></i></span>
                     <span class="role-summary-cot" id="rsc-author"><i data-lucide="brain"></i></span>
                     <span class="role-summary-label">Author:</span>
                     <span class="role-summary-value" id="rs-author">—</span>
                 </div>
                 <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-reviewer1"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-icon" id="rsi-reviewer1"><i data-lucide="scan-eye"></i></span>
                     <span class="role-summary-cot" id="rsc-reviewer1"><i data-lucide="brain"></i></span>
                     <span class="role-summary-label">Reviewer 1:</span>
                     <span class="role-summary-value" id="rs-reviewer1">—</span>
                 </div>
                 <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-reviewer2"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-icon" id="rsi-reviewer2"><i data-lucide="scan-eye"></i></span>
                     <span class="role-summary-cot" id="rsc-reviewer2"><i data-lucide="brain"></i></span>
                     <span class="role-summary-label">Reviewer 2:</span>
                     <span class="role-summary-value" id="rs-reviewer2">—</span>
                 </div>
                 <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-deduplication"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-icon" id="rsi-deduplication"><i data-lucide="combine"></i></span>
                     <span class="role-summary-cot" id="rsc-deduplication"><i data-lucide="brain"></i></span>
                     <span class="role-summary-label">Dedup:</span>
                     <span class="role-summary-value" id="rs-deduplication">—</span>
                 </div>
                 <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-normalization"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-icon" id="rsi-normalization"><i data-lucide="scale"></i></span>
                     <span class="role-summary-cot" id="rsc-normalization"><i data-lucide="brain"></i></span>
                     <span class="role-summary-label">Normalization:</span>
                     <span class="role-summary-value" id="rs-normalization">—</span>
                 </div>
                 <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-revision"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-icon" id="rsi-revision"><i data-lucide="file-pen"></i></span>
                     <span class="role-summary-cot" id="rsc-revision"><i data-lucide="brain"></i></span>
                     <span class="role-summary-label">Revision:</span>
                     <span class="role-summary-value" id="rs-revision">—</span>
                 </div>
                 <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-integration_reviewer"><i data-lucide="cpu"></i></span>
+                    <span class="role-summary-icon" id="rsi-integration_reviewer"><i data-lucide="puzzle"></i></span>
                     <span class="role-summary-cot" id="rsc-integration_reviewer"><i data-lucide="brain"></i></span>
                     <span class="role-summary-label">Integration:</span>
                     <span class="role-summary-value" id="rs-integration_reviewer">—</span>
@@ -212,6 +212,9 @@ document.addEventListener('DOMContentLoaded', () => {
     dvad.initRolePills();
     dvad.initThinkingToggle();
     dvad.initSettingsToggle();
+    // Re-run now that modelVendors/modelThinking are available
+    // (dvad.init() ran before these vars were defined)
+    dvad._updateRoleSummary();
 });
 </script>
 {% endblock %}

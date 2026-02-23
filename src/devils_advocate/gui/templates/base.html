@@ -4,14 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Devil's Advocate{% endblock %}</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=r4">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400&display=swap" rel="stylesheet">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </head>
 <body>
     <nav class="topnav">
         <a href="/" class="nav-brand">
-            <img src="/static/brand/vectorized-dvad-color-white.svg" class="nav-logo" alt="dvad">
+            <img src="/static/brand/vectorized-dvad-color-white.svg" class="nav-logo" alt="dvad" height="65" width="65">
             <span class="nav-title">Devil's Advocate</span>
         </a>
         <div class="nav-links">

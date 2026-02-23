@@ -114,8 +114,8 @@ async def start_review(request: Request):
     tmpdir = tempfile.mkdtemp(prefix="dvad-gui-")
     input_files: list[Path] = []
 
-    # Get uploaded input files
-    uploaded_files = form.getlist("input_files")
+    # Get uploaded input files + reference files (both become --input args)
+    uploaded_files = form.getlist("input_files") + form.getlist("reference_files")
     file_count = 0
 
     for upload in uploaded_files:

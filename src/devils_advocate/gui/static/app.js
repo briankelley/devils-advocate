@@ -86,39 +86,49 @@ const dvad = {
         const inputFilesInput = document.getElementById('input_files');
         const specRow = document.getElementById('spec-row');
         const projectDirRow = document.getElementById('project-dir-row');
+        const referenceRow = document.getElementById('reference-files-row');
         const fileHint = document.getElementById('file-hint');
         const inputRow = document.getElementById('input-files-row');
+        const inputLabel = document.getElementById('input-files-label');
 
         if (!inputFilesInput) return;
 
         if (mode === 'plan') {
-            inputFilesInput.multiple = true;
+            inputFilesInput.multiple = false;
             inputFilesInput.required = true;
+            inputLabel.textContent = 'Plan File';
+            fileHint.textContent = 'The implementation plan to review';
             specRow.style.display = 'none';
             projectDirRow.style.display = 'none';
-            fileHint.textContent = 'Plan file + up to 5 reference files';
+            referenceRow.style.display = '';
             inputRow.style.display = '';
         } else if (mode === 'code') {
             inputFilesInput.multiple = false;
             inputFilesInput.required = true;
+            inputLabel.textContent = 'Required Files';
+            fileHint.textContent = 'Exactly one file required for code mode';
             specRow.style.display = '';
             projectDirRow.style.display = 'none';
-            fileHint.textContent = 'Exactly one file required for code mode';
+            referenceRow.style.display = 'none';
             inputRow.style.display = '';
         } else if (mode === 'spec') {
             inputFilesInput.multiple = true;
             inputFilesInput.required = true;
+            inputLabel.textContent = 'Required Files';
+            fileHint.textContent = 'Specification file(s) to enrich with suggestions';
             specRow.style.display = 'none';
             projectDirRow.style.display = 'none';
-            fileHint.textContent = 'Specification file(s) to enrich with suggestions';
+            referenceRow.style.display = 'none';
             inputRow.style.display = '';
         } else {
             // integration
             inputFilesInput.multiple = true;
             inputFilesInput.required = false;
+            inputLabel.textContent = 'Input Files';
+            fileHint.textContent = 'Input files are optional for integration mode';
             specRow.style.display = '';
             projectDirRow.style.display = '';
-            fileHint.textContent = 'Input files are optional for integration mode';
+            referenceRow.style.display = 'none';
             inputRow.style.display = '';
         }
     },
@@ -133,6 +143,11 @@ const dvad = {
         const inputFiles = document.getElementById('input_files')?.files || [];
         for (let i = 0; i < inputFiles.length; i++) {
             parts.push('--input', inputFiles[i].name);
+        }
+
+        const refFiles = document.getElementById('reference_files')?.files || [];
+        for (let i = 0; i < refFiles.length; i++) {
+            parts.push('--input', refFiles[i].name);
         }
 
         const specFile = document.getElementById('spec_file')?.files?.[0];
@@ -780,8 +795,6 @@ const dvad = {
     },
 
     _updateRoleSummaryIcons(roles) {
-        if (typeof modelVendors === 'undefined' || typeof modelThinking === 'undefined') return;
-
         const roleKeys = [
             { key: 'author', prefix: 'author' },
             { key: 'reviewer1', prefix: 'reviewer1', get: (r) => r.reviewers?.[0] },
@@ -794,30 +807,23 @@ const dvad = {
 
         roleKeys.forEach(({ key, prefix, get }) => {
             const model = get ? get(roles) : roles[key];
-            const iconEl = document.getElementById('rsi-' + prefix);
-            const cotEl = document.getElementById('rsc-' + prefix);
 
+            // Role icon: green when assigned
+            const iconEl = document.getElementById('rsi-' + prefix);
             if (iconEl) {
-                if (model && modelVendors[model]) {
-                    const iconName = this.VENDOR_ICONS[modelVendors[model]] || 'cpu';
-                    iconEl.innerHTML = `<i data-lucide="${iconName}"></i>`;
-                    iconEl.title = modelVendors[model];
-                } else {
-                    iconEl.innerHTML = '<i data-lucide="cpu"></i>';
-                    iconEl.title = '';
-                }
+                iconEl.classList.toggle('icon-active', !!model);
             }
+
+            // CoT brain icon: active when model has thinking enabled
+            const cotEl = document.getElementById('rsc-' + prefix);
             if (cotEl) {
-                if (model && modelThinking[model]) {
+                if (model && typeof modelThinking !== 'undefined' && modelThinking[model]) {
                     cotEl.classList.add('cot-active');
                 } else {
                     cotEl.classList.remove('cot-active');
                 }
             }
         });
-
-        // Re-render lucide icons
-        if (typeof lucide !== 'undefined') lucide.createIcons();
     },
 
     _updateThinkingEligibility() {
@@ -1044,6 +1050,7 @@ const dvad = {
         document.querySelectorAll('.thinking-icon').forEach(el => {
             el.addEventListener('click', async (e) => {
                 e.stopPropagation();
+                e.preventDefault();
                 const model = el.dataset.model;
 
                 // Only allow toggle if model has an active role

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+import sys
 import time
 from pathlib import Path
 
@@ -15,6 +16,19 @@ from ..storage import StorageManager
 from ._helpers import get_gui_storage
 
 router = APIRouter()
+
+
+def _find_dvad_binary() -> str:
+    """Find the dvad binary, falling back to the venv bin dir."""
+    found = shutil.which("dvad")
+    if found:
+        return found
+    # Fallback: binary should be alongside the running Python interpreter
+    candidate = Path(sys.executable).parent / "dvad"
+    if candidate.is_file():
+        return str(candidate)
+    return "(not found in PATH)"
+
 
 # Simple TTL cache for review list
 _review_cache: dict = {"data": None, "expires": 0}
@@ -50,7 +64,7 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
     start = (page - 1) * per_page
     page_reviews = reviews[start:start + per_page]
 
-    dvad_binary = shutil.which("dvad") or "(not found in PATH)"
+    dvad_binary = _find_dvad_binary()
 
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "dashboard.html", {
@@ -287,7 +301,7 @@ async def config_page(request: Request):
         env_file_exists = Path(env_file_path).is_file()
 
         # dvad binary path
-        dvad_binary = shutil.which("dvad") or "(not found in PATH)"
+        dvad_binary = _find_dvad_binary()
 
         # Directory paths
         storage = StorageManager(Path.home())

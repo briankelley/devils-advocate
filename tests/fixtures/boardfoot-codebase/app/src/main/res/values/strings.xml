@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Board Foot Calculator</string>
+    <string name="hint_price">Price per Board Foot ($)</string>
+    <string name="hint_length">Length</string>
+    <string name="hint_width">Width</string>
+    <string name="hint_thickness">Thickness</string>
+    <string name="btn_calculate">Calculate</string>
+    <string name="btn_clear_all">Clear All</string>
+    <string name="result_format">%1$s x %2$s x %3$s = %4$.2f bf | $%5$.2f</string>
+    <string name="total_format">Total: %1$.2f bf | $%2$.2f</string>
+    <string name="total_default">Total: 0.00 bf | $0.00</string>
+    <string name="toast_enter_dimensions">Enter all dimensions</string>
+    <string name="toast_set_price">Set a price per board foot</string>
+</resources>
