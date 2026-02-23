@@ -7,6 +7,7 @@ All LLM-based normalization lives in ``normalization.py``.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from .ids import resolve_guid
 from .types import (
@@ -84,6 +85,110 @@ def _extract_multiline_field(text: str, field_name: str, next_fields: list) -> s
     if m:
         return m.group(1).strip()
     return ""
+
+
+# ─── Shared Grouped Response Core ────────────────────────────────────────────
+
+
+def _parse_grouped_response(
+    raw: str,
+    all_points: list[ReviewPoint],
+    ctx: ReviewContext,
+    extract_fields: Callable[[str], dict | None],
+    point_ref_pattern: str,
+    build_group_attrs: Callable[[dict, list[ReviewPoint]], dict],
+    build_singleton_attrs: Callable[[ReviewPoint], dict],
+) -> list[ReviewGroup]:
+    """Shared core for dedup and spec-dedup response parsing.
+
+    Parameters
+    ----------
+    extract_fields :
+        Called per block. Returns a dict of extracted fields with at least
+        'concern_text' and 'points_str' keys, or None to skip the block.
+    point_ref_pattern :
+        Regex with one capture group for the point index number.
+    build_group_attrs :
+        Given (fields_dict, found_points), returns a dict with keys
+        'concern', 'combined_severity', 'combined_category'.
+    build_singleton_attrs :
+        Given a single ungrouped ReviewPoint, returns a dict with keys
+        'combined_severity', 'combined_category'.
+    """
+    groups: list[ReviewGroup] = []
+    idx_point_map = {i + 1: p for i, p in enumerate(all_points)}
+    claimed_indices: set[int] = set()
+
+    blocks = re.split(r'(?=GROUP\s+\d+\s*:)', raw, flags=re.IGNORECASE)
+
+    group_idx = 0
+    for block in blocks:
+        if not block.strip():
+            continue
+
+        fields = extract_fields(block)
+        if fields is None:
+            continue
+
+        # Parse point references (first claim wins)
+        found_points: list[ReviewPoint] = []
+        points_str = fields.get("points_str", "")
+        if points_str:
+            for num_match in re.finditer(point_ref_pattern, points_str, re.IGNORECASE):
+                num = int(num_match.group(1))
+                if num in idx_point_map and num not in claimed_indices:
+                    found_points.append(idx_point_map[num])
+                    claimed_indices.add(num)
+
+        # Keyword fallback
+        concern_text = fields.get("concern_text", "")
+        if not found_points and concern_text:
+            for idx_key, p in idx_point_map.items():
+                if idx_key not in claimed_indices:
+                    if any(word.lower() in concern_text.lower()
+                           for word in p.description.split()[:5]):
+                        found_points.append(p)
+                        claimed_indices.add(idx_key)
+                        break
+
+        if not found_points:
+            continue
+
+        group_idx += 1
+        group_id = ctx.make_group_id(group_idx)
+
+        for pi, p in enumerate(found_points, 1):
+            p.point_id = ctx.make_point_id(group_id, pi)
+
+        reviewers = list(set(p.reviewer for p in found_points))
+        attrs = build_group_attrs(fields, found_points)
+
+        groups.append(ReviewGroup(
+            group_id=group_id,
+            concern=attrs["concern"],
+            points=found_points,
+            combined_severity=attrs["combined_severity"],
+            combined_category=attrs["combined_category"],
+            source_reviewers=reviewers,
+        ))
+
+    # Catch ungrouped points as singletons
+    for idx_key, p in idx_point_map.items():
+        if idx_key not in claimed_indices:
+            group_idx += 1
+            group_id = ctx.make_group_id(group_idx)
+            p.point_id = ctx.make_point_id(group_id, 1)
+            singleton_attrs = build_singleton_attrs(p)
+            groups.append(ReviewGroup(
+                group_id=group_id,
+                concern=p.description,
+                points=[p],
+                combined_severity=singleton_attrs["combined_severity"],
+                combined_category=singleton_attrs["combined_category"],
+                source_reviewers=[p.reviewer],
+            ))
+
+    return groups
 
 
 # ─── Review Response Parsing ────────────────────────────────────────────────
@@ -225,97 +330,42 @@ def parse_spec_dedup_response(
     Maps spec dedup fields: theme -> combined_category, title -> concern,
     consensus -> source_reviewers.
     """
-    groups: list[ReviewGroup] = []
-    idx_point_map = {i + 1: p for i, p in enumerate(all_points)}
-    claimed_indices: set[int] = set()
 
-    blocks = re.split(r'(?=GROUP\s+\d+\s*:)', raw, flags=re.IGNORECASE)
-
-    group_idx = 0
-    for block in blocks:
-        if not block.strip():
-            continue
-
-        theme = _extract_multiline_field(
-            block, "THEME",
-            ["TITLE", "DESCRIPTION", "CONSENSUS", "SUGGESTIONS"],
-        )
-        title = _extract_multiline_field(
-            block, "TITLE",
-            ["DESCRIPTION", "CONSENSUS", "SUGGESTIONS"],
-        )
-        description = _extract_multiline_field(
-            block, "DESCRIPTION",
-            ["CONSENSUS", "SUGGESTIONS"],
-        )
-        consensus = _extract_multiline_field(
-            block, "CONSENSUS",
-            ["SUGGESTIONS", "GROUP"],
-        )
-        suggestions_str = _extract_multiline_field(
-            block, "SUGGESTIONS",
-            ["GROUP"],
-        )
-
+    def _extract(block: str) -> dict | None:
+        theme = _extract_multiline_field(block, "THEME", ["TITLE", "DESCRIPTION", "CONSENSUS", "SUGGESTIONS"])
+        title = _extract_multiline_field(block, "TITLE", ["DESCRIPTION", "CONSENSUS", "SUGGESTIONS"])
+        description = _extract_multiline_field(block, "DESCRIPTION", ["CONSENSUS", "SUGGESTIONS"])
         if not title and not description:
-            continue
+            return None
+        suggestions_str = _extract_multiline_field(block, "SUGGESTIONS", ["GROUP"])
+        return {
+            "theme": theme,
+            "title": title,
+            "description": description,
+            "points_str": suggestions_str,
+            "concern_text": (title or "") + " " + (description or ""),
+        }
 
-        # Parse suggestion references (first claim wins)
-        found_points: list[ReviewPoint] = []
-        if suggestions_str:
-            for num_match in re.finditer(r'(?:SUGGESTION\s+)?(\d+)', suggestions_str, re.IGNORECASE):
-                num = int(num_match.group(1))
-                if num in idx_point_map and num not in claimed_indices:
-                    found_points.append(idx_point_map[num])
-                    claimed_indices.add(num)
-
-        if not found_points and title:
-            # Keyword fallback
-            for idx_key, p in idx_point_map.items():
-                if idx_key not in claimed_indices:
-                    if any(word.lower() in (title + " " + (description or "")).lower()
-                           for word in p.description.split()[:5]):
-                        found_points.append(p)
-                        claimed_indices.add(idx_key)
-                        break
-
-        if not found_points:
-            continue
-
-        group_idx += 1
-        group_id = ctx.make_group_id(group_idx)
-
-        for pi, p in enumerate(found_points, 1):
-            p.point_id = ctx.make_point_id(group_id, pi)
-
-        reviewers = list(set(p.reviewer for p in found_points))
+    def _attrs(fields: dict, found_points: list[ReviewPoint]) -> dict:
+        title = fields["title"]
+        description = fields["description"]
         concern = f"{title}: {description}" if title and description else (title or description or "")
+        return {
+            "concern": concern,
+            "combined_severity": "info",
+            "combined_category": _normalize_theme(fields["theme"]) if fields["theme"] else "other",
+        }
 
-        groups.append(ReviewGroup(
-            group_id=group_id,
-            concern=concern,
-            points=found_points,
-            combined_severity="info",
-            combined_category=_normalize_theme(theme) if theme else "other",
-            source_reviewers=reviewers,
-        ))
+    def _singleton_attrs(p: ReviewPoint) -> dict:
+        return {"combined_severity": "info", "combined_category": p.category}
 
-    # Catch ungrouped points
-    for idx_key, p in idx_point_map.items():
-        if idx_key not in claimed_indices:
-            group_idx += 1
-            group_id = ctx.make_group_id(group_idx)
-            p.point_id = ctx.make_point_id(group_id, 1)
-            groups.append(ReviewGroup(
-                group_id=group_id,
-                concern=p.description,
-                points=[p],
-                combined_severity="info",
-                combined_category=p.category,
-                source_reviewers=[p.reviewer],
-            ))
-
-    return groups
+    return _parse_grouped_response(
+        raw, all_points, ctx,
+        extract_fields=_extract,
+        point_ref_pattern=r'(?:SUGGESTION\s+)?(\d+)',
+        build_group_attrs=_attrs,
+        build_singleton_attrs=_singleton_attrs,
+    )
 
 
 # ─── Author Response Parsing ────────────────────────────────────────────────
@@ -403,93 +453,41 @@ def parse_dedup_response(
     Assigns final group and point IDs using ReviewContext.
     Each point is assigned to at most one group (first match wins).
     """
-    groups: list[ReviewGroup] = []
-    # Build index-based point map (1-based, matching POINT N in dedup prompt)
-    idx_point_map = {i + 1: p for i, p in enumerate(all_points)}
-    claimed_indices: set[int] = set()
 
-    blocks = re.split(r'(?=GROUP\s+\d+\s*:)', raw, flags=re.IGNORECASE)
-
-    group_idx = 0
-    for block in blocks:
-        if not block.strip():
-            continue
-
-        concern = _extract_multiline_field(
-            block, "CONCERN",
-            ["POINTS", "COMBINED_SEVERITY", "COMBINED_CATEGORY"],
-        )
-        points_str = _extract_multiline_field(
-            block, "POINTS",
-            ["COMBINED_SEVERITY", "COMBINED_CATEGORY", "GROUP"],
-        )
-        severity = _extract_multiline_field(
-            block, "COMBINED_SEVERITY",
-            ["COMBINED_CATEGORY", "GROUP"],
-        )
-        category = _extract_multiline_field(
-            block, "COMBINED_CATEGORY",
-            ["GROUP"],
-        )
-
+    def _extract(block: str) -> dict | None:
+        concern = _extract_multiline_field(block, "CONCERN", ["POINTS", "COMBINED_SEVERITY", "COMBINED_CATEGORY"])
+        points_str = _extract_multiline_field(block, "POINTS", ["COMBINED_SEVERITY", "COMBINED_CATEGORY", "GROUP"])
         if not concern and not points_str:
-            continue
+            return None
+        severity = _extract_multiline_field(block, "COMBINED_SEVERITY", ["COMBINED_CATEGORY", "GROUP"])
+        category = _extract_multiline_field(block, "COMBINED_CATEGORY", ["GROUP"])
+        return {
+            "concern": concern,
+            "points_str": points_str,
+            "concern_text": concern,
+            "severity": severity,
+            "category": category,
+        }
 
-        # Parse point references - match POINT N or bare numbers
-        found_points: list[ReviewPoint] = []
-        if points_str:
-            for num_match in re.finditer(r'(?:POINT\s+)?(\d+)', points_str, re.IGNORECASE):
-                num = int(num_match.group(1))
-                if num in idx_point_map and num not in claimed_indices:
-                    found_points.append(idx_point_map[num])
-                    claimed_indices.add(num)
+    def _attrs(fields: dict, found_points: list[ReviewPoint]) -> dict:
+        severity_raw = fields["severity"]
+        category_raw = fields["category"]
+        return {
+            "concern": fields["concern"] or found_points[0].description,
+            "combined_severity": _normalize_severity(severity_raw) if severity_raw else found_points[0].severity,
+            "combined_category": _normalize_category(category_raw) if category_raw else found_points[0].category,
+        }
 
-        # Fallback: keyword matching for ungrouped points
-        if not found_points and concern:
-            for idx_key, p in idx_point_map.items():
-                if idx_key not in claimed_indices:
-                    if any(word.lower() in concern.lower()
-                           for word in p.description.split()[:5]):
-                        found_points.append(p)
-                        claimed_indices.add(idx_key)
-                        break
+    def _singleton_attrs(p: ReviewPoint) -> dict:
+        return {"combined_severity": p.severity, "combined_category": p.category}
 
-        if not found_points:
-            continue
-
-        group_idx += 1
-        group_id = ctx.make_group_id(group_idx)
-
-        # Assign final point IDs derived from group ID
-        for pi, p in enumerate(found_points, 1):
-            p.point_id = ctx.make_point_id(group_id, pi)
-
-        reviewers = list(set(p.reviewer for p in found_points))
-        groups.append(ReviewGroup(
-            group_id=group_id,
-            concern=concern or found_points[0].description,
-            points=found_points,
-            combined_severity=_normalize_severity(severity) if severity else found_points[0].severity,
-            combined_category=_normalize_category(category) if category else found_points[0].category,
-            source_reviewers=reviewers,
-        ))
-
-    # Catch any ungrouped points
-    for idx_key, p in idx_point_map.items():
-        if idx_key not in claimed_indices:
-            group_idx += 1
-            group_id = ctx.make_group_id(group_idx)
-            p.point_id = ctx.make_point_id(group_id, 1)
-            groups.append(ReviewGroup(
-                group_id=group_id,
-                concern=p.description,
-                points=[p],
-                combined_severity=p.severity,
-                combined_category=p.category,
-                source_reviewers=[p.reviewer],
-            ))
-
-    return groups
+    return _parse_grouped_response(
+        raw, all_points, ctx,
+        extract_fields=_extract,
+        point_ref_pattern=r'(?:POINT\s+)?(\d+)',
+        build_group_attrs=_attrs,
+        build_singleton_attrs=_singleton_attrs,
+    )
 
 
 # ─── Revised Output Extraction ──────────────────────────────────────────────
