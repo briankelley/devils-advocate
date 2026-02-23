@@ -6,10 +6,13 @@ import asyncio
 import json
 import shutil
 import tempfile
+from io import StringIO
 from pathlib import Path
+from typing import Callable
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
+from ruamel.yaml import YAML
 
 from ..storage import StorageManager
 from ._helpers import get_gui_storage
@@ -28,6 +31,39 @@ def _check_csrf(request: Request) -> None:
     got = request.headers.get("X-DVAD-Token", "")
     if got != expected:
         raise HTTPException(status_code=403, detail="Invalid or missing CSRF token")
+
+
+async def _mutate_yaml_config(request: Request, mutator: Callable[[dict], None]) -> None:
+    """Load YAML config, apply a mutation, and atomically save.
+
+    The mutator receives the parsed YAML dict and modifies it in place.
+    It may raise HTTPException for validation errors.
+    """
+    from ..config import find_config
+
+    config_path_str = request.app.state.config_path
+    if config_path_str:
+        target = Path(config_path_str)
+    else:
+        try:
+            target = find_config()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Cannot determine config file path")
+
+    try:
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        data = yaml.load(target.read_text())
+
+        mutator(data)
+
+        stream = StringIO()
+        yaml.dump(data, stream)
+        await asyncio.to_thread(StorageManager._atomic_write, target, stream.getvalue())
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update config: {exc}")
 
 
 # ── Review Start ─────────────────────────────────────────────────────────────
@@ -395,37 +431,12 @@ async def set_model_timeout(request: Request):
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="timeout must be an integer between 10 and 7200")
 
-    from ..config import find_config
-
-    config_path_str = request.app.state.config_path
-    if config_path_str:
-        target = Path(config_path_str)
-    else:
-        try:
-            target = find_config()
-        except Exception:
-            raise HTTPException(status_code=400, detail="Cannot determine config file path")
-
-    try:
-        from ruamel.yaml import YAML
-        ruamel = YAML()
-        ruamel.preserve_quotes = True
-        data = ruamel.load(target.read_text())
-
+    def _apply(data: dict) -> None:
         if "models" not in data or model_name not in data["models"]:
             raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found in config")
-
         data["models"][model_name]["timeout"] = timeout
 
-        from io import StringIO
-        stream = StringIO()
-        ruamel.dump(data, stream)
-        await asyncio.to_thread(StorageManager._atomic_write, target, stream.getvalue())
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to update timeout: {exc}")
-
+    await _mutate_yaml_config(request, _apply)
     return JSONResponse({"status": "ok", "model_name": model_name, "timeout": timeout})
 
 
@@ -440,37 +451,12 @@ async def set_model_thinking(request: Request):
     if not model_name:
         raise HTTPException(status_code=400, detail="model_name is required")
 
-    from ..config import find_config
-
-    config_path_str = request.app.state.config_path
-    if config_path_str:
-        target = Path(config_path_str)
-    else:
-        try:
-            target = find_config()
-        except Exception:
-            raise HTTPException(status_code=400, detail="Cannot determine config file path")
-
-    try:
-        from ruamel.yaml import YAML
-        ruamel = YAML()
-        ruamel.preserve_quotes = True
-        data = ruamel.load(target.read_text())
-
+    def _apply(data: dict) -> None:
         if "models" not in data or model_name not in data["models"]:
             raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found in config")
-
         data["models"][model_name]["thinking"] = bool(thinking)
 
-        from io import StringIO
-        stream = StringIO()
-        ruamel.dump(data, stream)
-        await asyncio.to_thread(StorageManager._atomic_write, target, stream.getvalue())
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to update thinking: {exc}")
-
+    await _mutate_yaml_config(request, _apply)
     return JSONResponse({"status": "ok", "model_name": model_name, "thinking": bool(thinking)})
 
 
@@ -493,40 +479,15 @@ async def set_model_max_tokens(request: Request):
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="max_output_tokens must be an integer between 1 and 1000000")
 
-    from ..config import find_config
-
-    config_path_str = request.app.state.config_path
-    if config_path_str:
-        target = Path(config_path_str)
-    else:
-        try:
-            target = find_config()
-        except Exception:
-            raise HTTPException(status_code=400, detail="Cannot determine config file path")
-
-    try:
-        from ruamel.yaml import YAML
-        ruamel = YAML()
-        ruamel.preserve_quotes = True
-        data = ruamel.load(target.read_text())
-
+    def _apply(data: dict) -> None:
         if "models" not in data or model_name not in data["models"]:
             raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found in config")
-
         if max_tokens is not None:
             data["models"][model_name]["max_output_tokens"] = max_tokens
         else:
             data["models"][model_name].pop("max_output_tokens", None)
 
-        from io import StringIO
-        stream = StringIO()
-        ruamel.dump(data, stream)
-        await asyncio.to_thread(StorageManager._atomic_write, target, stream.getvalue())
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to update max_output_tokens: {exc}")
-
+    await _mutate_yaml_config(request, _apply)
     return JSONResponse({"status": "ok", "model_name": model_name, "max_output_tokens": max_tokens})
 
 
@@ -542,33 +503,12 @@ async def set_settings_toggle(request: Request):
     if key not in valid_keys:
         raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")
 
-    config_path_str = request.app.state.config_path
-    if config_path_str:
-        target = Path(config_path_str)
-    else:
-        from ..config import find_config
-        try:
-            target = find_config()
-        except Exception:
-            raise HTTPException(status_code=400, detail="Cannot determine config file path")
-
-    try:
-        from ruamel.yaml import YAML
-        from io import StringIO
-        ruamel = YAML()
-        ruamel.preserve_quotes = True
-        data = ruamel.load(target.read_text())
+    def _apply(data: dict) -> None:
         if "settings" not in data:
             data["settings"] = {}
         data["settings"][key] = bool(value)
-        stream = StringIO()
-        ruamel.dump(data, stream)
-        await asyncio.to_thread(StorageManager._atomic_write, target, stream.getvalue())
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to update setting: {exc}")
 
+    await _mutate_yaml_config(request, _apply)
     return JSONResponse({"status": "ok", "key": key, "value": bool(value)})
 
 
@@ -660,19 +600,15 @@ async def save_config(request: Request):
         except Exception:
             raise HTTPException(status_code=400, detail="Cannot determine config file path")
 
-    # Try round-trip save with ruamel.yaml to preserve comments
+    # Round-trip save with ruamel.yaml to preserve comments
     try:
-        from ruamel.yaml import YAML
-        ruamel = YAML()
-        ruamel.preserve_quotes = True
-        from io import StringIO
-        # Parse the new content
-        new_data = ruamel.load(yaml_content)
+        yaml_rt = YAML()
+        yaml_rt.preserve_quotes = True
+        new_data = yaml_rt.load(yaml_content)
         stream = StringIO()
-        ruamel.dump(new_data, stream)
+        yaml_rt.dump(new_data, stream)
         final_content = stream.getvalue()
-    except ImportError:
-        # Fallback to plain yaml if ruamel not available
+    except Exception:
         final_content = yaml_content
 
     # Atomic write
