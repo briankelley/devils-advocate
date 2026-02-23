@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,32 +15,20 @@ from ..types import (
     ReviewResult,
 )
 from ..ids import assign_guids, generate_review_id
-from ..cost import check_context_window, estimate_tokens
+from ..cost import check_context_window
 from ..config import get_models_by_role
-from ..providers import AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS, call_with_retry
-from ..prompts import (
-    build_integration_prompt,
-    build_round1_author_prompt,
-    get_reviewer_system_prompt,
-)
-from ..parser import parse_author_response, parse_review_response
-from ..revision import run_revision
+from ..providers import MAX_OUTPUT_TOKENS, call_with_retry
+from ..prompts import build_integration_prompt, get_reviewer_system_prompt
+from ..parser import parse_review_response
 from ..normalization import normalize_review_response
-from ..output import generate_ledger, generate_report
 from ..storage import StorageManager
 from ..ui import console
 
 from ._common import (
-    _apply_governance_or_escalate,
+    PipelineInputs,
     _check_cost_guardrail,
-    _compute_summary,
-    _estimate_total_cost,
-    _format_groups_for_author,
-    _group_to_dict,
     _print_dry_run,
-    _print_governance_summary,
-    _print_summary_table,
-    _run_round2_exchange,
+    _run_adversarial_pipeline,
 )
 
 
@@ -232,184 +219,28 @@ async def run_integration_review(
             if _check_cost_guardrail(cost_tracker, storage):
                 return None
 
-            # -- Round 1: Author response --
-            console.print(
-                Panel(
-                    "[bold]Round 1:[/bold] Author responding to reviewer findings...",
-                    style="blue",
-                )
-            )
-            grouped_text = _format_groups_for_author(groups)
-            round1_author_prompt = build_round1_author_prompt(
-                "integration", combined, grouped_text
-            )
-
-            console.print(
-                f"  Prompt size: ~{estimate_tokens(round1_author_prompt)} tokens"
-            )
-            author_raw, author_usage = await call_with_retry(
+            # -- Shared pipeline: author response -> round 2 -> governance -> revision --
+            return await _run_adversarial_pipeline(
                 client,
-                author,
-                "",
-                round1_author_prompt,
-                AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
-                log_fn=storage.log,
-                mode="integration",
-            )
-            cost_tracker.add(
-                author.name,
-                author_usage["input_tokens"],
-                author_usage["output_tokens"],
-                author.cost_per_1k_input,
-                author.cost_per_1k_output,
-                role="author",
-            )
-            console.print(
-                f"  Author responded ({author_usage['output_tokens']} tokens)"
-            )
-            storage.save_intermediate(
-                review_id, "round2", "author_raw.txt", author_raw
-            )
-
-            author_responses = parse_author_response(
-                author_raw, groups, log_fn=storage.log
-            )
-
-            # Log Round 1 author parsing coverage
-            parsed_count = len(author_responses)
-            total_count = len(groups)
-            console.print(f"  Parsed: {parsed_count}/{total_count} groups matched")
-            if parsed_count < total_count:
-                console.print(
-                    f"  [yellow]Warning: {total_count - parsed_count} groups "
-                    f"unmatched -- will be escalated[/yellow]"
-                )
-
-            # Cost guardrail checkpoint
-            if _check_cost_guardrail(cost_tracker, storage):
-                return None
-
-            # -- Round 2: Reviewer rebuttal + Author final response --
-            all_rebuttals, author_final_responses, _ = (
-                await _run_round2_exchange(
-                    client,
-                    "integration",
-                    combined,
-                    groups,
-                    author_responses,
-                    grouped_text,
-                    author,
-                    [integ_reviewer],
-                    cost_tracker,
-                    storage,
-                    review_id,
+                PipelineInputs(
+                    mode="integration",
+                    content=combined,
+                    input_file_label=", ".join(files_to_review.keys()),
+                    project=project,
+                    review_id=review_id,
+                    timestamp=timestamp,
+                    all_points=points,
+                    groups=groups,
+                    author=author,
+                    active_reviewers=[integ_reviewer],
+                    dedup_model=dedup_model,
+                    revision_model=revision_model,
+                    cost_tracker=cost_tracker,
+                    storage=storage,
+                    revision_filename="remediation-plan.md",
                     reviewer_roles={integ_reviewer.name: "reviewer_1"},
-                )
+                ),
             )
-
-            # Governance
-            console.print(
-                Panel(
-                    "[bold]Governance:[/bold] Applying deterministic rules...",
-                    style="blue",
-                )
-            )
-
-            decisions = _apply_governance_or_escalate(
-                groups,
-                author_responses,
-                all_rebuttals,
-                author_final_responses,
-                "integration",
-                parsed_count,
-                total_count,
-                storage,
-            )
-
-            _print_governance_summary(decisions)
-
-            summary = _compute_summary(decisions, groups)
-
-            result = ReviewResult(
-                review_id=review_id,
-                mode="integration",
-                input_file=", ".join(files_to_review.keys()),
-                project=project,
-                timestamp=timestamp,
-                author_model=author.name,
-                reviewer_models=[integ_reviewer.name],
-                dedup_model=dedup_model.name,
-                points=[asdict(p) for p in points],
-                groups=groups,
-                author_responses=author_responses,
-                governance_decisions=decisions,
-                rebuttals=all_rebuttals,
-                author_final_responses=author_final_responses,
-                cost=cost_tracker,
-                revised_output="",
-                summary=summary,
-            )
-
-            report_str = generate_report(result)
-            ledger_dict = generate_ledger(result)
-            round1_data = {
-                "points": [asdict(p) for p in points],
-                "groups": [_group_to_dict(g) for g in groups],
-            }
-            round2_data = {
-                "author_responses": [asdict(ar) for ar in author_responses],
-                "rebuttals": [asdict(rb) for rb in all_rebuttals],
-                "author_final_responses": [asdict(af) for af in author_final_responses],
-                "governance": [asdict(d) for d in decisions],
-            }
-            storage.save_review_artifacts(review_id, report_str, ledger_dict, round1_data, round2_data)
-
-            # Persist original content for dvad revise
-            rd = storage.review_dir(review_id)
-            storage._atomic_write(rd / "original_content.txt", combined)
-
-            # -- Revision (post-governance) --
-            has_actionable = any(
-                d.governance_resolution in ("auto_accepted", "accepted", "overridden")
-                for d in decisions
-            )
-            if has_actionable:
-                console.print(
-                    Panel(
-                        "[bold]Revision:[/bold] Generating revised artifact...",
-                        style="blue",
-                    )
-                )
-                try:
-                    revised_output = await run_revision(
-                        client,
-                        revision_model,
-                        combined,
-                        ledger_dict,
-                        mode="integration",
-                        cost_tracker=cost_tracker,
-                        storage=storage,
-                        review_id=review_id,
-                    )
-                    if revised_output:
-                        storage._atomic_write(rd / "remediation-plan.md", revised_output)
-                        console.print(
-                            f"  Remediation plan saved ({len(revised_output):,} chars)"
-                        )
-                except Exception as e:
-                    console.print(
-                        f"  [yellow]Warning: Revision failed: {e}[/yellow]"
-                    )
-                    storage.log(f"Revision failed (non-fatal): {e}")
-            else:
-                console.print("  [dim]No actionable findings — skipping revision[/dim]")
-
-        console.print(f"\n[green]Integration review complete.[/green]")
-        console.print(f"  Report: {rd / 'dvad-report.md'}")
-        if (rd / "remediation-plan.md").exists():
-            console.print(f"  Remediation: {rd / 'remediation-plan.md'}")
-        _print_summary_table(result)
-        return result
 
     finally:
         storage.release_lock()

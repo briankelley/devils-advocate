@@ -17,32 +17,21 @@ from ..types import (
     ReviewResult,
 )
 from ..ids import assign_guids, generate_review_id
-from ..cost import check_context_window, estimate_tokens
+from ..cost import check_context_window
 from ..config import get_models_by_role
-from ..providers import AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS, call_with_retry
-from ..prompts import (
-    build_review_prompt,
-    build_round1_author_prompt,
-)
-from ..parser import parse_author_response
-from ..revision import run_revision
+from ..prompts import build_review_prompt
 from ..dedup import deduplicate_points
-from ..output import generate_ledger, generate_report
 from ..storage import StorageManager
 from ..ui import console
 
 from ._common import (
-    _apply_governance_or_escalate,
+    PipelineInputs,
     _call_reviewer,
     _check_cost_guardrail,
-    _compute_summary,
     _estimate_total_cost,
-    _format_groups_for_author,
     _group_to_dict,
     _print_dry_run,
-    _print_governance_summary,
-    _print_summary_table,
-    _run_round2_exchange,
+    _run_adversarial_pipeline,
 )
 
 
@@ -191,204 +180,31 @@ async def run_code_review(
             if _check_cost_guardrail(cost_tracker, storage):
                 return None
 
-            # -- Round 1: Author response --
-            console.print(
-                Panel(
-                    "[bold]Round 1:[/bold] Author responding to reviewer findings...",
-                    style="blue",
-                )
-            )
-            grouped_text = _format_groups_for_author(groups)
-            round1_author_prompt = build_round1_author_prompt(
-                "code", content, grouped_text
-            )
-
-            fits, est, limit = check_context_window(author, round1_author_prompt)
-            if not fits:
-                console.print(
-                    "[red]Error:[/red] Author prompt exceeds author context."
-                )
-                return None
-
-            console.print(
-                f"  Prompt size: ~{estimate_tokens(round1_author_prompt)} tokens"
-            )
-            author_raw, author_usage = await call_with_retry(
+            # -- Shared pipeline: author response -> round 2 -> governance -> revision --
+            return await _run_adversarial_pipeline(
                 client,
-                author,
-                "",
-                round1_author_prompt,
-                AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
-                log_fn=storage.log,
-                mode="code",
+                PipelineInputs(
+                    mode="code",
+                    content=content,
+                    input_file_label=str(input_file),
+                    project=project,
+                    review_id=review_id,
+                    timestamp=timestamp,
+                    all_points=all_points,
+                    groups=groups,
+                    author=author,
+                    active_reviewers=active_reviewers,
+                    dedup_model=dedup_model,
+                    revision_model=revision_model,
+                    cost_tracker=cost_tracker,
+                    storage=storage,
+                    revision_filename="revised-diff.patch",
+                    reviewer_roles={
+                        r.name: f"reviewer_{i+1}"
+                        for i, r in enumerate(active_reviewers)
+                    },
+                ),
             )
-            cost_tracker.add(
-                author.name,
-                author_usage["input_tokens"],
-                author_usage["output_tokens"],
-                author.cost_per_1k_input,
-                author.cost_per_1k_output,
-                role="author",
-            )
-            console.print(
-                f"  Author responded ({author_usage['output_tokens']} tokens)"
-            )
-            storage.save_intermediate(
-                review_id, "round2", "author_raw.txt", author_raw
-            )
-
-            author_responses = parse_author_response(
-                author_raw, groups, log_fn=storage.log
-            )
-            storage.save_intermediate(
-                review_id,
-                "round2",
-                "author_responses.json",
-                [asdict(ar) for ar in author_responses],
-            )
-
-            # Log Round 1 author parsing coverage
-            parsed_count = len(author_responses)
-            total_count = len(groups)
-            console.print(f"  Parsed: {parsed_count}/{total_count} groups matched")
-            if parsed_count < total_count:
-                console.print(
-                    f"  [yellow]Warning: {total_count - parsed_count} groups "
-                    f"unmatched -- will be escalated[/yellow]"
-                )
-
-            # Cost guardrail checkpoint
-            if _check_cost_guardrail(cost_tracker, storage):
-                return None
-
-            # -- Round 2: Reviewer rebuttal + Author final response --
-            all_rebuttals, author_final_responses, _ = (
-                await _run_round2_exchange(
-                    client,
-                    "code",
-                    content,
-                    groups,
-                    author_responses,
-                    grouped_text,
-                    author,
-                    active_reviewers,
-                    cost_tracker,
-                    storage,
-                    review_id,
-                    reviewer_roles={r.name: f"reviewer_{i+1}" for i, r in enumerate(active_reviewers)},
-                )
-            )
-
-            # Governance
-            console.print(
-                Panel(
-                    "[bold]Governance:[/bold] Applying deterministic rules...",
-                    style="blue",
-                )
-            )
-
-            decisions = _apply_governance_or_escalate(
-                groups,
-                author_responses,
-                all_rebuttals,
-                author_final_responses,
-                "code",
-                parsed_count,
-                total_count,
-                storage,
-            )
-            storage.save_intermediate(
-                review_id,
-                "round2",
-                "governance.json",
-                [asdict(d) for d in decisions],
-            )
-
-            _print_governance_summary(decisions)
-
-            summary = _compute_summary(decisions, groups)
-
-            result = ReviewResult(
-                review_id=review_id,
-                mode="code",
-                input_file=str(input_file),
-                project=project,
-                timestamp=timestamp,
-                author_model=author.name,
-                reviewer_models=[r.name for r in active_reviewers],
-                dedup_model=dedup_model.name,
-                points=[asdict(p) for p in all_points],
-                groups=groups,
-                author_responses=author_responses,
-                governance_decisions=decisions,
-                rebuttals=all_rebuttals,
-                author_final_responses=author_final_responses,
-                cost=cost_tracker,
-                revised_output="",
-                summary=summary,
-            )
-
-            report_str = generate_report(result)
-            ledger_dict = generate_ledger(result)
-            round1_data = {
-                "points": [asdict(p) for p in all_points],
-                "groups": [_group_to_dict(g) for g in groups],
-            }
-            round2_data = {
-                "author_responses": [asdict(ar) for ar in author_responses],
-                "rebuttals": [asdict(rb) for rb in all_rebuttals],
-                "author_final_responses": [asdict(af) for af in author_final_responses],
-                "governance": [asdict(d) for d in decisions],
-            }
-            storage.save_review_artifacts(review_id, report_str, ledger_dict, round1_data, round2_data)
-
-            # Persist original content for dvad revise
-            rd = storage.review_dir(review_id)
-            storage._atomic_write(rd / "original_content.txt", content)
-
-            # -- Revision (post-governance) --
-            has_actionable = any(
-                d.governance_resolution in ("auto_accepted", "accepted", "overridden")
-                for d in decisions
-            )
-            if has_actionable:
-                console.print(
-                    Panel(
-                        "[bold]Revision:[/bold] Generating revised artifact...",
-                        style="blue",
-                    )
-                )
-                try:
-                    revised_output = await run_revision(
-                        client,
-                        revision_model,
-                        content,
-                        ledger_dict,
-                        mode="code",
-                        cost_tracker=cost_tracker,
-                        storage=storage,
-                        review_id=review_id,
-                    )
-                    if revised_output:
-                        storage._atomic_write(rd / "revised-diff.patch", revised_output)
-                        console.print(
-                            f"  Revised diff saved ({len(revised_output):,} chars)"
-                        )
-                except Exception as e:
-                    console.print(
-                        f"  [yellow]Warning: Revision failed: {e}[/yellow]"
-                    )
-                    storage.log(f"Revision failed (non-fatal): {e}")
-            else:
-                console.print("  [dim]No actionable findings — skipping revision[/dim]")
-
-        console.print(f"\n[green]Review complete.[/green]")
-        console.print(f"  Report: {rd / 'dvad-report.md'}")
-        console.print(f"  Ledger: {rd / 'review-ledger.json'}")
-        if (rd / "revised-diff.patch").exists():
-            console.print(f"  Revised: {rd / 'revised-diff.patch'}")
-        _print_summary_table(result)
-        return result
 
     finally:
         storage.release_lock()
