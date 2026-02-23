@@ -283,6 +283,9 @@ def config_cmd(show, do_init, config_path):
         else:
             console.print(f"[green]Config created:[/green] {path}")
             console.print("  Edit the file to configure your models and API keys.")
+            env_example = path.parent / ".env.example"
+            if env_example.exists():
+                console.print(f"  Rename [bold]{env_example}[/bold] to .env and add your API keys.")
         return
 
     if not show:

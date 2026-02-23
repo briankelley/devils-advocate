@@ -48,4 +48,5 @@ include = [
     "src/devils_advocate/templates/*.txt",
     "src/devils_advocate/gui/static/*",
     "src/devils_advocate/gui/templates/*",
+    "src/devils_advocate/examples/*",
 ]
