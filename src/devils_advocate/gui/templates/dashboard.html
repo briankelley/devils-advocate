@@ -59,87 +59,92 @@
 
 {# ── Review Settings Box ──────────────────────────────────────────── #}
 <div class="review-settings">
-    <form id="review-form" enctype="multipart/form-data">
-        <input type="hidden" name="mode" id="review-mode" value="plan">
+    <div class="settings-layout">
+        <form id="review-form" enctype="multipart/form-data" class="settings-form">
+            <input type="hidden" name="mode" id="review-mode" value="plan">
 
-        <div class="settings-grid">
-            <div class="form-row">
-                <label for="project">Project</label>
-                <input type="text" id="project" name="project" required class="input" placeholder="project-name">
-            </div>
+            <div class="settings-grid">
+                <div class="form-row">
+                    <label for="project">Project</label>
+                    <input type="text" id="project" name="project" required class="input" placeholder="project-name">
+                </div>
 
-            <div class="form-row" id="input-files-row">
-                <label id="input-files-label">Required Files</label>
-                <input type="file" id="input_files" name="input_files" multiple class="input-file">
-                <span class="field-hint" id="file-hint">Plan file + up to 5 reference files</span>
-            </div>
+                <div class="form-row" id="input-files-row">
+                    <label id="input-files-label">Required Files</label>
+                    <input type="file" id="input_files" name="input_files" multiple class="input-file">
+                    <span class="field-hint" id="file-hint">Plan file + up to 5 reference files</span>
+                </div>
 
-            <div class="form-row" id="reference-files-row" style="display:none">
-                <label>Reference Files <span class="dim">(optional)</span></label>
-                <input type="file" id="reference_files" name="reference_files" multiple class="input-file">
-                <span class="field-hint">Up to 7 reference files for reviewers to cross-check against</span>
-            </div>
+                <div class="form-row" id="reference-files-row" style="display:none">
+                    <label>Reference Files <span class="dim">(optional)</span></label>
+                    <input type="file" id="reference_files" name="reference_files" multiple class="input-file">
+                    <span class="field-hint">Up to 7 reference files for reviewers to cross-check against</span>
+                </div>
 
-            <div class="form-row" id="spec-row" style="display:none">
-                <label for="spec_file">Spec File <span class="dim">(optional)</span></label>
-                <input type="file" id="spec_file" name="spec_file" class="input-file">
-            </div>
+                <div class="form-row" id="spec-row" style="display:none">
+                    <label for="spec_file">Spec File <span class="dim">(optional)</span></label>
+                    <input type="file" id="spec_file" name="spec_file" class="input-file">
+                </div>
 
-            <div class="form-row" id="project-dir-row" style="display:none">
-                <label for="project_dir">
-                    Project Directory <span class="dim">(optional)</span>
-                    <span class="info-trigger">
-                        <i data-lucide="help-circle"></i>
-                        <span class="info-popover">
-                            <strong>What does this do?</strong><br><br>
-                            The project directory is <em>not</em> recursively scanned. It serves two purposes:<br><br>
-                            <strong>1. Manifest-based file discovery</strong><br>
-                            If no input files are provided, dvad looks for <code>.dvad/manifest.json</code>
-                            inside this directory and pulls only files listed under tasks with
-                            <code>status: "completed"</code>.<br><br>
-                            <strong>2. Spec file fallback</strong><br>
-                            If no <code>--spec</code> file is given, it looks for
-                            <code>000-strategic-summary.md</code> or <code>strategic-summary.md</code>
-                            in the project root.<br><br>
-                            <strong>Limits:</strong> All collected content must fit within 80% of the
-                            integration reviewer model's context window. No chunking — if it doesn't fit,
-                            the review aborts.
+                <div class="form-row" id="project-dir-row" style="display:none">
+                    <label for="project_dir">
+                        Project Directory <span class="dim">(optional)</span>
+                        <span class="info-trigger">
+                            <i data-lucide="help-circle"></i>
+                            <span class="info-popover">
+                                <strong>What does this do?</strong><br><br>
+                                The project directory is <em>not</em> recursively scanned. It serves two purposes:<br><br>
+                                <strong>1. Manifest-based file discovery</strong><br>
+                                If no input files are provided, dvad looks for <code>.dvad/manifest.json</code>
+                                inside this directory and pulls only files listed under tasks with
+                                <code>status: "completed"</code>.<br><br>
+                                <strong>2. Spec file fallback</strong><br>
+                                If no <code>--spec</code> file is given, it looks for
+                                <code>000-strategic-summary.md</code> or <code>strategic-summary.md</code>
+                                in the project root.<br><br>
+                                <strong>Limits:</strong> All collected content must fit within 80% of the
+                                integration reviewer model's context window. No chunking — if it doesn't fit,
+                                the review aborts.
+                            </span>
                         </span>
-                    </span>
-                </label>
-                <input type="text" id="project_dir" name="project_dir" class="input" placeholder="/path/to/project">
+                    </label>
+                    <input type="text" id="project_dir" name="project_dir" class="input" placeholder="/path/to/project">
+                </div>
+
+                <div class="form-row">
+                    <label for="max_cost">Max Cost <span class="dim">(optional)</span></label>
+                    <input type="number" id="max_cost" name="max_cost" step="0.01" min="0" class="input input-sm" placeholder="$0.00">
+                </div>
+
+                <div class="form-row">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="dry_run" id="dry_run"> Dry run
+                    </label>
+                    <span class="field-hint">Validates inputs and builds the command without calling any models</span>
+                </div>
             </div>
 
-            <div class="form-row">
-                <label for="max_cost">Max Cost <span class="dim">(optional)</span></label>
-                <input type="number" id="max_cost" name="max_cost" step="0.01" min="0" class="input input-sm" placeholder="$0.00">
+            <div class="review-settings-footer">
+                <button type="submit" class="btn btn-accent" id="submit-btn">New Review</button>
             </div>
 
-            <div class="form-row">
-                <label class="checkbox-label">
-                    <input type="checkbox" name="dry_run" id="dry_run"> Dry run
-                </label>
-                <span class="field-hint">Validates inputs and builds the command without calling any models</span>
-            </div>
-        </div>
+            <div id="form-error" class="error-msg" style="display:none"></div>
+        </form>
 
         {% if role_assignments %}
-        <div class="role-summary" style="margin-top: var(--pad-md); padding-top: var(--pad-md); border-top: 1px solid var(--border);">
-            {% for role_name, model_name in role_assignments %}
-            <div class="role-summary-row">
-                <span class="role-summary-label">{{ role_name }}:</span>
-                <span class="role-summary-value">{{ model_name }}</span>
+        <div class="dashboard-roles">
+            <div class="dashboard-roles-title">Active Roles</div>
+            <div class="role-summary">
+                {% for role_name, model_name in role_assignments %}
+                <div class="role-summary-row">
+                    <span class="role-summary-label">{{ role_name }}:</span>
+                    <span class="role-summary-value">{{ model_name }}</span>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
         {% endif %}
-
-        <div class="review-settings-footer">
-            <button type="submit" class="btn btn-accent" id="submit-btn">New Review</button>
-        </div>
-
-        <div id="form-error" class="error-msg" style="display:none"></div>
-    </form>
+    </div>
 </div>
 
 {# ── Interstitial — Command Preview ───────────────────────────────── #}
