@@ -203,6 +203,18 @@ async def start_review(request: Request):
     return JSONResponse({"review_id": review_id})
 
 
+# ── Cancel Review ────────────────────────────────────────────────────────────
+
+@router.post("/review/{review_id}/cancel")
+async def cancel_review(request: Request, review_id: str):
+    """Cancel a running review."""
+    _check_csrf(request)
+    runner = request.app.state.runner
+    if runner.cancel_review(review_id):
+        return JSONResponse({"status": "ok", "message": "Review cancelled"})
+    raise HTTPException(status_code=404, detail="No running review with that ID")
+
+
 # ── SSE Progress ─────────────────────────────────────────────────────────────
 
 @router.get("/review/{review_id}/progress")

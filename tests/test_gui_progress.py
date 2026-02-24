@@ -29,7 +29,7 @@ class TestClassifyLogMessage:
         assert ev.phase == "normalization"
 
     def test_round1_author(self):
-        ev = classify_log_message("Round 1: sending grouped feedback to author")
+        ev = classify_log_message("Round 1: author responding to grouped feedback from reviewers")
         assert ev.phase == "round1_author"
 
     def test_round2_skip_all(self):

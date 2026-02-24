@@ -63,10 +63,12 @@ async def call_anthropic(
 
     # Thinking / reasoning support
     if model.thinking:
-        budget = _ANTHROPIC_THINKING_BUDGETS.get(mode, 8192)
-        thinking_type = "adaptive" if "opus-4-6" in model.model_id else "enabled"
-        body["thinking"] = {"type": thinking_type, "budget_tokens": budget}
-        body["max_tokens"] = body["max_tokens"] + budget
+        if "opus-4-6" in model.model_id or "sonnet-4-6" in model.model_id:
+            body["thinking"] = {"type": "adaptive"}
+        else:
+            budget = _ANTHROPIC_THINKING_BUDGETS.get(mode, 8192)
+            body["thinking"] = {"type": "enabled", "budget_tokens": budget}
+            body["max_tokens"] = body["max_tokens"] + budget
 
     resp = await client.post(
         ANTHROPIC_API_URL, json=body, headers=headers, timeout=model.timeout
@@ -249,5 +251,10 @@ async def call_with_retry(
                     f"  {model.name}: {type(e).__name__}, retry {attempt + 1}/{max_retries} "
                     f"in {wait:.1f}s"
                 )
+                if attempt == 0 and isinstance(e, httpx.TimeoutException):
+                    log_fn(
+                        f"  hint: consider increasing the timeout for {model.name} "
+                        f"in models.yaml (current: {model.timeout}s)"
+                    )
             await asyncio.sleep(wait)
     raise APIError(f"{model.name}: failed after {max_retries} retries") from last_exc

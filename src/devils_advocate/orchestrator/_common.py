@@ -22,6 +22,7 @@ from ..types import (
     ModelConfig,
     RebuttalResponse,
     Resolution,
+    ReviewContext,
     ReviewGroup,
     ReviewPoint,
     ReviewResult,
@@ -69,6 +70,30 @@ from ._formatting import (  # noqa: F401
     _get_contested_groups_for_reviewer,
     _group_to_dict,
 )
+
+
+def _promote_points_to_groups(
+    points: list[ReviewPoint],
+    ctx: "ReviewContext",
+) -> list[ReviewGroup]:
+    """Promote each point to its own group (dedup fallback).
+
+    Used when dedup is skipped because not all reviewers succeeded.
+    Mirrors the context-overflow fallback in dedup.py.
+    """
+    groups: list[ReviewGroup] = []
+    for i, p in enumerate(points):
+        gid = ctx.make_group_id(i + 1)
+        p.point_id = ctx.make_point_id(gid, 1)
+        groups.append(ReviewGroup(
+            group_id=gid,
+            concern=p.description,
+            points=[p],
+            combined_severity=p.severity,
+            combined_category=p.category,
+            source_reviewers=[p.reviewer],
+        ))
+    return groups
 
 
 # ---- Reviewer call -----------------------------------------------------------
@@ -501,7 +526,7 @@ async def _run_adversarial_pipeline(
     console.print(
         f"  Prompt size: ~{estimate_tokens(round1_author_prompt)} tokens"
     )
-    storage.log("Round 1: sending grouped feedback to author")
+    storage.log("Round 1: author responding to grouped feedback from reviewers")
     author_raw, author_usage = await call_with_retry(
         client,
         author,
@@ -542,6 +567,7 @@ async def _run_adversarial_pipeline(
     parsed_count = len(author_responses)
     total_count = len(groups)
     console.print(f"  Parsed: {parsed_count}/{total_count} groups matched")
+    storage.log("Author response parsing complete — continuing review pipeline...")
     if parsed_count < total_count:
         console.print(
             f"  [yellow]Warning: {total_count - parsed_count} groups "

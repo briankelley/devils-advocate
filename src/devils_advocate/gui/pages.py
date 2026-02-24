@@ -66,6 +66,24 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
 
     dvad_binary = _find_dvad_binary()
 
+    # Load role assignments for display
+    role_assignments = []
+    try:
+        from ..config import load_config, get_models_by_role
+        config_path = request.app.state.config_path
+        config = load_config(Path(config_path) if config_path else None)
+        roles = get_models_by_role(config)
+        if roles.get("author"):
+            role_assignments.append(("Author", roles["author"].name))
+        for i, r in enumerate(roles.get("reviewers", []), 1):
+            role_assignments.append((f"Reviewer {i}", r.name))
+        if roles.get("dedup"):
+            role_assignments.append(("Dedup", roles["dedup"].name))
+        if roles.get("revision"):
+            role_assignments.append(("Revision", roles["revision"].name))
+    except Exception:
+        pass
+
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "dashboard.html", {
         "reviews": page_reviews,
@@ -74,6 +92,7 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
         "total": total,
         "show_test": show_test,
         "dvad_binary": dvad_binary,
+        "role_assignments": role_assignments,
         "csrf_token": request.app.state.csrf_token,
     })
 

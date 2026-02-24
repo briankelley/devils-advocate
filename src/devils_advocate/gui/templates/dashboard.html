@@ -13,7 +13,8 @@
         <div class="mode-card-meta">
             <div><strong>requires:</strong> spec file(s) in txt or md format</div>
             <div><strong>returns:</strong> revised spec with all suggestions from all reviewers</div>
-            <div><strong>uses:</strong> reviewers, dedup, normalization, revision</div>
+            <!-- TODO: resolve minimum reviewer count from config -->
+            <div><strong>uses:</strong> reviewer (2), dedup, revision</div>
         </div>
     </label>
     <label class="mode-card mode-card--code">
@@ -25,7 +26,8 @@
         <div class="mode-card-meta">
             <div><strong>requires:</strong> exactly one code file</div>
             <div><strong>returns:</strong> revised diff patch</div>
-            <div><strong>uses:</strong> author, reviewers, dedup, normalization, revision</div>
+            <!-- TODO: resolve minimum reviewer count from config -->
+            <div><strong>uses:</strong> author, reviewer (2), dedup, revision</div>
         </div>
     </label>
     <label class="mode-card mode-card--integration">
@@ -37,7 +39,7 @@
         <div class="mode-card-meta">
             <div><strong>requires:</strong> optional files + project directory</div>
             <div><strong>returns:</strong> remediation plan</div>
-            <div><strong>uses:</strong> author, integration, dedup, normalization, revision</div>
+            <div><strong>uses:</strong> author, integration, dedup, revision</div>
         </div>
     </label>
     <label class="mode-card mode-card--plan">
@@ -47,9 +49,10 @@
         </div>
         <p class="mode-card-desc">Adversarial review of implementation plans with author rebuttals</p>
         <div class="mode-card-meta">
-            <div><strong>requires:</strong> plan file + reference files</div>
+            <div><strong>requires:</strong> plan file</div>
             <div><strong>returns:</strong> revised plan with incorporated feedback</div>
-            <div><strong>uses:</strong> author, reviewers, dedup, normalization, revision</div>
+            <!-- TODO: resolve minimum reviewer count from config -->
+            <div><strong>uses:</strong> author, reviewer (2), dedup, revision</div>
         </div>
     </label>
 </div>
@@ -120,6 +123,18 @@
             </div>
         </div>
 
+        {% if role_assignments %}
+        <div class="role-assignments">
+            <div class="role-assignments-title">Active Roles</div>
+            {% for role_name, model_name in role_assignments %}
+            <div class="role-assignment-row">
+                <span class="role-assignment-label">{{ role_name }}</span>
+                <span class="role-assignment-model">{{ model_name }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         <div class="review-settings-footer">
             <button type="submit" class="btn btn-accent" id="submit-btn">New Review</button>
         </div>
@@ -136,6 +151,7 @@
         <pre id="command-preview-text"></pre>
         <button class="btn btn-sm" onclick="dvad.copyCommand()">Copy</button>
     </div>
+    <p class="dim" style="font-size: 0.8em; margin-top: 0.3em;">Note: file paths are filenames only — replace with absolute paths before running.</p>
     <div class="interstitial-actions">
         <button class="btn" onclick="dvad.cancelInterstitial()">Back</button>
         <button class="btn btn-accent" id="run-review-btn" onclick="dvad.executeReview()">Run Review</button>

@@ -169,7 +169,7 @@ const dvad = {
             parts.push('--dry-run');
         }
 
-        return parts.join(' \\\n    ');
+        return parts.join(' ');
     },
 
     showInterstitial() {
@@ -316,6 +316,26 @@ const dvad = {
         } catch (err) {
             alert('Network error: ' + err.message);
             buttons.forEach(b => b.disabled = false);
+        }
+    },
+
+    // ── Cancel Review ──────────────────────────────────────────────────
+    async cancelReview(reviewId) {
+        const btn = document.getElementById('cancel-review-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Cancelling...'; }
+        try {
+            const resp = await fetch(`/api/review/${reviewId}/cancel`, {
+                method: 'POST',
+                headers: { 'X-DVAD-Token': this.getToken() },
+            });
+            if (!resp.ok) {
+                const data = await resp.json();
+                alert(data.detail || 'Cancel failed');
+                if (btn) { btn.disabled = false; btn.textContent = 'Cancel Review'; }
+            }
+        } catch (err) {
+            alert('Network error: ' + err.message);
+            if (btn) { btn.disabled = false; btn.textContent = 'Cancel Review'; }
         }
     },
 

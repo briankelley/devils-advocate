@@ -161,6 +161,12 @@ class ReviewRunner:
                         if src.exists():
                             dest = storage.reviews_dir / review_id / f"input_{src.name}"
                             StorageManager._atomic_write(dest, src.read_text())
+                            file_info["original_path"] = str(dest)
+
+                # Re-write manifest with updated paths
+                import json as _json2
+                manifest_path = storage.reviews_dir / review_id / "input_files_manifest.json"
+                StorageManager._atomic_write(manifest_path, _json2.dumps(file_manifest, indent=2))
 
             # Monkey-patch storage.log to also emit progress events
             original_log = storage.log
@@ -262,6 +268,17 @@ class ReviewRunner:
                     shutil.rmtree(tmpdir, ignore_errors=True)
                 except Exception:
                     pass
+
+    def cancel_review(self, review_id: str) -> bool:
+        """Cancel a running review. Returns True if cancelled."""
+        if (
+            self.current_review_id == review_id
+            and self.current_task
+            and not self.current_task.done()
+        ):
+            self.current_task.cancel()
+            return True
+        return False
 
     def get_status(self, review_id: str) -> str:
         """Return status for a review: running|complete|failed|unknown."""

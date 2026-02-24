@@ -9,7 +9,9 @@
         <h1>dvad-gui <span class="dim">|</span>
             <span id="review-mode-label">review</span>
             <span class="dim">|</span>
-            <span class="mono">{{ review_id }}</span></h1>
+            <span class="mono">{{ review_id }}</span>
+            <button class="btn btn-cancel" id="cancel-review-btn" onclick="dvad.cancelReview('{{ review_id }}')">Cancel Review</button>
+        </h1>
     </div>
     <div class="live-cost-table" id="live-cost-table">
         <!-- populated by review_metadata SSE event -->
@@ -312,7 +314,7 @@
     {% if has_report %}
     <a href="/api/review/{{ review_id }}/report" class="btn">Download Report</a>
     {% endif %}
-    <a href="/api/review/{{ review_id }}" class="btn" target="_blank">Download Ledger</a>
+    <a href="/api/review/{{ review_id }}" class="btn" target="_blank">Download Ledger (JSON)</a>
 </div>
 
 {# Revision Output Area #}

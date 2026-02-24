@@ -45,6 +45,7 @@ from ._common import (
     _check_cost_guardrail,
     _group_to_dict,
     _print_summary_table,
+    _promote_points_to_groups,
 )
 
 
@@ -191,11 +192,13 @@ async def run_spec_review(
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
+            succeeded_reviewers = 0
             for r, result in zip(active_reviewers, results):
                 if isinstance(result, Exception):
                     console.print(f"  [red]x[/red] {r.name}: failed -- {result}")
                     storage.log(f"Reviewer {r.name} failed: {result}")
                     continue
+                succeeded_reviewers += 1
                 points = result
                 all_points.extend(points)
                 console.print(f"  {r.name}: {len(points)} suggestions")
@@ -219,22 +222,35 @@ async def run_spec_review(
             console.print(f"  Total suggestions: {len(all_points)}")
 
             # -- Deduplication with consensus --
-            console.print(
-                Panel(
-                    "[bold]Deduplication:[/bold] Grouping suggestions by theme...",
-                    style="blue",
+            failed_reviewers = len(active_reviewers) - succeeded_reviewers
+            if failed_reviewers > 0 and len(active_reviewers) > 1:
+                console.print(
+                    f"  [yellow]Skipping deduplication: {failed_reviewers} of "
+                    f"{len(active_reviewers)} reviewers failed[/yellow]"
                 )
-            )
-            groups = await deduplicate_points(
-                client,
-                all_points,
-                dedup_model,
-                ctx,
-                log_fn=storage.log,
-                cost_tracker=cost_tracker,
-                mode="spec",
-            )
-            assign_guids(groups)
+                storage.log(
+                    f"Skipping deduplication: {failed_reviewers} of "
+                    f"{len(active_reviewers)} reviewers failed"
+                )
+                groups = _promote_points_to_groups(all_points, ctx)
+                assign_guids(groups)
+            else:
+                console.print(
+                    Panel(
+                        "[bold]Deduplication:[/bold] Grouping suggestions by theme...",
+                        style="blue",
+                    )
+                )
+                groups = await deduplicate_points(
+                    client,
+                    all_points,
+                    dedup_model,
+                    ctx,
+                    log_fn=storage.log,
+                    cost_tracker=cost_tracker,
+                    mode="spec",
+                )
+                assign_guids(groups)
             storage.save_intermediate(
                 review_id,
                 "round1",
@@ -246,6 +262,10 @@ async def run_spec_review(
             multi_source = sum(1 for g in groups if len(g.source_reviewers) > 1)
             console.print(
                 f"  {len(groups)} suggestion groups from {len(all_points)} suggestions "
+                f"({multi_source} with multi-reviewer consensus)"
+            )
+            storage.log(
+                f"  Deduplication: {len(groups)} groups from {len(all_points)} suggestions "
                 f"({multi_source} with multi-reviewer consensus)"
             )
 
