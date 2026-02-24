@@ -66,21 +66,32 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
 
     dvad_binary = _find_dvad_binary()
 
-    # Load role assignments for display
+    # Load role assignments for display (mirrors config page's Role Assignments table)
     role_assignments = []
     try:
         from ..config import load_config, get_models_by_role
         config_path = request.app.state.config_path
         config = load_config(Path(config_path) if config_path else None)
         roles = get_models_by_role(config)
-        if roles.get("author"):
-            role_assignments.append(("Author", roles["author"].name))
-        for i, r in enumerate(roles.get("reviewers", []), 1):
-            role_assignments.append((f"Reviewer {i}", r.name))
-        if roles.get("dedup"):
-            role_assignments.append(("Dedup", roles["dedup"].name))
-        if roles.get("revision"):
-            role_assignments.append(("Revision", roles["revision"].name))
+
+        def _role_entry(label, icon, model):
+            return {
+                "label": label,
+                "icon": icon,
+                "model": model.name if model else None,
+                "thinking": bool(getattr(model, "thinking", False)) if model else False,
+            }
+
+        reviewers = roles.get("reviewers", [])
+        role_assignments = [
+            _role_entry("Author", "pen-tool", roles.get("author")),
+            _role_entry("Reviewer 1", "scan-eye", reviewers[0] if len(reviewers) > 0 else None),
+            _role_entry("Reviewer 2", "scan-eye", reviewers[1] if len(reviewers) > 1 else None),
+            _role_entry("Dedup", "combine", roles.get("dedup")),
+            _role_entry("Normalization", "scale", roles.get("normalization")),
+            _role_entry("Revision", "file-pen", roles.get("revision")),
+            _role_entry("Integration", "puzzle", roles.get("integration")),
+        ]
     except Exception:
         pass
 

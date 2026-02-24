@@ -145,6 +145,8 @@ def load_config(path: Path | None = None) -> dict:
             cost_per_1k_input=cfg.get("cost_per_1k_input"),
             cost_per_1k_output=cfg.get("cost_per_1k_output"),
             timeout=cfg.get("timeout", DEFAULT_TIMEOUT),
+            max_out_stated=cfg.get("max_out_stated"),
+            max_out_configured=cfg.get("max_out_configured"),
             use_completion_tokens=cfg.get("use_completion_tokens", False),
             thinking=cfg.get("thinking", False),
         )

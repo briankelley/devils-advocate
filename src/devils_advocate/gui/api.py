@@ -515,11 +515,11 @@ async def set_model_thinking(request: Request):
 
 @router.post("/config/model-max-tokens")
 async def set_model_max_tokens(request: Request):
-    """Update a single model's max_output_tokens value in the config file."""
+    """Update a single model's max_out_configured value in the config file."""
     _check_csrf(request)
     body = await request.json()
     model_name = body.get("model_name", "")
-    max_tokens = body.get("max_output_tokens")
+    max_tokens = body.get("max_out_configured")
 
     if not model_name:
         raise HTTPException(status_code=400, detail="model_name is required")
@@ -530,18 +530,24 @@ async def set_model_max_tokens(request: Request):
             if max_tokens < 1 or max_tokens > 1000000:
                 raise ValueError
         except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="max_output_tokens must be an integer between 1 and 1000000")
+            raise HTTPException(status_code=400, detail="max_out_configured must be an integer between 1 and 1000000")
 
     def _apply(data: dict) -> None:
         if "models" not in data or model_name not in data["models"]:
             raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found in config")
         if max_tokens is not None:
-            data["models"][model_name]["max_output_tokens"] = max_tokens
+            stated = data["models"][model_name].get("max_out_stated")
+            if stated is not None and max_tokens > stated:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"max_out_configured ({max_tokens}) cannot exceed max_out_stated ({stated})",
+                )
+            data["models"][model_name]["max_out_configured"] = max_tokens
         else:
-            data["models"][model_name].pop("max_output_tokens", None)
+            data["models"][model_name].pop("max_out_configured", None)
 
     await _mutate_yaml_config(request, _apply)
-    return JSONResponse({"status": "ok", "model_name": model_name, "max_output_tokens": max_tokens})
+    return JSONResponse({"status": "ok", "model_name": model_name, "max_out_configured": max_tokens})
 
 
 @router.post("/config/settings-toggle")

@@ -124,26 +124,33 @@
                 </div>
             </div>
 
-            <div class="review-settings-footer">
-                <button type="submit" class="btn btn-accent" id="submit-btn">New Review</button>
-            </div>
-
             <div id="form-error" class="error-msg" style="display:none"></div>
         </form>
 
         {% if role_assignments %}
-        <div class="dashboard-roles">
-            <div class="dashboard-roles-title">Active Roles</div>
-            <div class="role-summary">
-                {% for role_name, model_name in role_assignments %}
-                <div class="role-summary-row">
-                    <span class="role-summary-label">{{ role_name }}:</span>
-                    <span class="role-summary-value">{{ model_name }}</span>
+        <div class="dashboard-sidebar">
+            <div class="dashboard-roles">
+                <h2 class="dashboard-roles-title">Role Assignments</h2>
+                <div class="role-summary">
+                    {% for r in role_assignments %}
+                    <div class="role-summary-row">
+                        <span class="role-summary-icon {{ 'icon-active' if r.model }}"><i data-lucide="{{ r.icon }}"></i></span>
+                        <span class="role-summary-cot {{ 'cot-active' if r.thinking }}"><i data-lucide="brain"></i></span>
+                        <span class="role-summary-label">{{ r.label }}:</span>
+                        {% if r.model %}
+                        <span class="role-summary-value">{{ r.model }}</span>
+                        {% else %}
+                        <span class="role-summary-value unassigned">unassigned</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
                 </div>
-                {% endfor %}
             </div>
         </div>
         {% endif %}
+    </div>
+    <div class="settings-action-row">
+        <button type="submit" form="review-form" class="btn btn-accent" id="submit-btn">New Review</button>
     </div>
 </div>
 

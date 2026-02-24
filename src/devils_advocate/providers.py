@@ -17,7 +17,7 @@ from .types import APIError, ModelConfig
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
-MAX_OUTPUT_TOKENS = 8192
+MAX_OUTPUT_TOKENS = 16384
 AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS = 32000
 REVISION_MAX_OUTPUT_TOKENS = 64000
 DEFAULT_TIMEOUT = 120
@@ -132,9 +132,20 @@ async def call_openai_compatible(
         # reasoning_content is internal CoT — never use as response text
 
     usage = data.get("usage", {})
+    output_tokens = usage.get("completion_tokens", 0)
+
+    if not text and output_tokens > 0:
+        import logging
+        logging.getLogger("devils_advocate").warning(
+            "%s returned 0 visible content but %d output tokens — "
+            "reasoning likely consumed the entire token budget (max_tokens=%d). "
+            "Set a higher max_out_configured for this model.",
+            model.name, output_tokens, max_tokens,
+        )
+
     return text, {
         "input_tokens": usage.get("prompt_tokens", 0),
-        "output_tokens": usage.get("completion_tokens", 0),
+        "output_tokens": output_tokens,
     }
 
 

@@ -76,7 +76,8 @@
                             <span class="field-label" style="margin-left:12px">timeout:</span>
                             <span class="editable-timeout" data-model="{{ name }}">{{ m.timeout }}</span>s
                             <span class="field-label" style="margin-left:12px">max out:</span>
-                            <span class="editable-max-tokens" data-model="{{ name }}">{{ m.max_output_tokens if m.max_output_tokens is defined and m.max_output_tokens else 'unset' }}</span>
+                            <span class="editable-max-tokens" data-model="{{ name }}">{{ m.max_out_configured if m.max_out_configured else 'unset' }}</span>
+                            <span class="dim" style="margin-left:4px">/{{ "{:,}".format(m.max_out_stated) if m.max_out_stated else '?' }}</span>
                         </div>
                         <div class="field-row">
                             <span class="field-label">cost in:</span>

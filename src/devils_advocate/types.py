@@ -88,6 +88,8 @@ class ModelConfig:
     cost_per_1k_input: float | None = None
     cost_per_1k_output: float | None = None
     timeout: int = 120
+    max_out_stated: int | None = None
+    max_out_configured: int | None = None
     use_completion_tokens: bool = False
     thinking: bool = False
 

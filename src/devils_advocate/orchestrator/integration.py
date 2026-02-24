@@ -164,7 +164,7 @@ async def run_integration_review(
                 integ_reviewer,
                 get_reviewer_system_prompt(),
                 prompt,
-                MAX_OUTPUT_TOKENS,
+                integ_reviewer.max_out_configured or MAX_OUTPUT_TOKENS,
                 log_fn=storage.log,
                 mode="integration",
             )

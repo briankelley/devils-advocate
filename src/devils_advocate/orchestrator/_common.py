@@ -133,7 +133,7 @@ async def _call_reviewer(
         reviewer,
         sys_prompt,
         prompt,
-        MAX_OUTPUT_TOKENS,
+        reviewer.max_out_configured or MAX_OUTPUT_TOKENS,
         log_fn=storage.log,
         mode=mode,
     )
@@ -255,7 +255,7 @@ async def _run_round2_exchange(
                 r,
                 get_reviewer_system_prompt(),
                 rebuttal_prompt,
-                MAX_OUTPUT_TOKENS,
+                r.max_out_configured or MAX_OUTPUT_TOKENS,
                 log_fn=storage.log,
                 mode=mode,
             )

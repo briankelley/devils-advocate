@@ -943,7 +943,7 @@ const dvad = {
                 const commit = async () => {
                     const rawVal = input.value.trim();
 
-                    // Handle empty → null (for clearable fields like max_output_tokens)
+                    // Handle empty → null (for clearable fields like max_out_configured)
                     if (emptyValue && rawVal === '') {
                         span.textContent = emptyValue;
                         try {
@@ -1008,7 +1008,7 @@ const dvad = {
         this._initInlineEditor('.editable-max-tokens', {
             min: 1, max: 1000000,
             endpoint: '/api/config/model-max-tokens',
-            bodyKey: 'max_output_tokens',
+            bodyKey: 'max_out_configured',
             placeholder: 'unset',
             emptyValue: 'unset',
         });
