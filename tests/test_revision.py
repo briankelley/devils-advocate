@@ -12,10 +12,15 @@ from devils_advocate.revision import (
     _extract_revision_strict,
     build_revision_context,
     build_revision_prompt,
+    build_spec_revision_context,
     run_revision,
+    run_spec_revision,
+    _run_revision_core,
 )
-from devils_advocate.types import CostTracker, ModelConfig
+from devils_advocate.types import CostTracker, ModelConfig, ReviewGroup, ReviewPoint
 from devils_advocate.storage import StorageManager
+
+from conftest import make_review_group, make_review_point
 
 
 # ---------------------------------------------------------------------------
@@ -266,3 +271,229 @@ class TestRunRevision:
                     MagicMock(), model, "original content", ledger, "plan",
                     cost, storage, "test_review",
                 )
+
+
+# ---------------------------------------------------------------------------
+# build_spec_revision_context tests
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSpecRevisionContext:
+
+    def test_single_group_output(self):
+        """Single group produces themed output with suggestion details."""
+        p1 = make_review_point(
+            point_id="pt_001",
+            reviewer="reviewer_a",
+            description="Add dark mode to reduce eye strain",
+            location="Settings page",
+        )
+        group = ReviewGroup(
+            group_id="grp_001",
+            concern="Dark mode support",
+            points=[p1],
+            combined_severity="info",
+            combined_category="ux",
+            source_reviewers=["reviewer_a"],
+        )
+
+        ctx = build_spec_revision_context([group], total_reviewers=2)
+        assert "THEME: Ux" in ctx
+        assert "grp_001" in ctx
+        assert "Dark mode support" in ctx
+        assert "1 of 2 reviewers" in ctx
+        assert "reviewer_a" in ctx
+        assert "Settings page" in ctx
+
+    def test_multiple_themes_sorted(self):
+        """Groups from different themes are organized under sorted theme headings."""
+        p1 = make_review_point(
+            point_id="pt_001",
+            reviewer="reviewer_a",
+            description="Better onboarding flow",
+        )
+        p2 = make_review_point(
+            point_id="pt_002",
+            reviewer="reviewer_b",
+            description="Add export to CSV",
+        )
+        g1 = ReviewGroup(
+            group_id="grp_001",
+            concern="Onboarding",
+            points=[p1],
+            combined_severity="info",
+            combined_category="ux",
+            source_reviewers=["reviewer_a"],
+        )
+        g2 = ReviewGroup(
+            group_id="grp_002",
+            concern="Export features",
+            points=[p2],
+            combined_severity="info",
+            combined_category="features",
+            source_reviewers=["reviewer_b"],
+        )
+
+        ctx = build_spec_revision_context([g1, g2], total_reviewers=2)
+        assert "THEME: Features" in ctx
+        assert "THEME: Ux" in ctx
+        # Features comes before Ux alphabetically
+        features_pos = ctx.index("THEME: Features")
+        ux_pos = ctx.index("THEME: Ux")
+        assert features_pos < ux_pos
+
+    def test_empty_groups_returns_empty(self):
+        """No groups produces empty context."""
+        ctx = build_spec_revision_context([], total_reviewers=2)
+        assert ctx.strip() == ""
+
+    def test_consensus_count_from_source_reviewers(self):
+        """Consensus count reflects the number of source reviewers."""
+        p1 = make_review_point(point_id="pt_001", reviewer="reviewer_a", description="suggestion A")
+        p2 = make_review_point(point_id="pt_002", reviewer="reviewer_b", description="suggestion B")
+        group = ReviewGroup(
+            group_id="grp_001",
+            concern="Shared concern",
+            points=[p1, p2],
+            combined_severity="info",
+            combined_category="ux",
+            source_reviewers=["reviewer_a", "reviewer_b"],
+        )
+
+        ctx = build_spec_revision_context([group], total_reviewers=3)
+        assert "2 of 3 reviewers" in ctx
+
+
+# ---------------------------------------------------------------------------
+# run_spec_revision tests
+# ---------------------------------------------------------------------------
+
+
+class TestRunSpecRevision:
+
+    @pytest.fixture
+    def storage(self, tmp_path):
+        os.chdir(tmp_path)
+        return StorageManager(tmp_path)
+
+    @pytest.fixture
+    def model(self):
+        return _make_model()
+
+    @pytest.mark.asyncio
+    async def test_no_groups_skips_revision(self, storage, model):
+        """Empty groups list skips revision and returns empty string."""
+        client = AsyncMock()
+        cost = CostTracker()
+        storage.set_review_id("test_review")
+
+        result = await run_spec_revision(
+            client, model, "original spec content", [], 2,
+            cost, storage, "test_review",
+        )
+        assert result == ""
+
+    @pytest.mark.asyncio
+    async def test_with_groups_calls_api(self, storage, model, monkeypatch):
+        """Non-empty groups trigger API call and return extracted suggestions."""
+        monkeypatch.setenv("TEST_KEY", "fake-key")
+        cost = CostTracker()
+        storage.set_review_id("test_review")
+
+        p1 = make_review_point(
+            point_id="pt_001",
+            reviewer="reviewer_a",
+            description="Add dark mode support",
+        )
+        group = ReviewGroup(
+            group_id="grp_001",
+            concern="Dark mode",
+            points=[p1],
+            combined_severity="info",
+            combined_category="ux",
+            source_reviewers=["reviewer_a"],
+        )
+
+        revision_response = (
+            "=== SPEC SUGGESTIONS ===\n"
+            "## UX\n- Dark mode support for accessibility\n"
+            "=== END SPEC SUGGESTIONS ==="
+        )
+
+        with patch("devils_advocate.revision.call_with_retry", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = (revision_response, {"input_tokens": 100, "output_tokens": 50})
+
+            result = await run_spec_revision(
+                MagicMock(), model, "original spec", [group], 2,
+                cost, storage, "test_review",
+            )
+
+        assert "Dark mode" in result
+        mock_call.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _run_revision_core tests: context window exceeded and empty extraction
+# ---------------------------------------------------------------------------
+
+
+class TestRunRevisionCore:
+
+    @pytest.fixture
+    def storage(self, tmp_path):
+        os.chdir(tmp_path)
+        return StorageManager(tmp_path)
+
+    @pytest.fixture
+    def model(self):
+        return _make_model()
+
+    @pytest.mark.asyncio
+    async def test_context_window_exceeded_returns_empty(self, storage, model):
+        """When prompt exceeds context window, returns empty string without API call."""
+        # Use a model with a very small context window
+        small_model = ModelConfig(
+            name="tiny-model",
+            provider="anthropic",
+            model_id="tiny",
+            api_key_env="TEST_KEY",
+            cost_per_1k_input=0.003,
+            cost_per_1k_output=0.015,
+            context_window=10,  # Very small: 10 * 0.8 = 8 token limit
+        )
+        cost = CostTracker()
+        storage.set_review_id("test_review")
+        client = AsyncMock()
+
+        # Provide a long prompt that will exceed the tiny context window
+        long_content = "x" * 10000
+        result = await _run_revision_core(
+            client, small_model, long_content, "revision context",
+            "plan", cost, storage, "test_review",
+        )
+        assert result == ""
+        # No API call should have been made
+        client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_empty_extracted_output_returns_empty(self, storage, model, monkeypatch):
+        """When canonical delimiters are missing from response, returns empty string."""
+        monkeypatch.setenv("TEST_KEY", "fake-key")
+        cost = CostTracker()
+        storage.set_review_id("test_review")
+
+        # Response without canonical delimiters
+        bad_response = "Here is my revision without any proper delimiters."
+
+        with patch("devils_advocate.revision.call_with_retry", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = (bad_response, {"input_tokens": 100, "output_tokens": 50})
+
+            result = await _run_revision_core(
+                MagicMock(), model, "original content", "revision context",
+                "plan", cost, storage, "test_review",
+            )
+
+        assert result == ""
+        # Raw should still be saved
+        raw_path = storage.reviews_dir / "test_review" / "revision" / "revision_raw.txt"
+        assert raw_path.exists()

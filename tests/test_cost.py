@@ -150,6 +150,95 @@ class TestCostTracker:
         assert ct.total_usd == 0.0
         assert len(ct.entries) == 1
 
+    def test_log_fn_callback_emitted_on_add_with_role(self):
+        """_log_fn callback is called during add() when role is provided."""
+        log_messages = []
+        ct = CostTracker(_log_fn=lambda msg: log_messages.append(msg))
+        ct.add("model-a", 1000, 500, 0.03, 0.06, role="reviewer")
+        assert len(log_messages) == 1
+        assert "cost" in log_messages[0]
+        assert "role=reviewer" in log_messages[0]
+        assert "model=model-a" in log_messages[0]
+
+    def test_log_fn_not_called_without_role(self):
+        """_log_fn callback is NOT called when no role is provided."""
+        log_messages = []
+        ct = CostTracker(_log_fn=lambda msg: log_messages.append(msg))
+        ct.add("model-a", 1000, 500, 0.03, 0.06)  # no role
+        assert len(log_messages) == 0
+
+    def test_log_fn_none_no_error(self):
+        """No error when _log_fn is None and role is provided."""
+        ct = CostTracker(_log_fn=None)
+        ct.add("model-a", 1000, 500, 0.03, 0.06, role="reviewer")
+        # Should complete without error
+        assert ct.total_usd > 0
+
+    def test_role_costs_tracking_single_role(self):
+        """role_costs tracks accumulated cost per role."""
+        ct = CostTracker()
+        ct.add("model-a", 1000, 0, 0.01, 0.0, role="reviewer")  # $0.01
+        ct.add("model-a", 1000, 0, 0.02, 0.0, role="reviewer")  # $0.02
+        assert "reviewer" in ct.role_costs
+        assert abs(ct.role_costs["reviewer"] - 0.03) < 1e-9
+
+    def test_role_costs_tracking_multiple_roles(self):
+        """role_costs tracks separate totals for different roles."""
+        ct = CostTracker()
+        ct.add("model-a", 1000, 0, 0.01, 0.0, role="reviewer")   # $0.01
+        ct.add("model-b", 1000, 0, 0.02, 0.0, role="author")     # $0.02
+        ct.add("model-a", 1000, 0, 0.01, 0.0, role="reviewer")   # $0.01
+        ct.add("model-c", 1000, 0, 0.03, 0.0, role="revision")   # $0.03
+        assert abs(ct.role_costs["reviewer"] - 0.02) < 1e-9
+        assert abs(ct.role_costs["author"] - 0.02) < 1e-9
+        assert abs(ct.role_costs["revision"] - 0.03) < 1e-9
+
+    def test_role_costs_empty_role_not_tracked(self):
+        """Empty string role does not create a role_costs entry."""
+        ct = CostTracker()
+        ct.add("model-a", 1000, 0, 0.01, 0.0, role="")
+        assert "" not in ct.role_costs
+        assert len(ct.role_costs) == 0
+
+    def test_warned_80_flag_stays_set(self):
+        """Once warned_80 is True, it stays True even if cost drops (it never drops)."""
+        ct = CostTracker(max_cost=1.0)
+        ct.add("model-a", 1000, 0, 0.80, 0.0)  # $0.80 >= 80%
+        assert ct.warned_80 is True
+        # Additional small add doesn't unset it
+        ct.add("model-a", 1, 0, 0.001, 0.0)
+        assert ct.warned_80 is True
+
+    def test_exceeded_flag_stays_set(self):
+        """Once exceeded is True, it stays True on subsequent adds."""
+        ct = CostTracker(max_cost=0.10)
+        ct.add("model-a", 1000, 0, 0.10, 0.0)  # $0.10 = 100%
+        assert ct.exceeded is True
+        ct.add("model-a", 1, 0, 0.001, 0.0)
+        assert ct.exceeded is True
+
+    def test_warned_80_not_triggered_below_threshold(self):
+        """warned_80 stays False when cost is below 80% of max_cost."""
+        ct = CostTracker(max_cost=1.0)
+        ct.add("model-a", 1000, 0, 0.79, 0.0)  # $0.79 < 80%
+        assert ct.warned_80 is False
+
+    def test_exceeded_not_triggered_below_threshold(self):
+        """exceeded stays False when cost is below max_cost."""
+        ct = CostTracker(max_cost=1.0)
+        ct.add("model-a", 1000, 0, 0.99, 0.0)  # $0.99 < $1.00
+        assert ct.exceeded is False
+
+    def test_log_fn_includes_total_cost(self):
+        """Log message includes running total cost."""
+        log_messages = []
+        ct = CostTracker(_log_fn=lambda msg: log_messages.append(msg))
+        ct.add("model-a", 1000, 0, 0.01, 0.0, role="reviewer")
+        ct.add("model-a", 1000, 0, 0.02, 0.0, role="author")
+        assert len(log_messages) == 2
+        # Second message should reference total of $0.03
+        assert "total=" in log_messages[1]
+
 
 # ─── TestCheckContextWindow ────────────────────────────────────────────────
 
