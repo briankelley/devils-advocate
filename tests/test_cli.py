@@ -1348,3 +1348,287 @@ class TestGuiCommand:
             ])
         assert result.exit_code == 0
         mock_create_app.assert_called_once_with(config_path="/path/to/models.yaml")
+
+
+# ─── TestInstallCommand ─────────────────────────────────────────────────
+
+
+class TestInstallCommand:
+    """Tests for the install command."""
+
+    def test_help_output(self, runner):
+        result = runner.invoke(cli, ["install", "--help"])
+        assert result.exit_code == 0
+        assert "Install" in result.output
+        assert "--port" in result.output
+        assert "--no-start" in result.output
+        assert "--force" in result.output
+
+    def test_platform_gate(self, runner):
+        """Non-Linux platform exits 1."""
+        with patch("devils_advocate.service.sys") as mock_sys:
+            mock_sys.platform = "darwin"
+            result = runner.invoke(cli, ["install"])
+        assert result.exit_code == 1
+        assert "darwin" in result.output
+
+    def test_deps_missing(self, runner):
+        """Missing GUI deps exits 1."""
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.check_gui_deps",
+                   return_value="Missing GUI dependencies: fastapi. Install with: pip install -e '.[gui]'"):
+            result = runner.invoke(cli, ["install"])
+        assert result.exit_code == 1
+        assert "fastapi" in result.output
+
+    def test_binary_not_found(self, runner):
+        """Missing dvad binary exits 1."""
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.check_gui_deps", return_value=None), \
+             patch("devils_advocate.service.detect_dvad_binary",
+                   side_effect=FileNotFoundError("Could not locate the dvad binary.")):
+            result = runner.invoke(cli, ["install"])
+        assert result.exit_code == 1
+        assert "Could not locate" in result.output
+
+    def test_happy_path(self, runner, tmp_path):
+        """Full happy path: install, enable, start."""
+        fake_bin = tmp_path / "dvad"
+        fake_service = tmp_path / "dvad-gui.service"
+
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.check_gui_deps", return_value=None), \
+             patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
+             patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
+             patch("devils_advocate.service.service_exists", return_value=False), \
+             patch("devils_advocate.service.service_file_path", return_value=fake_service), \
+             patch("devils_advocate.service.write_service_file", return_value=fake_service), \
+             patch("devils_advocate.service.systemctl_daemon_reload"), \
+             patch("devils_advocate.service.systemctl_enable"), \
+             patch("devils_advocate.service.systemctl_start"):
+            result = runner.invoke(cli, ["install"])
+        assert result.exit_code == 0
+        assert "installed, enabled, and started" in result.output
+        assert "http://localhost:8411" in result.output
+
+    def test_no_start_flag(self, runner, tmp_path):
+        """--no-start enables but does not start."""
+        fake_bin = tmp_path / "dvad"
+        fake_service = tmp_path / "dvad-gui.service"
+
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.check_gui_deps", return_value=None), \
+             patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
+             patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
+             patch("devils_advocate.service.service_exists", return_value=False), \
+             patch("devils_advocate.service.service_file_path", return_value=fake_service), \
+             patch("devils_advocate.service.write_service_file", return_value=fake_service), \
+             patch("devils_advocate.service.systemctl_daemon_reload"), \
+             patch("devils_advocate.service.systemctl_enable"), \
+             patch("devils_advocate.service.systemctl_start") as mock_start:
+            result = runner.invoke(cli, ["install", "--no-start"])
+        assert result.exit_code == 0
+        assert "installed and enabled" in result.output
+        mock_start.assert_not_called()
+
+    def test_force_overwrites(self, runner, tmp_path):
+        """--force overwrites existing service without prompting."""
+        fake_bin = tmp_path / "dvad"
+        fake_service = tmp_path / "dvad-gui.service"
+
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.check_gui_deps", return_value=None), \
+             patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
+             patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
+             patch("devils_advocate.service.service_exists", return_value=True), \
+             patch("devils_advocate.service.read_existing_service", return_value="old content"), \
+             patch("devils_advocate.service.service_file_path", return_value=fake_service), \
+             patch("devils_advocate.service.write_service_file", return_value=fake_service), \
+             patch("devils_advocate.service.systemctl_daemon_reload"), \
+             patch("devils_advocate.service.systemctl_enable"), \
+             patch("devils_advocate.service.systemctl_start"):
+            result = runner.invoke(cli, ["install", "--force"])
+        assert result.exit_code == 0
+        assert "installed, enabled, and started" in result.output
+
+    def test_existing_identical_exits_0(self, runner, tmp_path):
+        """Identical existing service prints message and exits 0."""
+        fake_bin = tmp_path / "dvad"
+        from devils_advocate.service import render_service_unit
+        content = render_service_unit(fake_bin)
+
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.check_gui_deps", return_value=None), \
+             patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
+             patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
+             patch("devils_advocate.service.service_exists", return_value=True), \
+             patch("devils_advocate.service.read_existing_service", return_value=content):
+            result = runner.invoke(cli, ["install"])
+        assert result.exit_code == 0
+        assert "already installed" in result.output
+
+    def test_user_declines_overwrite(self, runner, tmp_path):
+        """User declining overwrite aborts cleanly."""
+        fake_bin = tmp_path / "dvad"
+
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.check_gui_deps", return_value=None), \
+             patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
+             patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
+             patch("devils_advocate.service.service_exists", return_value=True), \
+             patch("devils_advocate.service.read_existing_service", return_value="old content"):
+            result = runner.invoke(cli, ["install"], input="n\n")
+        assert result.exit_code == 0
+        assert "Aborted" in result.output
+
+    def test_custom_port(self, runner, tmp_path):
+        """Custom --port appears in output."""
+        fake_bin = tmp_path / "dvad"
+        fake_service = tmp_path / "dvad-gui.service"
+
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.check_gui_deps", return_value=None), \
+             patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
+             patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
+             patch("devils_advocate.service.service_exists", return_value=False), \
+             patch("devils_advocate.service.service_file_path", return_value=fake_service), \
+             patch("devils_advocate.service.write_service_file", return_value=fake_service), \
+             patch("devils_advocate.service.systemctl_daemon_reload"), \
+             patch("devils_advocate.service.systemctl_enable"), \
+             patch("devils_advocate.service.systemctl_start"):
+            result = runner.invoke(cli, ["install", "--port", "9999"])
+        assert result.exit_code == 0
+        assert "http://localhost:9999" in result.output
+
+    def test_systemctl_failure(self, runner, tmp_path):
+        """systemctl failure exits 1."""
+        fake_bin = tmp_path / "dvad"
+        fake_service = tmp_path / "dvad-gui.service"
+
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.check_gui_deps", return_value=None), \
+             patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
+             patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
+             patch("devils_advocate.service.service_exists", return_value=False), \
+             patch("devils_advocate.service.service_file_path", return_value=fake_service), \
+             patch("devils_advocate.service.write_service_file", return_value=fake_service), \
+             patch("devils_advocate.service.systemctl_daemon_reload",
+                   side_effect=RuntimeError("daemon-reload failed")):
+            result = runner.invoke(cli, ["install"])
+        assert result.exit_code == 1
+        assert "daemon-reload failed" in result.output
+
+    def test_config_init_created(self, runner, tmp_path):
+        """Config init creating a new file shows the creation message."""
+        fake_bin = tmp_path / "dvad"
+        fake_service = tmp_path / "dvad-gui.service"
+
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.check_gui_deps", return_value=None), \
+             patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
+             patch("devils_advocate.cli.init_config", return_value=("created", Path("/fake/models.yaml"))), \
+             patch("devils_advocate.service.service_exists", return_value=False), \
+             patch("devils_advocate.service.service_file_path", return_value=fake_service), \
+             patch("devils_advocate.service.write_service_file", return_value=fake_service), \
+             patch("devils_advocate.service.systemctl_daemon_reload"), \
+             patch("devils_advocate.service.systemctl_enable"), \
+             patch("devils_advocate.service.systemctl_start"):
+            result = runner.invoke(cli, ["install"])
+        assert result.exit_code == 0
+        assert "Config created" in result.output
+        assert "API keys" in result.output
+
+
+# ─── TestUninstallCommand ──────────────────────────────────────────────────
+
+
+class TestUninstallCommand:
+    """Tests for the uninstall command."""
+
+    def test_help_output(self, runner):
+        result = runner.invoke(cli, ["uninstall", "--help"])
+        assert result.exit_code == 0
+        assert "Uninstall" in result.output
+
+    def test_platform_gate(self, runner):
+        """Non-Linux platform exits 1."""
+        with patch("devils_advocate.service.sys") as mock_sys:
+            mock_sys.platform = "darwin"
+            result = runner.invoke(cli, ["uninstall"])
+        assert result.exit_code == 1
+        assert "darwin" in result.output
+
+    def test_not_installed(self, runner):
+        """Service not installed prints nothing-to-do and exits 0."""
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.service_exists", return_value=False):
+            result = runner.invoke(cli, ["uninstall"])
+        assert result.exit_code == 0
+        assert "Nothing to do" in result.output
+
+    def test_happy_path(self, runner):
+        """Full uninstall: stop, disable, remove, reload."""
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.service_exists", return_value=True), \
+             patch("devils_advocate.service.systemctl_is_active", return_value=True), \
+             patch("devils_advocate.service.systemctl_stop"), \
+             patch("devils_advocate.service.systemctl_is_enabled", return_value=True), \
+             patch("devils_advocate.service.systemctl_disable"), \
+             patch("devils_advocate.service.remove_service_file", return_value=True), \
+             patch("devils_advocate.service.systemctl_daemon_reload"):
+            result = runner.invoke(cli, ["uninstall"])
+        assert result.exit_code == 0
+        assert "Service stopped" in result.output
+        assert "Service disabled" in result.output
+        assert "Service file removed" in result.output
+        assert "uninstalled" in result.output
+        assert "preserved" in result.output
+
+    def test_already_stopped(self, runner):
+        """Already-stopped service prints appropriate message."""
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.service_exists", return_value=True), \
+             patch("devils_advocate.service.systemctl_is_active", return_value=False), \
+             patch("devils_advocate.service.systemctl_is_enabled", return_value=True), \
+             patch("devils_advocate.service.systemctl_disable"), \
+             patch("devils_advocate.service.remove_service_file", return_value=True), \
+             patch("devils_advocate.service.systemctl_daemon_reload"):
+            result = runner.invoke(cli, ["uninstall"])
+        assert result.exit_code == 0
+        assert "already stopped" in result.output
+
+    def test_already_disabled(self, runner):
+        """Already-disabled service prints appropriate message."""
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.service_exists", return_value=True), \
+             patch("devils_advocate.service.systemctl_is_active", return_value=False), \
+             patch("devils_advocate.service.systemctl_is_enabled", return_value=False), \
+             patch("devils_advocate.service.remove_service_file", return_value=True), \
+             patch("devils_advocate.service.systemctl_daemon_reload"):
+            result = runner.invoke(cli, ["uninstall"])
+        assert result.exit_code == 0
+        assert "already stopped" in result.output
+        assert "already disabled" in result.output
+
+    def test_stop_failure(self, runner):
+        """systemctl stop failure exits 1."""
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.service_exists", return_value=True), \
+             patch("devils_advocate.service.systemctl_is_active", return_value=True), \
+             patch("devils_advocate.service.systemctl_stop",
+                   side_effect=RuntimeError("stop failed")):
+            result = runner.invoke(cli, ["uninstall"])
+        assert result.exit_code == 1
+        assert "stop" in result.output.lower()
+
+    def test_disable_failure(self, runner):
+        """systemctl disable failure exits 1."""
+        with patch("devils_advocate.service.check_platform", return_value=None), \
+             patch("devils_advocate.service.service_exists", return_value=True), \
+             patch("devils_advocate.service.systemctl_is_active", return_value=False), \
+             patch("devils_advocate.service.systemctl_is_enabled", return_value=True), \
+             patch("devils_advocate.service.systemctl_disable",
+                   side_effect=RuntimeError("disable failed")):
+            result = runner.invoke(cli, ["uninstall"])
+        assert result.exit_code == 1
+        assert "disable" in result.output.lower()

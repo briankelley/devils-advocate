@@ -592,3 +592,153 @@ def gui_cmd(port, host, config_path, allow_nonlocal):
     import uvicorn
     app = create_app(config_path=config_path)
     uvicorn.run(app, host=host, port=port, log_level="warning")
+
+
+# ─── install ─────────────────────────────────────────────────────────────
+
+
+@cli.command("install")
+@click.option("--port", default=8411, help="Port for the GUI service")
+@click.option("--no-start", is_flag=True, default=False, help="Enable but don't start the service")
+@click.option("--force", is_flag=True, default=False, help="Overwrite existing service file without prompting")
+def install_cmd(port, no_start, force):
+    """Install the dvad GUI as a systemd user service."""
+    from .service import (
+        check_gui_deps,
+        check_platform,
+        detect_dvad_binary,
+        read_existing_service,
+        render_service_unit,
+        service_exists,
+        systemctl_daemon_reload,
+        systemctl_enable,
+        systemctl_start,
+        write_service_file,
+    )
+
+    # 1. Platform check
+    err = check_platform()
+    if err:
+        console.print(f"[red]Error:[/red] {err}")
+        sys.exit(1)
+
+    # 2. GUI dependency check
+    err = check_gui_deps()
+    if err:
+        console.print(f"[red]Error:[/red] {err}")
+        sys.exit(1)
+
+    # 3. Binary detection
+    try:
+        dvad_bin = detect_dvad_binary()
+    except FileNotFoundError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+
+    # 4. Config init
+    status, config_path = init_config()
+    if status == "created":
+        console.print(f"[green]Config created:[/green] {config_path}")
+        console.print("  Edit the file to add your API keys before using reviews.")
+    else:
+        console.print(f"Config: {config_path}")
+
+    # 5. Existing service check
+    if service_exists() and not force:
+        existing = read_existing_service()
+        new_content = render_service_unit(dvad_bin, port)
+        if existing == new_content:
+            console.print("[green]Service already installed[/green] with identical configuration.")
+            sys.exit(0)
+        if not click.confirm("Service file already exists with different content. Overwrite?"):
+            console.print("Aborted.")
+            sys.exit(0)
+
+    # 6. Write service file
+    content = render_service_unit(dvad_bin, port)
+    path = write_service_file(content)
+    console.print(f"Service file written: {path}")
+
+    # 7. systemctl operations
+    try:
+        systemctl_daemon_reload()
+        systemctl_enable()
+        if not no_start:
+            systemctl_start()
+    except RuntimeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+
+    # 8. Success
+    if no_start:
+        console.print("[green]Service installed and enabled.[/green] Start manually with:")
+        console.print(f"  systemctl --user start dvad-gui.service")
+    else:
+        console.print(f"[green]Service installed, enabled, and started.[/green]")
+    console.print(f"  GUI: http://localhost:{port}")
+
+
+# ─── uninstall ───────────────────────────────────────────────────────────
+
+
+@cli.command("uninstall")
+def uninstall_cmd():
+    """Uninstall the dvad GUI systemd user service."""
+    from .service import (
+        check_platform,
+        remove_service_file,
+        service_exists,
+        systemctl_daemon_reload,
+        systemctl_disable,
+        systemctl_is_active,
+        systemctl_is_enabled,
+        systemctl_stop,
+    )
+
+    # 1. Platform check
+    err = check_platform()
+    if err:
+        console.print(f"[red]Error:[/red] {err}")
+        sys.exit(1)
+
+    # 2. Service exists check
+    if not service_exists():
+        console.print("Service is not installed. Nothing to do.")
+        sys.exit(0)
+
+    # 3. Stop
+    try:
+        if systemctl_is_active():
+            systemctl_stop()
+            console.print("Service stopped.")
+        else:
+            console.print("Service already stopped.")
+    except RuntimeError as e:
+        console.print(f"[red]Error:[/red] Failed to stop service: {e}")
+        sys.exit(1)
+
+    # 4. Disable
+    try:
+        if systemctl_is_enabled():
+            systemctl_disable()
+            console.print("Service disabled.")
+        else:
+            console.print("Service already disabled.")
+    except RuntimeError as e:
+        console.print(f"[red]Error:[/red] Failed to disable service: {e}")
+        sys.exit(1)
+
+    # 5. Remove service file
+    remove_service_file()
+    console.print("Service file removed.")
+
+    # 6. daemon-reload
+    try:
+        systemctl_daemon_reload()
+    except RuntimeError as e:
+        console.print(f"[red]Error:[/red] Failed to reload daemon: {e}")
+        sys.exit(1)
+
+    # 7. Success
+    console.print("[green]Service uninstalled.[/green]")
+    console.print("  Config at ~/.config/devils-advocate/ was preserved.")
