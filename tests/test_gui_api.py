@@ -282,7 +282,7 @@ class TestModelMaxTokens:
     def test_rejects_out_of_range(self, client, token):
         resp = client.post(
             "/api/config/model-max-tokens",
-            json={"model_name": "test", "max_output_tokens": -1},
+            json={"model_name": "test", "max_out_configured": -1},
             headers={"X-DVAD-Token": token},
         )
         assert resp.status_code == 400
@@ -290,7 +290,7 @@ class TestModelMaxTokens:
     def test_rejects_too_large(self, client, token):
         resp = client.post(
             "/api/config/model-max-tokens",
-            json={"model_name": "test", "max_output_tokens": 2_000_000},
+            json={"model_name": "test", "max_out_configured": 2_000_000},
             headers={"X-DVAD-Token": token},
         )
         assert resp.status_code == 400
