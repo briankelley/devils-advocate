@@ -33,6 +33,7 @@ from ._common import (
     _print_dry_run,
     _promote_points_to_groups,
     _run_adversarial_pipeline,
+    _save_stub_ledger,
 )
 
 
@@ -131,6 +132,10 @@ async def run_plan_review(
     # Dry run
     if dry_run:
         _print_dry_run("plan", content, author, active_reviewers, dedup_model, max_cost)
+        _save_stub_ledger(
+            storage, review_id, "plan", project, str(primary_file),
+            "dry_run", timestamp=timestamp,
+        )
         return None
 
     # Cost estimate
@@ -140,6 +145,10 @@ async def run_plan_review(
             console.print(
                 f"[red]Error:[/red] Estimated cost ${est_cost:.4f} exceeds "
                 f"--max-cost ${max_cost:.2f}. Aborting."
+            )
+            _save_stub_ledger(
+                storage, review_id, "plan", project, str(primary_file),
+                "cost_exceeded", timestamp=timestamp, est_cost=est_cost,
             )
             return None
         storage.log(f"Estimated cost: ${est_cost:.4f} (limit: ${max_cost:.2f})")

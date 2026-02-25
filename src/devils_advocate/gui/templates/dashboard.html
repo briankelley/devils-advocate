@@ -220,24 +220,31 @@
         <thead>
             <tr>
                 <th class="th-sortable" data-col="0" data-sort-type="string">Project<span class="sort-indicator"></span></th>
-                <th class="th-sortable" data-col="1" data-sort-type="string">Review ID<span class="sort-indicator"></span></th>
+                <th class="th-sortable" data-col="1" data-sort-type="string">Result<span class="sort-indicator"></span></th>
                 <th class="th-sortable" data-col="2" data-sort-type="string">Mode<span class="sort-indicator"></span></th>
-                <th class="th-sortable" data-col="3" data-sort-type="string">Input<span class="sort-indicator"></span></th>
-                <th class="th-sortable" data-col="4" data-sort-type="string">Date<span class="sort-indicator"></span></th>
-                <th class="num th-sortable" data-col="5" data-sort-type="numeric">Points<span class="sort-indicator"></span></th>
-                <th class="num th-sortable" data-col="6" data-sort-type="numeric">Groups<span class="sort-indicator"></span></th>
-                <th class="num th-sortable" data-col="7" data-sort-type="numeric">Escalated<span class="sort-indicator"></span></th>
-                <th class="num th-sortable" data-col="8" data-sort-type="numeric">Cost<span class="sort-indicator"></span></th>
+                <th class="th-sortable" data-col="3" data-sort-type="string">Date<span class="sort-indicator"></span></th>
+                <th class="num th-sortable" data-col="4" data-sort-type="numeric">Points<span class="sort-indicator"></span></th>
+                <th class="num th-sortable" data-col="5" data-sort-type="numeric">Groups<span class="sort-indicator"></span></th>
+                <th class="num th-sortable" data-col="6" data-sort-type="numeric">Escalated<span class="sort-indicator"></span></th>
+                <th class="num th-sortable" data-col="7" data-sort-type="numeric">Cost<span class="sort-indicator"></span></th>
             </tr>
         </thead>
         <tbody>
             {% for r in reviews %}
             <tr class="clickable-row" data-href="/review/{{ r.review_id }}">
                 <td data-sort-val="{{ r.get('project', '—')|lower }}">{{ r.get('project', '—') }}</td>
-                <td class="mono" data-sort-val="{{ r.review_id[:20]|lower }}">{{ r.review_id[:20] }}</td>
+                <td data-sort-val="{{ r.get('result', 'complete') }}">
+                    {% set res = r.get('result', 'complete') %}
+                    {% if res == 'complete' %}<span class="badge badge-low">Complete</span>
+                    {% elif res == 'dry_run' %}<span class="badge badge-info">Dry Run</span>
+                    {% elif res == 'cost_exceeded' %}<span class="badge badge-high">Cost Exceeded</span>
+                    {% elif res == 'cost_aborted' %}<span class="badge badge-high">Cost Aborted</span>
+                    {% elif res == 'failed' %}<span class="badge badge-critical">Failed</span>
+                    {% else %}<span class="badge">{{ res }}</span>
+                    {% endif %}
+                </td>
                 <td data-sort-val="{{ r.mode|lower }}">{{ r.mode }}</td>
-                <td class="truncate" title="{{ r.input_file }}" data-sort-val="{{ r.input_file|string|lower }}">{{ r.input_file|string|truncate(35) }}</td>
-                <td class="mono" data-sort-val="{{ r.timestamp|string }}">{{ r.timestamp|string|truncate(19) }}</td>
+                <td class="mono" data-sort-val="{{ r.timestamp|string }}">{{ r.timestamp|human_date }}</td>
                 <td class="num" data-sort-val="{{ r.total_points }}">{{ r.total_points }}</td>
                 <td class="num" data-sort-val="{{ r.get('total_groups', 0) }}">{{ r.get('total_groups', '—') }}</td>
                 <td class="num" data-sort-val="{{ r.get('escalated', 0) }}">{{ r.get('escalated', '—') }}</td>
@@ -245,7 +252,7 @@
             </tr>
             {% endfor %}
             {% if not reviews %}
-            <tr><td colspan="9" class="empty-state">No reviews found.</td></tr>
+            <tr><td colspan="8" class="empty-state">No reviews found.</td></tr>
             {% endif %}
         </tbody>
     </table>

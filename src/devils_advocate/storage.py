@@ -300,6 +300,7 @@ class StorageManager:
                     summary = data.get("summary", {})
                     reviews.append({
                         "review_id": data.get("review_id", d.name),
+                        "result": data.get("result", "complete"),
                         "project": data.get("project", ""),
                         "mode": data.get("mode", "?"),
                         "input_file": data.get("input_file", "?"),

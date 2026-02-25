@@ -41,6 +41,17 @@ def build_app(config_path: str | None = None) -> FastAPI:
     # Templates
     templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
+    # Custom Jinja filters
+    def human_date(value: str) -> str:
+        from datetime import datetime
+        try:
+            dt = datetime.fromisoformat(value)
+            return dt.strftime("%-d %b %Y, %H:%M")
+        except (ValueError, TypeError):
+            return str(value)
+
+    templates.env.filters["human_date"] = human_date
+
     # CSRF token (startup-generated)
     csrf_token = secrets.token_urlsafe(32)
 

@@ -33,6 +33,7 @@ from ._common import (
     _print_dry_run,
     _promote_points_to_groups,
     _run_adversarial_pipeline,
+    _save_stub_ledger,
 )
 
 
@@ -93,6 +94,10 @@ async def run_code_review(
 
     if dry_run:
         _print_dry_run("code", content, author, active_reviewers, dedup_model, max_cost)
+        _save_stub_ledger(
+            storage, review_id, "code", project, str(input_file),
+            "dry_run", timestamp=timestamp,
+        )
         return None
 
     if max_cost is not None:
@@ -100,6 +105,10 @@ async def run_code_review(
         if est_cost > max_cost:
             console.print(
                 f"[red]Error:[/red] Estimated cost ${est_cost:.4f} exceeds limit."
+            )
+            _save_stub_ledger(
+                storage, review_id, "code", project, str(input_file),
+                "cost_exceeded", timestamp=timestamp, est_cost=est_cost,
             )
             return None
 

@@ -29,6 +29,7 @@ from ._common import (
     _check_cost_guardrail,
     _print_dry_run,
     _run_adversarial_pipeline,
+    _save_stub_ledger,
 )
 
 
@@ -141,6 +142,11 @@ async def run_integration_review(
             [integ_reviewer],
             dedup_model,
             max_cost,
+        )
+        _save_stub_ledger(
+            storage, review_id, "integration", project,
+            ", ".join(files_to_review.keys()),
+            "dry_run", timestamp=timestamp,
         )
         return None
 

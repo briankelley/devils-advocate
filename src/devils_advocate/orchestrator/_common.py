@@ -72,6 +72,51 @@ from ._formatting import (  # noqa: F401
 )
 
 
+def _save_stub_ledger(
+    storage: StorageManager,
+    review_id: str,
+    mode: str,
+    project: str,
+    input_file_label: str,
+    result: str,
+    timestamp: str | None = None,
+    **kwargs,
+) -> None:
+    """Save a minimal ledger for dry runs, cost-exceeded, and cost-aborted reviews."""
+    from datetime import datetime, timezone as tz
+
+    ts = timestamp or datetime.now(tz.utc).isoformat()
+    ledger = {
+        "review_id": review_id,
+        "result": result,
+        "mode": mode,
+        "input_file": input_file_label,
+        "project": project,
+        "timestamp": ts,
+        "author_model": "",
+        "reviewer_models": [],
+        "dedup_model": "",
+        "points": [],
+        "summary": {
+            "total_points": 0,
+            "total_groups": 0,
+        },
+        "cost": {
+            "total_usd": round(kwargs.get("est_cost", 0.0), 6),
+            "breakdown": {},
+            "role_costs": {},
+        },
+    }
+    if "cost_tracker" in kwargs:
+        ct = kwargs["cost_tracker"]
+        ledger["cost"] = {
+            "total_usd": round(ct.total_usd, 6),
+            "breakdown": {k: round(v, 6) for k, v in ct.breakdown().items()},
+            "role_costs": {k: round(v, 6) for k, v in ct.role_costs.items()},
+        }
+    storage.save_review_artifacts(review_id, "", ledger, {}, {})
+
+
 def _promote_points_to_groups(
     points: list[ReviewPoint],
     ctx: "ReviewContext",
@@ -576,6 +621,10 @@ async def _run_adversarial_pipeline(
 
     # Cost guardrail checkpoint
     if _check_cost_guardrail(cost_tracker, storage):
+        _save_stub_ledger(
+            storage, review_id, mode, inputs.project, inputs.input_file_label,
+            "cost_aborted", timestamp=inputs.timestamp, cost_tracker=cost_tracker,
+        )
         return None
 
     # -- Round 2: Reviewer rebuttal + Author final response --
