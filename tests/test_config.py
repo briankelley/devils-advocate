@@ -256,6 +256,166 @@ class TestValidateConfig:
         errors = [msg for level, msg in issues if level == "error"]
         assert errors == []
 
+    def test_missing_author_error(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("TEST_KEY", "fake-key-123")
+        no_author_yaml = textwrap.dedent("""\
+            models:
+              reviewer1:
+                provider: openai
+                model_id: gpt-test
+                api_key_env: TEST_KEY
+                context_window: 128000
+                cost_per_1k_input: 0.005
+                cost_per_1k_output: 0.015
+              reviewer2:
+                provider: openai
+                model_id: gemini-test
+                api_key_env: TEST_KEY
+                context_window: 1000000
+                cost_per_1k_input: 0.001
+                cost_per_1k_output: 0.004
+              dedup-model:
+                provider: anthropic
+                model_id: haiku-test
+                api_key_env: TEST_KEY
+                context_window: 200000
+                cost_per_1k_input: 0.001
+                cost_per_1k_output: 0.004
+            roles:
+              reviewers:
+                - reviewer1
+                - reviewer2
+              deduplication: dedup-model
+              integration_reviewer: reviewer1
+        """)
+        cfg_path = _write_yaml(tmp_path / "no_author.yaml", no_author_yaml)
+        config = load_config(path=cfg_path)
+        issues = validate_config(config)
+        errors = [msg for level, msg in issues if level == "error"]
+        assert any("1 author" in e and "found 0" in e for e in errors)
+
+    def test_missing_dedup_error(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("TEST_KEY", "fake-key-123")
+        no_dedup_yaml = textwrap.dedent("""\
+            models:
+              author-model:
+                provider: anthropic
+                model_id: claude-test
+                api_key_env: TEST_KEY
+                context_window: 200000
+                cost_per_1k_input: 0.003
+                cost_per_1k_output: 0.015
+              reviewer1:
+                provider: openai
+                model_id: gpt-test
+                api_key_env: TEST_KEY
+                context_window: 128000
+                cost_per_1k_input: 0.005
+                cost_per_1k_output: 0.015
+              reviewer2:
+                provider: openai
+                model_id: gemini-test
+                api_key_env: TEST_KEY
+                context_window: 1000000
+                cost_per_1k_input: 0.001
+                cost_per_1k_output: 0.004
+            roles:
+              author: author-model
+              reviewers:
+                - reviewer1
+                - reviewer2
+              integration_reviewer: reviewer1
+        """)
+        cfg_path = _write_yaml(tmp_path / "no_dedup.yaml", no_dedup_yaml)
+        config = load_config(path=cfg_path)
+        issues = validate_config(config)
+        errors = [msg for level, msg in issues if level == "error"]
+        assert any("deduplication" in e.lower() for e in errors)
+
+    def test_missing_integration_reviewer_error(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("TEST_KEY", "fake-key-123")
+        no_integ_yaml = textwrap.dedent("""\
+            models:
+              author-model:
+                provider: anthropic
+                model_id: claude-test
+                api_key_env: TEST_KEY
+                context_window: 200000
+                cost_per_1k_input: 0.003
+                cost_per_1k_output: 0.015
+              reviewer1:
+                provider: openai
+                model_id: gpt-test
+                api_key_env: TEST_KEY
+                context_window: 128000
+                cost_per_1k_input: 0.005
+                cost_per_1k_output: 0.015
+              reviewer2:
+                provider: openai
+                model_id: gemini-test
+                api_key_env: TEST_KEY
+                context_window: 1000000
+                cost_per_1k_input: 0.001
+                cost_per_1k_output: 0.004
+              dedup-model:
+                provider: anthropic
+                model_id: haiku-test
+                api_key_env: TEST_KEY
+                context_window: 200000
+                cost_per_1k_input: 0.001
+                cost_per_1k_output: 0.004
+            roles:
+              author: author-model
+              reviewers:
+                - reviewer1
+                - reviewer2
+              deduplication: dedup-model
+        """)
+        cfg_path = _write_yaml(tmp_path / "no_integ.yaml", no_integ_yaml)
+        config = load_config(path=cfg_path)
+        issues = validate_config(config)
+        errors = [msg for level, msg in issues if level == "error"]
+        assert any("1 integration_reviewer" in e and "found 0" in e for e in errors)
+
+    def test_dedup_same_as_author_error(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("TEST_KEY", "fake-key-123")
+        dedup_is_author_yaml = textwrap.dedent("""\
+            models:
+              author-model:
+                provider: anthropic
+                model_id: claude-test
+                api_key_env: TEST_KEY
+                context_window: 200000
+                cost_per_1k_input: 0.003
+                cost_per_1k_output: 0.015
+              reviewer1:
+                provider: openai
+                model_id: gpt-test
+                api_key_env: TEST_KEY
+                context_window: 128000
+                cost_per_1k_input: 0.005
+                cost_per_1k_output: 0.015
+              reviewer2:
+                provider: openai
+                model_id: gemini-test
+                api_key_env: TEST_KEY
+                context_window: 1000000
+                cost_per_1k_input: 0.001
+                cost_per_1k_output: 0.004
+            roles:
+              author: author-model
+              reviewers:
+                - reviewer1
+                - reviewer2
+              deduplication: author-model
+              integration_reviewer: reviewer1
+        """)
+        cfg_path = _write_yaml(tmp_path / "dedup_author.yaml", dedup_is_author_yaml)
+        config = load_config(path=cfg_path)
+        issues = validate_config(config)
+        errors = [msg for level, msg in issues if level == "error"]
+        assert any("must NOT be the author" in e for e in errors)
+
 
 # ─── TestGetModelsByRole ─────────────────────────────────────────────────────
 
@@ -399,3 +559,64 @@ class TestGetModelsByRole:
         roles = get_models_by_role(config)
         assert roles["revision"].name == "revision-model"
         assert roles["revision"] is not roles["author"]
+
+    def test_bare_minimum_3_model_config(self, tmp_path, monkeypatch):
+        """3 models, no normalization/revision roles, model reuse across roles.
+
+        model-a = author
+        model-b, model-c = reviewers
+        model-b doubles as dedup + integration_reviewer
+        Normalization and revision are absent (default to dedup and author).
+        Should pass validation with zero errors.
+        """
+        monkeypatch.setenv("TEST_KEY", "fake-key-123")
+        minimal_yaml = textwrap.dedent("""\
+            models:
+              model-a:
+                provider: anthropic
+                model_id: claude-test
+                api_key_env: TEST_KEY
+                context_window: 200000
+                cost_per_1k_input: 0.003
+                cost_per_1k_output: 0.015
+              model-b:
+                provider: openai
+                model_id: gpt-test
+                api_key_env: TEST_KEY
+                context_window: 128000
+                cost_per_1k_input: 0.005
+                cost_per_1k_output: 0.015
+              model-c:
+                provider: openai
+                model_id: gemini-test
+                api_key_env: TEST_KEY
+                context_window: 1000000
+                cost_per_1k_input: 0.001
+                cost_per_1k_output: 0.004
+            roles:
+              author: model-a
+              reviewers:
+                - model-b
+                - model-c
+              deduplication: model-b
+              integration_reviewer: model-b
+        """)
+        cfg_path = _write_yaml(tmp_path / "minimal.yaml", minimal_yaml)
+        config = load_config(path=cfg_path)
+
+        # Validation should produce zero errors
+        issues = validate_config(config)
+        errors = [msg for level, msg in issues if level == "error"]
+        assert errors == [], f"Expected no errors, got: {errors}"
+
+        # Verify role assignments via get_models_by_role
+        roles = get_models_by_role(config)
+        assert roles["author"].name == "model-a"
+        assert len(roles["reviewers"]) == 2
+        assert {r.name for r in roles["reviewers"]} == {"model-b", "model-c"}
+        assert roles["dedup"].name == "model-b"
+        assert roles["integration"].name == "model-b"
+        # Normalization defaults to dedup (model-b)
+        assert roles["normalization"] is roles["dedup"]
+        # Revision defaults to author (model-a)
+        assert roles["revision"] is roles["author"]
