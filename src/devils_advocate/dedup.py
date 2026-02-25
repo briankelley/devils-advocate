@@ -87,7 +87,7 @@ async def deduplicate_points(
         return groups
 
     if log_fn:
-        log_fn(f"  Deduplication: sending {len(all_points)} points to {model.name}")
+        log_fn(f"  Deduplication: calling {model.name} ({len(all_points)} points)")
 
     text, usage = await call_with_retry(
         client, model, "", prompt, MAX_OUTPUT_TOKENS, log_fn=log_fn,

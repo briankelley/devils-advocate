@@ -211,7 +211,7 @@
     <div class="filter-bar">
         <input type="text" id="project-filter" placeholder="Filter by project..." class="input-sm">
         <label class="checkbox-label">
-            <input type="checkbox" id="show-test-toggle" {% if show_test %}checked{% endif %} onchange="window.location.href='/?show_test=' + this.checked">
+            <input type="checkbox" id="show-test-toggle" {% if show_test %}checked{% endif %} onchange="window.location.href='/?show_test=' + this.checked + '&page=1'">
             Show test reviews
         </label>
     </div>
@@ -253,11 +253,11 @@
     {% if total_pages > 1 %}
     <div class="pagination">
         {% if page > 1 %}
-        <a href="/?page={{ page - 1 }}" class="btn btn-sm">&laquo; Prev</a>
+        <a href="/?page={{ page - 1 }}{% if show_test %}&show_test=true{% endif %}" class="btn btn-sm">&laquo; Prev</a>
         {% endif %}
         <span class="dim">Page {{ page }} of {{ total_pages }}</span>
         {% if page < total_pages %}
-        <a href="/?page={{ page + 1 }}" class="btn btn-sm">Next &raquo;</a>
+        <a href="/?page={{ page + 1 }}{% if show_test %}&show_test=true{% endif %}" class="btn btn-sm">Next &raquo;</a>
         {% endif %}
     </div>
     {% endif %}

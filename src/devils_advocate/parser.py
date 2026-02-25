@@ -379,6 +379,8 @@ def parse_author_response(
     """Parse the author's round 1 response into AuthorResponse objects."""
     responses = []
     matched_group_ids: set[str] = set()
+    id_attempts = 0
+    id_failures = 0
 
     # Split by RESPONSE TO GROUP headers
     blocks = re.split(r'(?=RESPONSE\s+TO\s+GROUP)', raw, flags=re.IGNORECASE)
@@ -396,7 +398,8 @@ def parse_author_response(
             continue
 
         raw_gid = gid_match.group(1).strip()
-        matched_gid = resolve_guid(raw_gid, groups, log_fn=log_fn)
+        id_attempts += 1
+        matched_gid = resolve_guid(raw_gid, groups, log_fn=log_fn, silent=True)
 
         if not matched_gid:
             # Positional fallback: author writes "RESPONSE TO GROUP N [uuid]" -- use N
@@ -411,6 +414,7 @@ def parse_author_response(
                             log_fn(f"  ID match: positional fallback {seq} -> '{matched_gid}'")
 
         if not matched_gid:
+            id_failures += 1
             continue
 
         matched_group_ids.add(matched_gid)
@@ -436,6 +440,9 @@ def parse_author_response(
             resolution=res_val,
             rationale=rationale.strip(),
         ))
+
+    if id_failures and log_fn:
+        log_fn(f"  ID mapping: {id_failures} of {id_attempts} unmatched for author — recovered gracefully")
 
     return responses
 
@@ -529,6 +536,8 @@ def parse_rebuttal_response(
 ) -> list[RebuttalResponse]:
     """Parse reviewer rebuttal into RebuttalResponse objects."""
     responses: list[RebuttalResponse] = []
+    id_attempts = 0
+    id_failures = 0
     blocks = re.split(r'(?=REBUTTAL\s+TO\s+GROUP)', raw, flags=re.IGNORECASE)
 
     for block in blocks:
@@ -543,8 +552,10 @@ def parse_rebuttal_response(
             continue
 
         raw_gid = gid_match.group(1).strip()
-        matched_gid = resolve_guid(raw_gid, groups, log_fn=log_fn)
+        id_attempts += 1
+        matched_gid = resolve_guid(raw_gid, groups, log_fn=log_fn, silent=True)
         if not matched_gid:
+            id_failures += 1
             continue
 
         verdict = _extract_multiline_field(block, "VERDICT", ["RATIONALE"])
@@ -568,6 +579,9 @@ def parse_rebuttal_response(
             rationale=rationale.strip(),
         ))
 
+    if id_failures and log_fn:
+        log_fn(f"  ID mapping: {id_failures} of {id_attempts} unmatched for {reviewer_name} rebuttal — recovered gracefully")
+
     return responses
 
 
@@ -581,6 +595,8 @@ def parse_author_final_response(
 ) -> list[AuthorFinalResponse]:
     """Parse the author's final response to challenged groups."""
     responses: list[AuthorFinalResponse] = []
+    id_attempts = 0
+    id_failures = 0
     blocks = re.split(r'(?=FINAL\s+RESPONSE\s+TO\s+GROUP)', raw, flags=re.IGNORECASE)
 
     for block in blocks:
@@ -595,8 +611,10 @@ def parse_author_final_response(
             continue
 
         raw_gid = gid_match.group(1).strip()
-        matched_gid = resolve_guid(raw_gid, groups, log_fn=log_fn)
+        id_attempts += 1
+        matched_gid = resolve_guid(raw_gid, groups, log_fn=log_fn, silent=True)
         if not matched_gid:
+            id_failures += 1
             continue
 
         resolution = _extract_multiline_field(
@@ -626,5 +644,8 @@ def parse_author_final_response(
             resolution=res_val,
             rationale=rationale.strip(),
         ))
+
+    if id_failures and log_fn:
+        log_fn(f"  ID mapping: {id_failures} of {id_attempts} unmatched for author final — recovered gracefully")
 
     return responses

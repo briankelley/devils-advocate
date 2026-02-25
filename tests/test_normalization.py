@@ -166,5 +166,5 @@ async def test_log_fn_called_on_success(anthropic_model):
                 log_fn=log_messages.append,
             )
 
-        assert any("Normalization fallback" in msg for msg in log_messages)
+        assert any("Normalization: calling" in msg for msg in log_messages)
         assert any("rev-x" in msg for msg in log_messages)

@@ -65,6 +65,7 @@
         {{ ledger.get('mode', '—') }} review
         <span class="dim">|</span>
         <span class="mono">{{ review_id[:20] }}</span>
+        <button class="btn btn-sm" id="show-log-btn" onclick="dvad.showLog('{{ review_id }}')">Show Log</button>
     </h1>
     <div class="completed-cost-table">
         {% for role_name, model_name, role_cost in role_cost_rows %}
@@ -81,6 +82,11 @@
             <span class="cost-value cost-total-value">${{ "%.6f"|format(total_cost) }}</span>
         </div>
     </div>
+</div>
+
+<div class="log-container" id="completed-log" style="display:none">
+    <div class="log-header">Console Log</div>
+    <pre class="log-output" id="completed-log-output"></pre>
 </div>
 
 {% if review_mode == 'spec' %}
@@ -186,7 +192,7 @@
 
                 {% if g.author_resolution %}
                 <details class="expand-section">
-                    <summary>Author Response (Round 1): {{ g.author_resolution }}</summary>
+                    <summary>[{{ ledger.get('author_model', 'author') }}] Author Response (Round 1): {{ g.author_resolution }}</summary>
                     <div class="expand-content">{{ g.author_rationale }}</div>
                 </details>
                 {% endif %}
@@ -208,7 +214,7 @@
 
                 {% if g.author_final_resolution %}
                 <details class="expand-section">
-                    <summary>Author Final Response: {{ g.author_final_resolution }}</summary>
+                    <summary>[{{ ledger.get('author_model', 'author') }}] Author Final Response: {{ g.author_final_resolution }}</summary>
                     <div class="expand-content">{{ g.author_final_rationale }}</div>
                 </details>
                 {% endif %}

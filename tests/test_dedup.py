@@ -330,8 +330,8 @@ COMBINED_CATEGORY: performance
         assert groups[1].combined_severity == "medium"
         assert groups[1].combined_category == "performance"
 
-        # Log should mention sending points to model
-        assert any("sending" in msg.lower() and "points" in msg.lower() for msg in log_messages)
+        # Log should mention calling model with points
+        assert any("calling" in msg.lower() and "points" in msg.lower() for msg in log_messages)
 
     async def test_successful_dedup_spec_mode(self, monkeypatch):
         """Spec mode should use spec-specific formatting, prompt, and parser."""

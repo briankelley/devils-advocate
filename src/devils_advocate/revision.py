@@ -197,6 +197,7 @@ async def _run_revision_core(
     cost_tracker: CostTracker,
     storage: StorageManager,
     review_id: str,
+    finding_count: int = 0,
 ) -> str:
     """Shared revision implementation: build prompt, call LLM, extract result.
 
@@ -219,7 +220,10 @@ async def _run_revision_core(
         )
         return ""
 
-    storage.log(f"Revision: calling {revision_model.name}")
+    if finding_count:
+        storage.log(f"Revision: calling {revision_model.name} (incorporating {finding_count} accepted findings)")
+    else:
+        storage.log(f"Revision: calling {revision_model.name}")
     raw, usage = await call_with_retry(
         client,
         revision_model,
@@ -284,9 +288,16 @@ async def run_revision(
         storage.log("Revision: no actionable findings — skipping")
         return ""
 
+    # Count accepted findings for the log message
+    finding_count = sum(
+        1 for p in ledger_data.get("points", [])
+        if p.get("governance_resolution") in _ACTIONABLE_RESOLUTIONS
+    )
+
     return await _run_revision_core(
         client, revision_model, original_content, revision_context,
         mode, cost_tracker, storage, review_id,
+        finding_count=finding_count,
     )
 
 
@@ -315,4 +326,5 @@ async def run_spec_revision(
     return await _run_revision_core(
         client, revision_model, original_content, revision_context,
         "spec", cost_tracker, storage, review_id,
+        finding_count=len(groups),
     )

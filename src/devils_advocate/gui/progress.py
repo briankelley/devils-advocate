@@ -39,14 +39,15 @@ _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     # Cost events (must be first — suppressed from console log)
     (r"§cost role=(\S+) model=(.+?) cost=([\d.]+) total=([\d.]+)", "cost_update", {}),
 
-    # Round 1 reviewer calls
+    # Round 1 reviewer calls (author pattern must precede generic "calling" pattern)
+    (r"Round 1: calling author \((.+?)\)", "round1_author", {}),
     (r"Round 1: calling (.+)", "round1_calling", {}),
     (r"Round 1: (.+) responded \((\d+) output tokens\)", "round1_responded", {}),
     (r"No structured points from (.+) -- trying LLM normalization", "normalization", {}),
-    (r"Round 1: author responding to grouped feedback from reviewers", "round1_author", {}),
+    (r"Normalization: calling (.+?) \(fallback for (.+?)\)", "normalization", {}),
 
     # Dedup
-    (r"Deduplication: sending (.+) (?:points|suggestions) to (.+)", "dedup_calling", {}),
+    (r"Deduplication: calling (.+?) \((\d+) points\)", "dedup_calling", {}),
     (r"Deduplication: (.+) responded \((\d+) output tokens\)", "dedup_responded", {}),
 
     # Round 2
@@ -65,7 +66,7 @@ _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     (r"Cost limit exceeded: \$(.+) >= \$(.+)", "cost_exceeded", {}),
 
     # Revision
-    (r"Revision: calling (.+)", "revision_calling", {}),
+    (r"Revision: calling (.+?)(?:\s*\(|$)", "revision_calling", {}),
     (r"Revision: (.+) responded \((\d+) output tokens\)", "revision_responded", {}),
     (r"Revision: no actionable findings", "revision_skip", {}),
     (r"Revision: prompt \((\d+) tokens\) exceeds context", "revision_skip_context", {}),

@@ -91,6 +91,7 @@ def resolve_guid(
     raw_gid: str,
     groups: list[ReviewGroup],
     log_fn=None,
+    silent: bool = False,
 ) -> str | None:
     """Resolve a GUID from an LLM response to a real group_id.
 
@@ -102,7 +103,7 @@ def resolve_guid(
 
     # Direct match
     if raw_gid in guid_map:
-        if log_fn:
+        if log_fn and not silent:
             log_fn(f"  ID match: exact '{raw_gid}' -> '{guid_map[raw_gid]}'")
         return guid_map[raw_gid]
 
@@ -114,7 +115,7 @@ def resolve_guid(
     if uuid_match:
         extracted = uuid_match.group(0).lower()
         if extracted in guid_map:
-            if log_fn:
+            if log_fn and not silent:
                 log_fn(f"  ID match: extracted '{extracted}' -> '{guid_map[extracted]}'")
             return guid_map[extracted]
 
@@ -128,10 +129,10 @@ def resolve_guid(
                 best_dist = dist
                 best_match = guid
         if best_match is not None and best_dist <= 2:
-            if log_fn:
+            if log_fn and not silent:
                 log_fn(f"  ID match: fuzzy '{extracted}' -> '{guid_map[best_match]}' (dist={best_dist})")
             return guid_map[best_match]
 
-    if log_fn:
+    if log_fn and not silent:
         log_fn(f"  ID match: FAILED for '{raw_gid}'")
     return None

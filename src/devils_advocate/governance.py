@@ -263,7 +263,7 @@ def apply_governance(
                     group_id=group.group_id,
                     author_resolution="partial",
                     governance_resolution=Resolution.ESCALATED.value,
-                    reason="Partial acceptance — escalated to human for review",
+                    reason="Partial acceptance — escalated to human for review (not yet incorporated into revision)",
                 ))
 
             elif effective_resolution == "REJECTED":

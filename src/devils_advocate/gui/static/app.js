@@ -637,6 +637,33 @@ const dvad = {
         }
     },
 
+    async showLog(reviewId) {
+        const container = document.getElementById('completed-log');
+        const output = document.getElementById('completed-log-output');
+        const btn = document.getElementById('show-log-btn');
+        if (!container || !output || !btn) return;
+
+        if (container.style.display !== 'none') {
+            container.style.display = 'none';
+            btn.textContent = 'Show Log';
+            return;
+        }
+
+        btn.textContent = 'Loading...';
+        try {
+            const resp = await fetch(`/api/review/${reviewId}/log`);
+            if (!resp.ok) {
+                output.textContent = 'Log not available.';
+            } else {
+                output.textContent = await resp.text();
+            }
+        } catch (err) {
+            output.textContent = 'Failed to load log: ' + err.message;
+        }
+        container.style.display = '';
+        btn.textContent = 'Hide Log';
+    },
+
     copyRevision() {
         if (this._revisionContent) {
             navigator.clipboard.writeText(this._revisionContent);

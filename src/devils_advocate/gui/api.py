@@ -442,6 +442,23 @@ async def revise_review(request: Request, review_id: str):
     })
 
 
+# ── Log Viewer ────────────────────────────────────────────────────────────
+
+@router.get("/review/{review_id}/log")
+async def get_review_log(request: Request, review_id: str):
+    """Return the console log for a completed review."""
+    storage = get_gui_storage()
+    log_path = storage.data_dir / "logs" / f"{review_id}.log"
+    if not log_path.exists():
+        raise HTTPException(status_code=404, detail="Log not found")
+    content = await asyncio.to_thread(log_path.read_text)
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/plain",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 # ── Downloads ────────────────────────────────────────────────────────────────
 
 @router.get("/review/{review_id}/report")

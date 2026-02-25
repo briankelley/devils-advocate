@@ -28,9 +28,9 @@
             <h2>Models</h2>
             {% if config and sorted_models %}
             {% for name, m in sorted_models %}
-            <details class="model-card-collapsible{% if not m.enabled %} model-disabled{% endif %}" data-model-name="{{ name }}">
+            <details class="model-card-collapsible{% if m.enabled is defined and not m.enabled %} model-disabled{% endif %}" data-model-name="{{ name }}">
                 <summary class="model-card-header" onclick="event.preventDefault()">
-                    <span class="model-name" onclick="this.closest('details').toggleAttribute('open')">{{ name }}{% if not m.enabled %} <span class="disabled-badge">disabled</span>{% endif %}</span>
+                    <span class="model-name" onclick="this.closest('details').toggleAttribute('open')">{{ name }}{% if m.enabled is defined and not m.enabled %} <span class="disabled-badge">disabled</span>{% endif %}</span>
                     <span class="model-role-icons">
                         <span class="role-icon{% if roles.get('author') == name %} role-active{% endif %}" data-role="author" data-model="{{ name }}" title="Author{% if roles.get('author') == name %} (assigned){% endif %}"><i data-lucide="pen-tool"></i></span>
                         <span class="role-icon{% if name in (roles.get('reviewers') or []) %} role-active{% endif %}" data-role="reviewer" data-model="{{ name }}" title="Reviewer{% if name in (roles.get('reviewers') or []) %} (assigned){% endif %}"><i data-lucide="scan-eye"></i></span>
