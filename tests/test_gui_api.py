@@ -480,3 +480,124 @@ class TestOverrideExtended:
         )
         assert resp.status_code == 400
         assert "group_id" in resp.json()["detail"]
+
+
+# ── Filesystem Browser (/api/fs/ls) ──────────────────────────────────────────
+
+
+class TestFilesystemBrowser:
+    """Tests for the /api/fs/ls endpoint."""
+
+    def test_default_home_directory(self, client):
+        """Omitting dir param should list the home directory."""
+        resp = client.get("/api/fs/ls")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "current_dir" in data
+        assert "entries" in data
+        assert isinstance(data["entries"], list)
+
+    def test_explicit_directory(self, client, tmp_path):
+        """Passing an explicit directory should list its contents."""
+        (tmp_path / "fileA.txt").write_text("a")
+        (tmp_path / "subdir").mkdir()
+        resp = client.get("/api/fs/ls", params={"dir": str(tmp_path)})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["current_dir"] == str(tmp_path)
+        names = [e["name"] for e in data["entries"]]
+        assert "fileA.txt" in names
+        assert "subdir" in names
+
+    def test_directories_sorted_before_files(self, client, tmp_path):
+        """Directories should appear before files in the listing."""
+        (tmp_path / "zfile.txt").write_text("z")
+        (tmp_path / "adir").mkdir()
+        resp = client.get("/api/fs/ls", params={"dir": str(tmp_path)})
+        data = resp.json()
+        entries = data["entries"]
+        assert len(entries) == 2
+        assert entries[0]["name"] == "adir"
+        assert entries[0]["is_dir"] is True
+        assert entries[1]["name"] == "zfile.txt"
+
+    def test_dotfiles_filtered_out(self, client, tmp_path):
+        """Hidden files (starting with .) should be excluded."""
+        (tmp_path / ".hidden").write_text("secret")
+        (tmp_path / "visible.txt").write_text("public")
+        resp = client.get("/api/fs/ls", params={"dir": str(tmp_path)})
+        data = resp.json()
+        names = [e["name"] for e in data["entries"]]
+        assert ".hidden" not in names
+        assert "visible.txt" in names
+
+    def test_nonexistent_path_returns_400(self, client):
+        resp = client.get("/api/fs/ls", params={"dir": "/nonexistent/path/xyz"})
+        assert resp.status_code == 400
+        assert "does not exist" in resp.json()["detail"]
+
+    def test_file_path_returns_400(self, client, tmp_path):
+        """Passing a file (not directory) should return 400."""
+        f = tmp_path / "notadir.txt"
+        f.write_text("content")
+        resp = client.get("/api/fs/ls", params={"dir": str(f)})
+        assert resp.status_code == 400
+        assert "Not a directory" in resp.json()["detail"]
+
+    def test_parent_dir_included(self, client, tmp_path):
+        """Response should include parent_dir for non-root paths."""
+        subdir = tmp_path / "child"
+        subdir.mkdir()
+        resp = client.get("/api/fs/ls", params={"dir": str(subdir)})
+        data = resp.json()
+        assert data["parent_dir"] == str(tmp_path)
+
+    def test_file_entries_have_size(self, client, tmp_path):
+        """File entries should include a numeric size field."""
+        (tmp_path / "sized.txt").write_text("hello")
+        resp = client.get("/api/fs/ls", params={"dir": str(tmp_path)})
+        entry = resp.json()["entries"][0]
+        assert entry["name"] == "sized.txt"
+        assert entry["size"] == 5
+
+    def test_directory_entries_have_null_size(self, client, tmp_path):
+        """Directory entries should have size=None."""
+        (tmp_path / "mydir").mkdir()
+        resp = client.get("/api/fs/ls", params={"dir": str(tmp_path)})
+        entry = resp.json()["entries"][0]
+        assert entry["is_dir"] is True
+        assert entry["size"] is None
+
+
+# ── Log Viewer (/api/review/{id}/log) ────────────────────────────────────────
+
+
+class TestLogViewer:
+    """Tests for the /api/review/{review_id}/log endpoint."""
+
+    def test_missing_log_returns_404(self, client):
+        resp = client.get("/api/review/nonexistent_review_xyz/log")
+        assert resp.status_code == 404
+        assert "Log not found" in resp.json()["detail"]
+
+    def test_existing_log_returns_content(self, client):
+        """When a log file exists, it should be returned as text/plain."""
+        from unittest.mock import patch, MagicMock
+        from pathlib import Path
+        import tempfile, os
+
+        with tempfile.TemporaryDirectory() as td:
+            log_dir = Path(td) / "logs"
+            log_dir.mkdir()
+            log_file = log_dir / "test_review_123.log"
+            log_file.write_text("Line 1\nLine 2\n")
+
+            mock_storage = MagicMock()
+            mock_storage.data_dir = Path(td)
+
+            with patch("devils_advocate.gui.api.get_gui_storage", return_value=mock_storage):
+                resp = client.get("/api/review/test_review_123/log")
+
+            assert resp.status_code == 200
+            assert "Line 1" in resp.text
+            assert "Line 2" in resp.text

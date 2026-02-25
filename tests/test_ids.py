@@ -143,3 +143,41 @@ class TestGuidDeterminism:
         hash1 = id1.split("_")[1]
         hash2 = id2.split("_")[1]
         assert hash1 == hash2
+
+
+# ─── TestExtractRandomSuffix ────────────────────────────────────────────────
+
+
+class TestExtractRandomSuffix:
+    """Tests for extract_random_suffix()."""
+
+    def test_new_format_group_id(self):
+        from devils_advocate.ids import extract_random_suffix
+        result = extract_random_suffix("atlas-voice.group_001.14FEB2026.1826.4g9a")
+        assert result == "4g9a"
+
+    def test_new_format_point_id(self):
+        """Point IDs have 6 parts; suffix is the last dot-segment."""
+        from devils_advocate.ids import extract_random_suffix
+        result = extract_random_suffix("atlas-voice.group_001.14FEB2026.1826.4g9a.point_001")
+        assert result == "point_001"
+
+    def test_five_part_minimum(self):
+        from devils_advocate.ids import extract_random_suffix
+        assert extract_random_suffix("a.b.c.d.xyz") == "xyz"
+
+    def test_old_format_returns_empty(self):
+        from devils_advocate.ids import extract_random_suffix
+        assert extract_random_suffix("20260214T182600_abc123_review") == ""
+
+    def test_short_id_returns_empty(self):
+        from devils_advocate.ids import extract_random_suffix
+        assert extract_random_suffix("group_001") == ""
+
+    def test_empty_string(self):
+        from devils_advocate.ids import extract_random_suffix
+        assert extract_random_suffix("") == ""
+
+    def test_four_parts_returns_empty(self):
+        from devils_advocate.ids import extract_random_suffix
+        assert extract_random_suffix("a.b.c.d") == ""

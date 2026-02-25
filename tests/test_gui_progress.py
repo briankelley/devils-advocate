@@ -136,3 +136,23 @@ class TestProgressEventSSE:
         data = json.loads(sse[6:].strip())
         assert data["type"] == "log"
         assert data["message"] == "test msg"
+
+
+class TestCostEventClassification:
+    """Tests for the internal cost event (section-cost prefix)."""
+
+    def test_cost_update_event(self):
+        ev = classify_log_message("§cost role=reviewer model=gpt-4o cost=0.032 total=0.145")
+        assert ev.event_type == "cost"
+        assert ev.phase == "cost_update"
+        assert ev.detail["role"] == "reviewer"
+        assert ev.detail["model"] == "gpt-4o"
+        assert ev.detail["cost"] == "0.032"
+        assert ev.detail["total"] == "0.145"
+        assert ev.message == ""
+
+    def test_cost_update_suppresses_message(self):
+        """Cost events should have an empty message (suppressed from console)."""
+        ev = classify_log_message("§cost role=author model=claude-sonnet cost=0.010 total=0.010")
+        assert ev.message == ""
+        assert ev.event_type == "cost"

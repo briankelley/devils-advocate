@@ -19,6 +19,7 @@ from devils_advocate.providers import (
     call_minimax,
     call_model,
     call_openai_compatible,
+    call_openai_responses,
     call_with_retry,
 )
 from devils_advocate.types import APIError, ModelConfig
@@ -38,6 +39,7 @@ def _make_model(
     thinking=False,
     timeout=120,
     use_completion_tokens=False,
+    use_responses_api=False,
 ):
     """Build a ModelConfig for testing."""
     return ModelConfig(
@@ -49,6 +51,7 @@ def _make_model(
         thinking=thinking,
         timeout=timeout,
         use_completion_tokens=use_completion_tokens,
+        use_responses_api=use_responses_api,
     )
 
 
@@ -1214,3 +1217,318 @@ class TestCallWithRetry:
         import json
         parsed = json.loads(route.calls.last.request.content)
         assert parsed["max_tokens"] == MAX_OUTPUT_TOKENS
+
+
+# ===========================================================================
+# call_openai_responses
+# ===========================================================================
+
+
+def _responses_api_response(text="Hello", input_tokens=100, output_tokens=50):
+    """Build a mock OpenAI Responses API response body."""
+    return {
+        "output": [
+            {
+                "content": [
+                    {"type": "output_text", "text": text},
+                ],
+            }
+        ],
+        "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+    }
+
+
+class TestCallOpenAIResponses:
+    """Tests for call_openai_responses — OpenAI Responses API (/v1/responses)."""
+
+    async def test_basic_successful_call(self):
+        """Standard call returns text and usage."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+        )
+        with respx.mock:
+            respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=_responses_api_response("Codex output"))
+            )
+            async with httpx.AsyncClient() as client:
+                text, usage = await call_openai_responses(
+                    client, model, "You are a reviewer.", "Review this code."
+                )
+
+        assert text == "Codex output"
+        assert usage == {"input_tokens": 100, "output_tokens": 50}
+
+    async def test_system_prompt_in_input(self):
+        """Non-empty system prompt appears as a system message in 'input'."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+        )
+        with respx.mock:
+            route = respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=_responses_api_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_openai_responses(client, model, "Be precise.", "Question")
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        messages = parsed["input"]
+        assert messages[0] == {"role": "system", "content": "Be precise."}
+        assert messages[1] == {"role": "user", "content": "Question"}
+
+    async def test_empty_system_prompt_omitted(self):
+        """Empty system prompt produces only a user message in 'input'."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+        )
+        with respx.mock:
+            route = respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=_responses_api_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_openai_responses(client, model, "", "Question")
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert len(parsed["input"]) == 1
+        assert parsed["input"][0]["role"] == "user"
+
+    async def test_uses_max_output_tokens(self):
+        """Body should use 'max_output_tokens' not 'max_tokens'."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+        )
+        with respx.mock:
+            route = respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=_responses_api_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_openai_responses(client, model, "sys", "usr", max_tokens=8192)
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert parsed["max_output_tokens"] == 8192
+        assert "max_tokens" not in parsed
+
+    async def test_thinking_reasoning_spec_mode(self):
+        """With thinking=True and mode=spec, reasoning effort is medium."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+            thinking=True,
+        )
+        with respx.mock:
+            route = respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=_responses_api_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_openai_responses(client, model, "sys", "usr", mode="spec")
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert parsed["reasoning"] == {"effort": "medium"}
+
+    async def test_thinking_reasoning_plan_mode(self):
+        """With thinking=True and mode=plan, reasoning effort is high."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+            thinking=True,
+        )
+        with respx.mock:
+            route = respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=_responses_api_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_openai_responses(client, model, "sys", "usr", mode="plan")
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert parsed["reasoning"] == {"effort": "high"}
+
+    async def test_no_reasoning_when_thinking_disabled(self):
+        """When thinking=False, no reasoning key in body."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+            thinking=False,
+        )
+        with respx.mock:
+            route = respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=_responses_api_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_openai_responses(client, model, "sys", "usr")
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert "reasoning" not in parsed
+
+    async def test_multiple_output_blocks_concatenated(self):
+        """Multiple output blocks with output_text are concatenated."""
+        response_body = {
+            "output": [
+                {"content": [{"type": "output_text", "text": "Part one. "}]},
+                {"content": [{"type": "output_text", "text": "Part two."}]},
+            ],
+            "usage": {"input_tokens": 10, "output_tokens": 20},
+        }
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+        )
+        with respx.mock:
+            respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=response_body)
+            )
+            async with httpx.AsyncClient() as client:
+                text, usage = await call_openai_responses(client, model, "sys", "usr")
+
+        assert text == "Part one. Part two."
+        assert usage == {"input_tokens": 10, "output_tokens": 20}
+
+    async def test_non_output_text_blocks_ignored(self):
+        """Blocks with type != 'output_text' are ignored."""
+        response_body = {
+            "output": [
+                {"content": [{"type": "reasoning", "text": "thinking..."}]},
+            ],
+            "usage": {"input_tokens": 5, "output_tokens": 5},
+        }
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+        )
+        with respx.mock:
+            respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=response_body)
+            )
+            async with httpx.AsyncClient() as client:
+                text, _ = await call_openai_responses(client, model, "sys", "usr")
+
+        assert text == ""
+
+    async def test_empty_content_warning_logged(self, caplog):
+        """Warns when output_tokens > 0 but visible text is empty."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+        )
+        response_body = {
+            "output": [{"content": [{"type": "reasoning", "text": "..."}]}],
+            "usage": {"input_tokens": 500, "output_tokens": 200},
+        }
+        with respx.mock:
+            respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=response_body)
+            )
+            with caplog.at_level(logging.WARNING, logger="devils_advocate"):
+                async with httpx.AsyncClient() as client:
+                    text, usage = await call_openai_responses(
+                        client, model, "sys", "usr", max_tokens=4096
+                    )
+
+        assert text == ""
+        assert usage["output_tokens"] == 200
+        assert any("0 visible content" in record.message for record in caplog.records)
+
+    async def test_authorization_header(self):
+        """Bearer token is set in the Authorization header."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+        )
+        with respx.mock:
+            route = respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=_responses_api_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_openai_responses(client, model, "sys", "usr")
+
+        headers = route.calls.last.request.headers
+        assert headers["authorization"] == "Bearer fake-key-for-testing"
+
+    async def test_http_error_propagates(self):
+        """HTTP errors raise httpx.HTTPStatusError."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+        )
+        with respx.mock:
+            respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(500, text="Server Error")
+            )
+            async with httpx.AsyncClient() as client:
+                with pytest.raises(httpx.HTTPStatusError):
+                    await call_openai_responses(client, model, "sys", "usr")
+
+
+# ===========================================================================
+# call_model — responses API dispatch
+# ===========================================================================
+
+
+class TestCallModelResponsesAPI:
+    """Tests for call_model dispatching to call_openai_responses."""
+
+    async def test_routes_to_responses_api(self):
+        """use_responses_api=True dispatches to call_openai_responses."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-5.3-codex",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=True,
+        )
+        with respx.mock:
+            respx.post("https://api.openai.com/v1/responses").mock(
+                return_value=httpx.Response(200, json=_responses_api_response("from responses api"))
+            )
+            async with httpx.AsyncClient() as client:
+                text, _ = await call_model(client, model, "sys", "usr")
+
+        assert text == "from responses api"
+
+    async def test_non_responses_api_routes_to_chat_completions(self):
+        """use_responses_api=False (default) dispatches to call_openai_compatible."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-4o",
+            api_base="https://api.openai.com/v1",
+            use_responses_api=False,
+        )
+        with respx.mock:
+            respx.post("https://api.openai.com/v1/chat/completions").mock(
+                return_value=httpx.Response(200, json=_openai_response("from chat completions"))
+            )
+            async with httpx.AsyncClient() as client:
+                text, _ = await call_model(client, model, "sys", "usr")
+
+        assert text == "from chat completions"

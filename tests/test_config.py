@@ -620,3 +620,92 @@ class TestGetModelsByRole:
         assert roles["normalization"] is roles["dedup"]
         # Revision defaults to author (model-a)
         assert roles["revision"] is roles["author"]
+
+
+# ─── TestEnabledField ───────────────────────────────────────────────────────
+
+
+class TestEnabledField:
+    """Tests for the model enabled/disabled feature."""
+
+    def test_disabled_model_in_reviewers_raises(self, tmp_path, monkeypatch):
+        """Referencing a disabled model in roles should raise ConfigError."""
+        monkeypatch.setenv("FAKE_KEY", "sk-fake")
+        cfg_path = _write_yaml(tmp_path / "dis.yaml", textwrap.dedent("""\
+            models:
+              active-model:
+                provider: anthropic
+                model_id: claude-test
+                api_key_env: FAKE_KEY
+              disabled-model:
+                provider: anthropic
+                model_id: claude-test-2
+                api_key_env: FAKE_KEY
+                enabled: false
+            roles:
+              author: active-model
+              reviewers:
+                - disabled-model
+              deduplication: active-model
+        """))
+        with pytest.raises(ConfigError, match="disabled model"):
+            load_config(cfg_path)
+
+    def test_disabled_model_in_author_raises(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("FAKE_KEY", "sk-fake")
+        cfg_path = _write_yaml(tmp_path / "dis2.yaml", textwrap.dedent("""\
+            models:
+              disabled-model:
+                provider: anthropic
+                model_id: claude-test
+                api_key_env: FAKE_KEY
+                enabled: false
+              other-model:
+                provider: anthropic
+                model_id: claude-test-2
+                api_key_env: FAKE_KEY
+            roles:
+              author: disabled-model
+              reviewers:
+                - other-model
+              deduplication: other-model
+        """))
+        with pytest.raises(ConfigError, match="disabled model"):
+            load_config(cfg_path)
+
+    def test_enabled_true_model_works(self, tmp_path, monkeypatch):
+        """Explicitly enabled model should load without error."""
+        monkeypatch.setenv("FAKE_KEY", "sk-fake")
+        cfg_path = _write_yaml(tmp_path / "en.yaml", textwrap.dedent("""\
+            models:
+              my-model:
+                provider: anthropic
+                model_id: claude-test
+                api_key_env: FAKE_KEY
+                enabled: true
+            roles:
+              author: my-model
+              reviewers:
+                - my-model
+              deduplication: my-model
+        """))
+        config = load_config(cfg_path)
+        assert "my-model" in config["all_models"]
+
+    def test_enabled_defaults_true(self, tmp_path, monkeypatch):
+        """Omitting enabled should default to True (model is active)."""
+        monkeypatch.setenv("FAKE_KEY", "sk-fake")
+        cfg_path = _write_yaml(tmp_path / "def.yaml", textwrap.dedent("""\
+            models:
+              my-model:
+                provider: anthropic
+                model_id: claude-test
+                api_key_env: FAKE_KEY
+            roles:
+              author: my-model
+              reviewers:
+                - my-model
+              deduplication: my-model
+        """))
+        config = load_config(cfg_path)
+        assert config["all_models"]["my-model"].enabled is True
