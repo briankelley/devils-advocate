@@ -149,6 +149,66 @@ async def call_openai_compatible(
     }
 
 
+async def call_openai_responses(
+    client: httpx.AsyncClient,
+    model: ModelConfig,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = MAX_OUTPUT_TOKENS,
+    mode: str = "",
+) -> tuple:
+    """Call OpenAI Responses API (/v1/responses). Returns (response_text, usage_dict).
+
+    Required for models only available via the Responses API (e.g. gpt-5.3-codex).
+    """
+    url = f"{model.api_base.rstrip('/')}/responses"
+    headers = {
+        "Authorization": f"Bearer {model.api_key}",
+        "Content-Type": "application/json",
+    }
+    input_messages = []
+    if system_prompt:
+        input_messages.append({"role": "system", "content": system_prompt})
+    input_messages.append({"role": "user", "content": user_prompt})
+
+    body: dict = {
+        "model": model.model_id,
+        "input": input_messages,
+        "max_output_tokens": max_tokens,
+    }
+
+    if model.thinking:
+        effort = "medium" if mode == "spec" else "high"
+        body["reasoning"] = {"effort": effort}
+
+    resp = await client.post(url, json=body, headers=headers, timeout=model.timeout)
+    resp.raise_for_status()
+    data = resp.json()
+
+    text = ""
+    for block in data.get("output", []):
+        for part in block.get("content", []):
+            if part.get("type") == "output_text":
+                text += part.get("text", "")
+
+    usage = data.get("usage", {})
+    output_tokens = usage.get("output_tokens", 0)
+
+    if not text and output_tokens > 0:
+        import logging
+        logging.getLogger("devils_advocate").warning(
+            "%s returned 0 visible content but %d output tokens — "
+            "reasoning likely consumed the entire token budget (max_output_tokens=%d). "
+            "Set a higher max_out_configured for this model.",
+            model.name, output_tokens, max_tokens,
+        )
+
+    return text, {
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": output_tokens,
+    }
+
+
 async def call_minimax(
     client: httpx.AsyncClient,
     model: ModelConfig,
@@ -209,6 +269,8 @@ async def call_model(
         return await call_anthropic(client, model, system_prompt, user_prompt, max_tokens, mode)
     elif model.provider == "minimax":
         return await call_minimax(client, model, system_prompt, user_prompt, max_tokens, mode)
+    elif model.use_responses_api:
+        return await call_openai_responses(client, model, system_prompt, user_prompt, max_tokens, mode)
     else:
         return await call_openai_compatible(client, model, system_prompt, user_prompt, max_tokens, mode)
 

@@ -90,7 +90,9 @@ class ModelConfig:
     timeout: int = 120
     max_out_stated: int | None = None
     max_out_configured: int | None = None
+    enabled: bool = True
     use_completion_tokens: bool = False
+    use_responses_api: bool = False
     thinking: bool = False
 
     @property

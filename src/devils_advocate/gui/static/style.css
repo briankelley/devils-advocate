@@ -840,6 +840,21 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .model-card-header .model-name {
     cursor: pointer;
 }
+.model-card-collapsible.model-disabled {
+    opacity: 0.45;
+}
+.model-card-collapsible.model-disabled .model-name {
+    color: var(--text-dim);
+}
+.disabled-badge {
+    font-size: 0.7em;
+    color: var(--text-dim);
+    background: var(--bg-hover);
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
 .model-card-header::-webkit-details-marker { display: none; }
 .model-card-body {
     padding: 0 var(--pad-md) var(--pad-md);

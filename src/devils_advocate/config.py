@@ -147,7 +147,9 @@ def load_config(path: Path | None = None) -> dict:
             timeout=cfg.get("timeout", DEFAULT_TIMEOUT),
             max_out_stated=cfg.get("max_out_stated"),
             max_out_configured=cfg.get("max_out_configured"),
+            enabled=cfg.get("enabled", True),
             use_completion_tokens=cfg.get("use_completion_tokens", False),
+            use_responses_api=cfg.get("use_responses_api", False),
             thinking=cfg.get("thinking", False),
         )
 
@@ -161,6 +163,8 @@ def load_config(path: Path | None = None) -> dict:
     def _resolve(key: str, name: str) -> None:
         if name not in all_models:
             raise ConfigError(f"roles.{key} references unknown model '{name}'")
+        if not all_models[name].enabled:
+            raise ConfigError(f"roles.{key} references disabled model '{name}'")
         active_names.add(name)
 
     author_name = roles_block.get("author")
