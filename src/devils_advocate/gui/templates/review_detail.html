@@ -193,7 +193,7 @@
                 {% if g.author_resolution %}
                 <details class="expand-section">
                     <summary>[{{ ledger.get('author_model', 'author') }}] Author Response (Round 1): {{ g.author_resolution }}</summary>
-                    <div class="expand-content">{{ g.author_rationale }}</div>
+                    <div class="expand-content"><span class="reviewer-name">[{{ ledger.get('author_model', 'author') }}]</span> {{ g.author_rationale }}</div>
                 </details>
                 {% endif %}
 
@@ -215,7 +215,7 @@
                 {% if g.author_final_resolution %}
                 <details class="expand-section">
                     <summary>[{{ ledger.get('author_model', 'author') }}] Author Final Response: {{ g.author_final_resolution }}</summary>
-                    <div class="expand-content">{{ g.author_final_rationale }}</div>
+                    <div class="expand-content"><span class="reviewer-name">[{{ ledger.get('author_model', 'author') }}]</span> {{ g.author_final_rationale }}</div>
                 </details>
                 {% endif %}
 
@@ -264,7 +264,7 @@
                     </div>
                     {% endfor %}
                     {% if g.author_rationale %}
-                    <div class="author-response">Author: {{ g.author_rationale }}</div>
+                    <div class="author-response"><span class="reviewer-name">[{{ ledger.get('author_model', 'author') }}]</span> {{ g.author_rationale }}</div>
                     {% endif %}
                 </div>
             </details>
