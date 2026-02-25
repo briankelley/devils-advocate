@@ -557,12 +557,7 @@ def revise(project, review_id, config_path, project_dir, max_cost, input_overrid
 )
 def gui_cmd(port, host, config_path, allow_nonlocal):
     """Launch the Devil's Advocate web GUI."""
-    try:
-        from .gui import create_app
-    except ImportError:
-        console.print("[red]Error:[/red] GUI dependencies not installed.")
-        console.print("  Install with: pip install -e '.[gui]'")
-        sys.exit(1)
+    from .gui import create_app
 
     # Preflight port bind for clean UX
     import socket
@@ -604,7 +599,6 @@ def gui_cmd(port, host, config_path, allow_nonlocal):
 def install_cmd(port, no_start, force):
     """Install the dvad GUI as a systemd user service."""
     from .service import (
-        check_gui_deps,
         check_platform,
         detect_dvad_binary,
         read_existing_service,
@@ -622,11 +616,6 @@ def install_cmd(port, no_start, force):
         console.print(f"[red]Error:[/red] {err}")
         sys.exit(1)
 
-    # 2. GUI dependency check
-    err = check_gui_deps()
-    if err:
-        console.print(f"[red]Error:[/red] {err}")
-        sys.exit(1)
 
     # 3. Binary detection
     try:

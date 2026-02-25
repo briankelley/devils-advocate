@@ -72,25 +72,6 @@ def detect_dvad_binary() -> Path:
     )
 
 
-def check_gui_deps() -> str | None:
-    """Return an error message if GUI dependencies are missing, None if OK."""
-    missing = []
-    try:
-        import fastapi  # noqa: F401
-    except ImportError:
-        missing.append("fastapi")
-    try:
-        import uvicorn  # noqa: F401
-    except ImportError:
-        missing.append("uvicorn")
-
-    if missing:
-        return (
-            f"Missing GUI dependencies: {', '.join(missing)}. "
-            "Install with: pip install -e '.[gui]'"
-        )
-    return None
-
 
 # ─── Service File Operations ──────────────────────────────────────────────
 

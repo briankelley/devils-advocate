@@ -13,7 +13,6 @@ from devils_advocate.service import (
     DEFAULT_PORT,
     SERVICE_NAME,
     SERVICE_TEMPLATE,
-    check_gui_deps,
     check_platform,
     detect_dvad_binary,
     read_existing_service,
@@ -98,47 +97,6 @@ class TestDetectDvadBinary:
             with pytest.raises(FileNotFoundError, match="Could not locate"):
                 detect_dvad_binary()
 
-
-# ─── TestCheckGuiDeps ──────────────────────────────────────────────────────
-
-
-class TestCheckGuiDeps:
-    """Tests for check_gui_deps()."""
-
-    def test_all_available_returns_none(self):
-        """When both fastapi and uvicorn are importable, returns None."""
-        with patch.dict("sys.modules", {"fastapi": MagicMock(), "uvicorn": MagicMock()}):
-            assert check_gui_deps() is None
-
-    def test_fastapi_missing(self):
-        """Missing fastapi is reported."""
-        import builtins
-        original_import = builtins.__import__
-
-        def selective_import(name, *args, **kwargs):
-            if name == "fastapi":
-                raise ImportError("No module named 'fastapi'")
-            return original_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=selective_import):
-            result = check_gui_deps()
-        assert result is not None
-        assert "fastapi" in result
-
-    def test_uvicorn_missing(self):
-        """Missing uvicorn is reported."""
-        import builtins
-        original_import = builtins.__import__
-
-        def selective_import(name, *args, **kwargs):
-            if name == "uvicorn":
-                raise ImportError("No module named 'uvicorn'")
-            return original_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=selective_import):
-            result = check_gui_deps()
-        assert result is not None
-        assert "uvicorn" in result
 
 
 # ─── TestRenderServiceUnit ─────────────────────────────────────────────────

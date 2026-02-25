@@ -8,11 +8,21 @@ Cost-aware multi-LLM adversarial review engine.
 pip install devils-advocate
 ```
 
-Or editable install for development:
+This installs everything including the web dashboard. For development:
 
 ```
 pip install -e ".[dev]"
 ```
+
+### Systemd Service (Linux)
+
+To run the GUI as a background service:
+
+```
+dvad install
+```
+
+This creates and enables a systemd user service on port 8411. See `dvad install --help` for options.
 
 ## Quick Start
 

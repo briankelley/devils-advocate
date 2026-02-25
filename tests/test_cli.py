@@ -1312,25 +1312,6 @@ class TestGuiCommand:
             mock_app, host="127.0.0.1", port=18412, log_level="warning",
         )
 
-    def test_gui_import_error(self, runner):
-        """Missing GUI dependencies print install instructions and exit 1."""
-        # Set the gui module to None in sys.modules so the relative import fails
-        # with ImportError (Python treats None in sys.modules as ImportError)
-        with patch.dict("sys.modules", {"devils_advocate.gui": None}):
-            import builtins
-            original_import = builtins.__import__
-
-            def fail_gui_import(name, globals=None, locals=None, fromlist=(), level=0):
-                if level > 0 and fromlist and "create_app" in fromlist:
-                    raise ImportError("No module named 'devils_advocate.gui'")
-                return original_import(name, globals, locals, fromlist, level)
-
-            with patch("builtins.__import__", side_effect=fail_gui_import):
-                result = runner.invoke(cli, ["gui"])
-
-        assert result.exit_code == 1
-        assert "GUI dependencies not installed" in result.output
-
     def test_gui_config_path_forwarded(self, runner):
         """--config is forwarded to create_app."""
         mock_sock = MagicMock()
@@ -1372,19 +1353,9 @@ class TestInstallCommand:
         assert result.exit_code == 1
         assert "darwin" in result.output
 
-    def test_deps_missing(self, runner):
-        """Missing GUI deps exits 1."""
-        with patch("devils_advocate.service.check_platform", return_value=None), \
-             patch("devils_advocate.service.check_gui_deps",
-                   return_value="Missing GUI dependencies: fastapi. Install with: pip install -e '.[gui]'"):
-            result = runner.invoke(cli, ["install"])
-        assert result.exit_code == 1
-        assert "fastapi" in result.output
-
     def test_binary_not_found(self, runner):
         """Missing dvad binary exits 1."""
         with patch("devils_advocate.service.check_platform", return_value=None), \
-             patch("devils_advocate.service.check_gui_deps", return_value=None), \
              patch("devils_advocate.service.detect_dvad_binary",
                    side_effect=FileNotFoundError("Could not locate the dvad binary.")):
             result = runner.invoke(cli, ["install"])
@@ -1397,7 +1368,6 @@ class TestInstallCommand:
         fake_service = tmp_path / "dvad-gui.service"
 
         with patch("devils_advocate.service.check_platform", return_value=None), \
-             patch("devils_advocate.service.check_gui_deps", return_value=None), \
              patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
              patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
              patch("devils_advocate.service.service_exists", return_value=False), \
@@ -1417,7 +1387,6 @@ class TestInstallCommand:
         fake_service = tmp_path / "dvad-gui.service"
 
         with patch("devils_advocate.service.check_platform", return_value=None), \
-             patch("devils_advocate.service.check_gui_deps", return_value=None), \
              patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
              patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
              patch("devils_advocate.service.service_exists", return_value=False), \
@@ -1437,7 +1406,6 @@ class TestInstallCommand:
         fake_service = tmp_path / "dvad-gui.service"
 
         with patch("devils_advocate.service.check_platform", return_value=None), \
-             patch("devils_advocate.service.check_gui_deps", return_value=None), \
              patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
              patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
              patch("devils_advocate.service.service_exists", return_value=True), \
@@ -1458,7 +1426,6 @@ class TestInstallCommand:
         content = render_service_unit(fake_bin)
 
         with patch("devils_advocate.service.check_platform", return_value=None), \
-             patch("devils_advocate.service.check_gui_deps", return_value=None), \
              patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
              patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
              patch("devils_advocate.service.service_exists", return_value=True), \
@@ -1472,7 +1439,6 @@ class TestInstallCommand:
         fake_bin = tmp_path / "dvad"
 
         with patch("devils_advocate.service.check_platform", return_value=None), \
-             patch("devils_advocate.service.check_gui_deps", return_value=None), \
              patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
              patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
              patch("devils_advocate.service.service_exists", return_value=True), \
@@ -1487,7 +1453,6 @@ class TestInstallCommand:
         fake_service = tmp_path / "dvad-gui.service"
 
         with patch("devils_advocate.service.check_platform", return_value=None), \
-             patch("devils_advocate.service.check_gui_deps", return_value=None), \
              patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
              patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
              patch("devils_advocate.service.service_exists", return_value=False), \
@@ -1506,7 +1471,6 @@ class TestInstallCommand:
         fake_service = tmp_path / "dvad-gui.service"
 
         with patch("devils_advocate.service.check_platform", return_value=None), \
-             patch("devils_advocate.service.check_gui_deps", return_value=None), \
              patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
              patch("devils_advocate.cli.init_config", return_value=("exists", Path("/fake/models.yaml"))), \
              patch("devils_advocate.service.service_exists", return_value=False), \
@@ -1524,7 +1488,6 @@ class TestInstallCommand:
         fake_service = tmp_path / "dvad-gui.service"
 
         with patch("devils_advocate.service.check_platform", return_value=None), \
-             patch("devils_advocate.service.check_gui_deps", return_value=None), \
              patch("devils_advocate.service.detect_dvad_binary", return_value=fake_bin), \
              patch("devils_advocate.cli.init_config", return_value=("created", Path("/fake/models.yaml"))), \
              patch("devils_advocate.service.service_exists", return_value=False), \
