@@ -39,12 +39,12 @@ _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     # Cost events (must be first — suppressed from console log)
     (r"§cost role=(\S+) model=(.+?) cost=([\d.]+) total=([\d.]+)", "cost_update", {}),
 
-    # Round 1 reviewer calls (author pattern must precede generic "calling" pattern)
-    (r"Round 1: calling author \((.+?)\)", "round1_author", {}),
+    # Round 1 reviewer calls
     (r"Round 1: calling (.+)", "round1_calling", {}),
     (r"Round 1: (.+) responded \((\d+) output tokens\)", "round1_responded", {}),
     (r"No structured points from (.+) -- trying LLM normalization", "normalization", {}),
     (r"Normalization: calling (.+?) \(fallback for (.+?)\)", "normalization", {}),
+    (r"Round 1: author responding to grouped feedback from reviewers", "round1_author", {}),
 
     # Dedup
     (r"Deduplication: calling (.+?) \((\d+) points\)", "dedup_calling", {}),

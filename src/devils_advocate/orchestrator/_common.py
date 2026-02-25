@@ -526,7 +526,7 @@ async def _run_adversarial_pipeline(
     console.print(
         f"  Prompt size: ~{estimate_tokens(round1_author_prompt)} tokens"
     )
-    storage.log(f"Round 1: calling author ({author.name})")
+    storage.log("Round 1: author responding to grouped feedback from reviewers")
     author_raw, author_usage = await call_with_retry(
         client,
         author,
