@@ -5,6 +5,20 @@ const dvad = {
     _revisionContent: '',
     _pendingRoles: {},
     _sortState: { col: null, asc: true },
+    _picker: {
+        targetField: null,
+        multiSelect: false,
+        dirMode: false,
+        selected: [],
+        currentDir: null,
+    },
+    // Stored paths per field (persisted across modal open/close)
+    _selectedPaths: {
+        input_files: [],
+        reference_files: [],
+        spec_file: [],
+        project_dir: [],
+    },
 
     // ── Vendor icon mapping ──────────────────────────────────────────
     VENDOR_ICONS: {
@@ -77,14 +91,30 @@ const dvad = {
         // Form submit → show interstitial
         form.addEventListener('submit', (e) => {
             e.preventDefault();
-            this._formData = new FormData(form);
+            // Build FormData manually with path-based fields
+            const fd = new FormData();
+            fd.set('mode', document.getElementById('review-mode')?.value || 'plan');
+            fd.set('project', document.getElementById('project')?.value || '');
+            fd.set('max_cost', document.getElementById('max_cost')?.value || '');
+            if (document.getElementById('dry_run')?.checked) fd.set('dry_run', 'on');
+            fd.set('project_dir', document.getElementById('project_dir')?.value || '');
+
+            // Path-based file inputs
+            const inputHidden = document.getElementById('input_files_paths')?.value || '';
+            if (inputHidden) fd.set('input_paths', inputHidden);
+            const refHidden = document.getElementById('reference_files_paths')?.value || '';
+            if (refHidden) fd.set('reference_paths', refHidden);
+            const specHidden = document.getElementById('spec_file_paths')?.value || '';
+            if (specHidden) fd.set('spec_path', specHidden);
+
+            this._formData = fd;
             this.showInterstitial();
         });
     },
 
     updateModeUI() {
         const mode = document.querySelector('input[name="mode"]:checked')?.value || 'plan';
-        const inputFilesInput = document.getElementById('input_files');
+        const browseBtn = document.getElementById('input-files-browse');
         const specRow = document.getElementById('spec-row');
         const projectDirRow = document.getElementById('project-dir-row');
         const referenceRow = document.getElementById('reference-files-row');
@@ -92,11 +122,10 @@ const dvad = {
         const inputRow = document.getElementById('input-files-row');
         const inputLabel = document.getElementById('input-files-label');
 
-        if (!inputFilesInput) return;
+        if (!browseBtn) return;
 
         if (mode === 'plan') {
-            inputFilesInput.multiple = false;
-            inputFilesInput.required = true;
+            browseBtn.onclick = () => this.openFilePicker('input_files', false);
             inputLabel.textContent = 'Plan File';
             fileHint.textContent = 'The implementation plan to review';
             specRow.style.display = 'none';
@@ -104,8 +133,7 @@ const dvad = {
             referenceRow.style.display = '';
             inputRow.style.display = '';
         } else if (mode === 'code') {
-            inputFilesInput.multiple = false;
-            inputFilesInput.required = true;
+            browseBtn.onclick = () => this.openFilePicker('input_files', false);
             inputLabel.textContent = 'Required Files';
             fileHint.textContent = 'Exactly one file required for code mode';
             specRow.style.display = '';
@@ -113,8 +141,7 @@ const dvad = {
             referenceRow.style.display = 'none';
             inputRow.style.display = '';
         } else if (mode === 'spec') {
-            inputFilesInput.multiple = true;
-            inputFilesInput.required = true;
+            browseBtn.onclick = () => this.openFilePicker('input_files', true);
             inputLabel.textContent = 'Required Files';
             fileHint.textContent = 'Specification file(s) to enrich with suggestions';
             specRow.style.display = 'none';
@@ -123,8 +150,7 @@ const dvad = {
             inputRow.style.display = '';
         } else {
             // integration
-            inputFilesInput.multiple = true;
-            inputFilesInput.required = false;
+            browseBtn.onclick = () => this.openFilePicker('input_files', true);
             inputLabel.textContent = 'Input Files';
             fileHint.textContent = 'Input files are optional for integration mode';
             specRow.style.display = '';
@@ -141,19 +167,20 @@ const dvad = {
 
         let parts = [binary, 'review', '--mode', mode, '--project', project];
 
-        const inputFiles = document.getElementById('input_files')?.files || [];
-        for (let i = 0; i < inputFiles.length; i++) {
-            parts.push('--input', inputFiles[i].name);
+        // Read from stored paths
+        const inputPaths = this._selectedPaths.input_files || [];
+        for (const s of inputPaths) {
+            parts.push('--input', s.path);
         }
 
-        const refFiles = document.getElementById('reference_files')?.files || [];
-        for (let i = 0; i < refFiles.length; i++) {
-            parts.push('--input', refFiles[i].name);
+        const refPaths = this._selectedPaths.reference_files || [];
+        for (const s of refPaths) {
+            parts.push('--input', s.path);
         }
 
-        const specFile = document.getElementById('spec_file')?.files?.[0];
-        if (specFile) {
-            parts.push('--spec', specFile.name);
+        const specPaths = this._selectedPaths.spec_file || [];
+        if (specPaths.length > 0) {
+            parts.push('--spec', specPaths[0].path);
         }
 
         const projectDir = document.getElementById('project_dir')?.value?.trim();
@@ -1202,6 +1229,234 @@ const dvad = {
                 status.textContent = 'Network error: ' + err.message;
                 status.style.color = 'var(--red)';
             }
+        }
+    },
+    // ── File Picker ─────────────────────────────────────────────────
+
+    openFilePicker(targetField, multiSelect, dirMode = false) {
+        this._picker.targetField = targetField;
+        this._picker.multiSelect = multiSelect;
+        this._picker.dirMode = dirMode;
+        // Copy existing selections for this field into picker state
+        this._picker.selected = [...(this._selectedPaths[targetField] || [])];
+
+        const title = dirMode ? 'Select Directory' : (multiSelect ? 'Select Files' : 'Select File');
+        const titleEl = document.getElementById('picker-title');
+        if (titleEl) titleEl.textContent = title;
+
+        document.getElementById('file-picker-modal').classList.add('visible');
+        this._fetchDir(this._picker.currentDir || '~');
+    },
+
+    _fetchDir(dir) {
+        fetch('/api/fs/ls?dir=' + encodeURIComponent(dir))
+            .then(r => r.json())
+            .then(data => {
+                if (data.detail) {
+                    // Error from API
+                    const list = document.getElementById('picker-file-list');
+                    if (list) list.innerHTML = `<p class="dim">${data.detail}</p>`;
+                    return;
+                }
+                this._picker.currentDir = data.current_dir;
+                this._renderPicker(data);
+            })
+            .catch(err => {
+                const list = document.getElementById('picker-file-list');
+                if (list) list.innerHTML = `<p class="dim">Error: ${err.message}</p>`;
+            });
+    },
+
+    _renderPicker(data) {
+        // Breadcrumb
+        const bc = document.getElementById('picker-breadcrumb');
+        if (bc) {
+            const parts = data.current_dir.split('/').filter(Boolean);
+            let html = '<span class="breadcrumb-seg" onclick="dvad._fetchDir(\'/\')">/</span>';
+            let cumPath = '';
+            for (const part of parts) {
+                cumPath += '/' + part;
+                const p = cumPath;
+                html += `<span class="breadcrumb-sep">/</span><span class="breadcrumb-seg" onclick="dvad._fetchDir('${p.replace(/'/g, "\\'")}')">${part}</span>`;
+            }
+            bc.innerHTML = html;
+        }
+
+        // File list
+        const list = document.getElementById('picker-file-list');
+        if (!list) return;
+
+        let html = '';
+
+        // Parent directory entry
+        if (data.parent_dir) {
+            html += `<div class="file-entry is-dir" ondblclick="dvad._fetchDir('${data.parent_dir.replace(/'/g, "\\'")}')" onclick="dvad._fetchDir('${data.parent_dir.replace(/'/g, "\\'")}')">
+                <i data-lucide="corner-left-up" class="file-icon"></i>
+                <span class="file-name">..</span>
+            </div>`;
+        }
+
+        if (data.error) {
+            html += `<p class="dim" style="padding:var(--pad-md)">${data.error}</p>`;
+        }
+
+        for (const entry of (data.entries || [])) {
+            const isSelected = this._picker.selected.some(s => s.path === entry.path);
+            const selClass = isSelected ? ' selected' : '';
+            const dirClass = entry.is_dir ? ' is-dir' : '';
+            const icon = entry.is_dir ? 'folder' : 'file-text';
+            const size = entry.is_dir ? '' : this._formatSize(entry.size);
+            const escapedPath = entry.path.replace(/'/g, "\\'");
+            const entryJson = JSON.stringify(entry).replace(/'/g, "&#39;").replace(/"/g, '&quot;');
+
+            html += `<div class="file-entry${dirClass}${selClass}" data-path="${entry.path}" onclick="dvad._onEntryClick(${entryJson})" ondblclick="dvad._onEntryDblClick(${entryJson})">
+                <i data-lucide="${icon}" class="file-icon"></i>
+                <span class="file-name">${entry.name}</span>
+                <span class="file-size">${size}</span>
+            </div>`;
+        }
+
+        if (!data.entries || data.entries.length === 0) {
+            if (!data.error) html += '<p class="dim" style="padding:var(--pad-md)">Empty directory</p>';
+        }
+
+        list.innerHTML = html;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        this._updatePickerSelection();
+    },
+
+    _formatSize(bytes) {
+        if (bytes == null) return '';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    },
+
+    _onEntryClick(entry) {
+        if (entry.is_dir && !this._picker.dirMode) {
+            // Navigate into directory
+            this._fetchDir(entry.path);
+            return;
+        }
+
+        if (entry.is_dir && this._picker.dirMode) {
+            // In dir mode, single click selects the directory
+            this._picker.selected = [{ path: entry.path, name: entry.name }];
+            this._updatePickerSelection();
+            this._highlightEntries();
+            return;
+        }
+
+        // File: toggle or replace selection
+        const idx = this._picker.selected.findIndex(s => s.path === entry.path);
+        if (idx >= 0) {
+            this._picker.selected.splice(idx, 1);
+        } else {
+            if (this._picker.multiSelect) {
+                this._picker.selected.push({ path: entry.path, name: entry.name });
+            } else {
+                this._picker.selected = [{ path: entry.path, name: entry.name }];
+            }
+        }
+        this._updatePickerSelection();
+        this._highlightEntries();
+    },
+
+    _onEntryDblClick(entry) {
+        if (entry.is_dir) {
+            // Always navigate on double-click (even in dirMode)
+            this._fetchDir(entry.path);
+        }
+    },
+
+    _highlightEntries() {
+        document.querySelectorAll('#picker-file-list .file-entry').forEach(el => {
+            const path = el.dataset.path;
+            const isSelected = this._picker.selected.some(s => s.path === path);
+            el.classList.toggle('selected', isSelected);
+        });
+    },
+
+    _updatePickerSelection() {
+        const container = document.getElementById('picker-selected');
+        if (!container) return;
+
+        if (this._picker.selected.length === 0) {
+            container.innerHTML = '<span class="dim">No files selected</span>';
+        } else {
+            container.innerHTML = this._picker.selected.map(s =>
+                `<span class="file-chip">${s.name}<button class="chip-remove" onclick="event.stopPropagation(); dvad._removePickerSelection('${s.path.replace(/'/g, "\\'")}')">&times;</button></span>`
+            ).join('');
+        }
+
+        const confirmBtn = document.getElementById('picker-confirm-btn');
+        if (confirmBtn) confirmBtn.disabled = this._picker.selected.length === 0;
+    },
+
+    _removePickerSelection(path) {
+        this._picker.selected = this._picker.selected.filter(s => s.path !== path);
+        this._updatePickerSelection();
+        this._highlightEntries();
+    },
+
+    confirmFilePicker() {
+        const field = this._picker.targetField;
+        this._selectedPaths[field] = [...this._picker.selected];
+
+        if (field === 'project_dir') {
+            // Write to the text input directly
+            const input = document.getElementById('project_dir');
+            if (input && this._picker.selected.length > 0) {
+                input.value = this._picker.selected[0].path;
+            }
+        } else {
+            // Write paths JSON to hidden input
+            const hidden = document.getElementById(field + '_paths');
+            if (hidden) {
+                if (field === 'spec_file') {
+                    // Single path string
+                    hidden.value = this._picker.selected.length > 0 ? this._picker.selected[0].path : '';
+                } else {
+                    hidden.value = JSON.stringify(this._picker.selected.map(s => s.path));
+                }
+            }
+
+            // Render chips in display div
+            const display = document.getElementById(field + '_display');
+            if (display) {
+                display.innerHTML = this._picker.selected.map(s =>
+                    `<span class="file-chip">${s.name}<button class="chip-remove" onclick="event.stopPropagation(); dvad._removeSelectedFile('${field}', '${s.path.replace(/'/g, "\\'")}')">&times;</button></span>`
+                ).join('');
+            }
+        }
+
+        this.closeFilePicker();
+    },
+
+    closeFilePicker() {
+        document.getElementById('file-picker-modal').classList.remove('visible');
+    },
+
+    _removeSelectedFile(targetField, path) {
+        this._selectedPaths[targetField] = this._selectedPaths[targetField].filter(s => s.path !== path);
+        const remaining = this._selectedPaths[targetField];
+
+        // Update hidden input
+        const hidden = document.getElementById(targetField + '_paths');
+        if (hidden) {
+            if (targetField === 'spec_file') {
+                hidden.value = remaining.length > 0 ? remaining[0].path : '';
+            } else {
+                hidden.value = remaining.length > 0 ? JSON.stringify(remaining.map(s => s.path)) : '';
+            }
+        }
+
+        // Update display chips
+        const display = document.getElementById(targetField + '_display');
+        if (display) {
+            display.innerHTML = remaining.map(s =>
+                `<span class="file-chip">${s.name}<button class="chip-remove" onclick="event.stopPropagation(); dvad._removeSelectedFile('${targetField}', '${s.path.replace(/'/g, "\\'")}')">&times;</button></span>`
+            ).join('');
         }
     },
 };

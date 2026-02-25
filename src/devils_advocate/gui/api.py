@@ -113,54 +113,90 @@ async def start_review(request: Request):
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid max_cost value")
 
-    # Handle file uploads — save to temp dir
-    tmpdir = tempfile.mkdtemp(prefix="dvad-gui-")
+    # Determine input mode: path-based (new) or upload-based (legacy fallback)
+    input_paths_raw = form.get("input_paths", "")
+    use_path_mode = bool(input_paths_raw and input_paths_raw.strip())
+
     input_files: list[Path] = []
+    spec_path = None
+    tmpdir = None
 
-    # Get uploaded input files + reference files (both become --input args)
-    uploaded_files = form.getlist("input_files") + form.getlist("reference_files")
-    file_count = 0
+    if use_path_mode:
+        # ── Path-based flow (server-side file picker) ────────────────
+        try:
+            all_paths = json.loads(input_paths_raw) if input_paths_raw.strip() else []
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid input_paths JSON")
 
-    for upload in uploaded_files:
-        if not hasattr(upload, 'filename') or not upload.filename:
-            continue
-        file_count += 1
-        if file_count > MAX_FILES:
-            shutil.rmtree(tmpdir, ignore_errors=True)
-            raise HTTPException(status_code=400, detail=f"Too many files (max {MAX_FILES})")
+        reference_paths_raw = form.get("reference_paths", "")
+        try:
+            ref_paths = json.loads(reference_paths_raw) if reference_paths_raw and reference_paths_raw.strip() else []
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid reference_paths JSON")
 
-        safe_name = Path(upload.filename).name
-        dest = Path(tmpdir) / safe_name
-        content = await upload.read()
-        if len(content) > MAX_FILE_SIZE:
-            shutil.rmtree(tmpdir, ignore_errors=True)
-            raise HTTPException(
-                status_code=400,
-                detail=f"File '{safe_name}' exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit",
-            )
-        dest.write_bytes(content)
-        input_files.append(dest)
+        all_paths = all_paths + ref_paths
+
+        for p_str in all_paths:
+            p = Path(p_str)
+            if not p.exists():
+                raise HTTPException(status_code=400, detail=f"File not found: {p_str}")
+            if not p.is_file():
+                raise HTTPException(status_code=400, detail=f"Not a file: {p_str}")
+            input_files.append(p)
+
+        spec_path_raw = form.get("spec_path", "").strip()
+        if spec_path_raw:
+            sp = Path(spec_path_raw)
+            if not sp.exists() or not sp.is_file():
+                raise HTTPException(status_code=400, detail=f"Spec file not found: {spec_path_raw}")
+            spec_path = sp
+    else:
+        # ── Upload-based flow (legacy browser upload) ────────────────
+        tmpdir = tempfile.mkdtemp(prefix="dvad-gui-")
+
+        uploaded_files = form.getlist("input_files") + form.getlist("reference_files")
+        file_count = 0
+
+        for upload in uploaded_files:
+            if not hasattr(upload, 'filename') or not upload.filename:
+                continue
+            file_count += 1
+            if file_count > MAX_FILES:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+                raise HTTPException(status_code=400, detail=f"Too many files (max {MAX_FILES})")
+
+            safe_name = Path(upload.filename).name
+            dest = Path(tmpdir) / safe_name
+            content = await upload.read()
+            if len(content) > MAX_FILE_SIZE:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File '{safe_name}' exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit",
+                )
+            dest.write_bytes(content)
+            input_files.append(dest)
+
+        if spec_file_upload and hasattr(spec_file_upload, 'filename') and spec_file_upload.filename:
+            safe_name = Path(spec_file_upload.filename).name
+            spec_dest = Path(tmpdir) / f"_spec_{safe_name}"
+            content = await spec_file_upload.read()
+            if len(content) > MAX_FILE_SIZE:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+                raise HTTPException(status_code=400, detail="Spec file too large")
+            spec_dest.write_bytes(content)
+            spec_path = spec_dest
 
     # Mode-aware validation
     if mode in ("plan", "spec") and not input_files:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
         raise HTTPException(status_code=400, detail=f"{mode.title()} mode requires at least one input file")
     if mode == "code":
         if len(input_files) != 1:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+            if tmpdir:
+                shutil.rmtree(tmpdir, ignore_errors=True)
             raise HTTPException(status_code=400, detail="Code mode requires exactly one input file")
-
-    # Handle spec file
-    spec_path = None
-    if spec_file_upload and hasattr(spec_file_upload, 'filename') and spec_file_upload.filename:
-        safe_name = Path(spec_file_upload.filename).name
-        spec_dest = Path(tmpdir) / f"_spec_{safe_name}"
-        content = await spec_file_upload.read()
-        if len(content) > MAX_FILE_SIZE:
-            shutil.rmtree(tmpdir, ignore_errors=True)
-            raise HTTPException(status_code=400, detail="Spec file too large")
-        spec_dest.write_bytes(content)
-        spec_path = spec_dest
 
     project_dir = Path(project_dir_str) if project_dir_str else None
 
@@ -172,7 +208,7 @@ async def start_review(request: Request):
             "filename": f.name,
             "type": "plan" if mode in ("plan", "spec") else "code",
             "size_bytes": f.stat().st_size,
-            "copied": mode in ("plan", "spec"),
+            "copied": not use_path_mode,
         }
         entry.update(_get_git_info(f))
         manifest["files"].append(entry)
@@ -183,7 +219,7 @@ async def start_review(request: Request):
             "filename": spec_path.name,
             "type": "spec",
             "size_bytes": spec_path.stat().st_size,
-            "copied": True,
+            "copied": not use_path_mode,
         }
         entry.update(_get_git_info(spec_path))
         manifest["files"].append(entry)
@@ -892,4 +928,64 @@ async def save_env_vars(request: Request):
         "status": "ok",
         "path": str(env_file_path),
         "updated_keys": list(env_updates.keys()),
+    })
+
+
+# ── Filesystem Browser ───────────────────────────────────────────────────
+
+
+@router.get("/fs/ls")
+async def list_directory(request: Request, dir: str = "~"):
+    """Return directory listing for the file picker. Localhost-only tool."""
+    if dir == "~":
+        target = Path.home()
+    else:
+        target = Path(dir).resolve()
+
+    if not target.exists():
+        raise HTTPException(status_code=400, detail=f"Path does not exist: {target}")
+    if not target.is_dir():
+        raise HTTPException(status_code=400, detail=f"Not a directory: {target}")
+
+    try:
+        children = list(target.iterdir())
+    except PermissionError:
+        return JSONResponse({
+            "current_dir": str(target),
+            "parent_dir": str(target.parent) if target != target.parent else None,
+            "entries": [],
+            "error": "Permission denied",
+        })
+
+    entries = []
+    for child in children:
+        if child.name.startswith("."):
+            continue
+        try:
+            is_dir = child.is_dir()
+        except (PermissionError, OSError):
+            continue
+        entry = {
+            "name": child.name,
+            "is_dir": is_dir,
+            "path": str(child),
+        }
+        if is_dir:
+            entry["size"] = None
+        else:
+            try:
+                entry["size"] = child.stat().st_size
+            except (PermissionError, OSError):
+                entry["size"] = None
+        entries.append(entry)
+
+    # Sort: directories first (alpha), then files (alpha)
+    entries.sort(key=lambda e: (not e["is_dir"], e["name"].lower()))
+
+    parent = str(target.parent) if target != target.parent else None
+
+    return JSONResponse({
+        "current_dir": str(target),
+        "parent_dir": parent,
+        "entries": entries,
     })

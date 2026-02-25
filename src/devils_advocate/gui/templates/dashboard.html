@@ -82,19 +82,37 @@
 
                 <div class="form-row" id="input-files-row">
                     <label id="input-files-label">Required Files</label>
-                    <input type="file" id="input_files" name="input_files" multiple class="input-file">
+                    <div class="file-input-wrapper">
+                        <button type="button" class="browse-btn" id="input-files-browse" onclick="dvad.openFilePicker('input_files', false)">
+                            <i data-lucide="folder-open"></i> Browse…
+                        </button>
+                        <div id="input_files_display" class="selected-files-display"></div>
+                        <input type="hidden" id="input_files_paths" name="input_paths">
+                    </div>
                     <span class="field-hint" id="file-hint">Plan file + up to 5 reference files</span>
                 </div>
 
                 <div class="form-row" id="reference-files-row" style="display:none">
                     <label>Reference Files <span class="dim">(optional)</span></label>
-                    <input type="file" id="reference_files" name="reference_files" multiple class="input-file">
+                    <div class="file-input-wrapper">
+                        <button type="button" class="browse-btn" onclick="dvad.openFilePicker('reference_files', true)">
+                            <i data-lucide="folder-open"></i> Browse…
+                        </button>
+                        <div id="reference_files_display" class="selected-files-display"></div>
+                        <input type="hidden" id="reference_files_paths" name="reference_paths">
+                    </div>
                     <span class="field-hint">Up to 7 reference files for reviewers to cross-check against</span>
                 </div>
 
                 <div class="form-row" id="spec-row" style="display:none">
                     <label for="spec_file">Spec File <span class="dim">(optional)</span></label>
-                    <input type="file" id="spec_file" name="spec_file" class="input-file">
+                    <div class="file-input-wrapper">
+                        <button type="button" class="browse-btn" onclick="dvad.openFilePicker('spec_file', false)">
+                            <i data-lucide="folder-open"></i> Browse…
+                        </button>
+                        <div id="spec_file_display" class="selected-files-display"></div>
+                        <input type="hidden" id="spec_file_paths" name="spec_path">
+                    </div>
                 </div>
 
                 <div class="form-row" id="project-dir-row" style="display:none">
@@ -119,7 +137,12 @@
                             </span>
                         </span>
                     </label>
-                    <input type="text" id="project_dir" name="project_dir" class="input" placeholder="/path/to/project">
+                    <div class="dir-input-wrapper">
+                        <input type="text" id="project_dir" name="project_dir" class="input" placeholder="/path/to/project">
+                        <button type="button" class="browse-btn" onclick="dvad.openFilePicker('project_dir', false, true)">
+                            <i data-lucide="folder-open"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="form-row">
@@ -238,6 +261,25 @@
         {% endif %}
     </div>
     {% endif %}
+</div>
+
+{# ── File Picker Modal ────────────────────────────────────────────── #}
+<div id="file-picker-modal" class="modal-overlay">
+    <div class="modal-panel">
+        <div class="modal-header">
+            <h3 id="picker-title">Select Files</h3>
+            <button class="modal-close-btn" onclick="dvad.closeFilePicker()">&times;</button>
+        </div>
+        <div class="modal-breadcrumb" id="picker-breadcrumb"></div>
+        <div class="modal-file-list" id="picker-file-list">
+            <p class="dim">Loading…</p>
+        </div>
+        <div class="modal-selected" id="picker-selected"></div>
+        <div class="modal-actions">
+            <button class="btn" onclick="dvad.closeFilePicker()">Cancel</button>
+            <button class="btn btn-accent" id="picker-confirm-btn" onclick="dvad.confirmFilePicker()">Select</button>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
