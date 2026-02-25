@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
+import re
 import shutil
 import tempfile
 from io import StringIO
@@ -674,3 +677,219 @@ async def save_config(request: Request):
     await asyncio.to_thread(StorageManager._atomic_write, target, final_content)
 
     return JSONResponse({"status": "ok", "path": str(target)})
+
+
+# ── .env File Helpers ────────────────────────────────────────────────────────
+
+
+def _get_env_file_path(request: Request) -> Path:
+    """Determine the .env file path (same directory as models.yaml)."""
+    from ..config import find_config
+
+    config_path_str = request.app.state.config_path
+    if config_path_str:
+        return Path(config_path_str).parent / ".env"
+    try:
+        return find_config().parent / ".env"
+    except Exception:
+        raise HTTPException(status_code=400, detail="Cannot determine config directory")
+
+
+def _get_allowed_env_names(config: dict) -> set[str]:
+    """Extract unique api_key_env names from the config."""
+    all_models = config.get("all_models", config.get("models", {}))
+    return {m.api_key_env for m in all_models.values() if m.api_key_env}
+
+
+def _read_env_file(path: Path) -> tuple[list[str], dict[str, str]]:
+    """Read a .env file, returning (lines, key-value dict).
+
+    Comments and blank lines are preserved in the lines list.
+    Returns ([], {}) if the file does not exist.
+    """
+    if not path.is_file():
+        return [], {}
+    text = path.read_text()
+    lines = text.split("\n")
+    kv: dict[str, str] = {}
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key, sep, value = stripped.partition("=")
+        if sep:
+            kv[key] = value
+    return lines, kv
+
+
+def _write_env_file(path: Path, existing_lines: list[str], updates: dict[str, str]) -> None:
+    """Write updates to a .env file, preserving comments and existing structure.
+
+    Keys present in updates replace their existing lines; new keys are appended.
+    File is written with 0o600 permissions.
+    """
+    remaining = dict(updates)
+    new_lines: list[str] = []
+
+    for line in existing_lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            key, sep, _ = stripped.partition("=")
+            if sep and key in remaining:
+                new_lines.append(f"{key}={remaining.pop(key)}")
+                continue
+        new_lines.append(line)
+
+    # Append new keys not already in the file
+    for key, value in remaining.items():
+        new_lines.append(f"{key}={value}")
+
+    content = "\n".join(new_lines)
+    # Ensure trailing newline
+    if not content.endswith("\n"):
+        content += "\n"
+
+    old_umask = os.umask(0o077)
+    try:
+        path.write_text(content)
+    finally:
+        os.umask(old_umask)
+    os.chmod(path, 0o600)
+
+
+# ── API Key Management ───────────────────────────────────────────────────────
+
+
+@router.get("/config/env")
+async def get_env_vars(request: Request):
+    """Return environment variable names needed by configured models and their status."""
+    from ..config import load_config
+
+    config_path = request.app.state.config_path
+    try:
+        config = await asyncio.to_thread(
+            load_config, Path(config_path) if config_path else None
+        )
+    except Exception:
+        logging.exception("Failed to load configuration")
+        raise HTTPException(status_code=500, detail="Failed to load configuration")
+
+    try:
+        env_file_path = _get_env_file_path(request)
+    except HTTPException:
+        return JSONResponse({
+            "env_file_path": None,
+            "env_file_exists": False,
+            "env_vars": [],
+            "status": "config_dir_unknown",
+        })
+
+    _, file_kv = _read_env_file(env_file_path)
+
+    allowed_env_names = _get_allowed_env_names(config)
+    env_vars: list[dict] = []
+    for env_name in sorted(allowed_env_names):
+        env_vars.append({
+            "env_name": env_name,
+            "is_set": bool(os.environ.get(env_name)),
+            "in_env_file": env_name in file_kv,
+        })
+
+    return JSONResponse({
+        "env_file_path": str(env_file_path),
+        "env_file_exists": env_file_path.is_file(),
+        "env_vars": env_vars,
+    })
+
+
+@router.post("/config/env")
+async def save_env_vars(request: Request):
+    """Save API key environment variables to the .env file."""
+    _check_csrf(request)
+    body = await request.json()
+    env_updates: dict[str, str] = body.get("env_vars", {})
+
+    if not env_updates:
+        raise HTTPException(status_code=400, detail="No environment variables provided")
+
+    # Validate: only allow known api_key_env names from models
+    from ..config import load_config
+
+    config_path = request.app.state.config_path
+    try:
+        config = await asyncio.to_thread(
+            load_config, Path(config_path) if config_path else None
+        )
+    except Exception:
+        logging.exception("Failed to load configuration")
+        raise HTTPException(status_code=500, detail="Failed to load configuration")
+
+    allowed_env_names = _get_allowed_env_names(config)
+
+    # Input validation
+    key_regex = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+    for key, value in env_updates.items():
+        if key not in allowed_env_names:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown environment variable: {key}. Only model api_key_env values are allowed.",
+            )
+        if not key_regex.match(key):
+            raise HTTPException(status_code=400, detail=f"Invalid key name: {key}")
+        if any(c in value for c in "\r\n\0"):
+            raise HTTPException(status_code=400, detail=f"Invalid characters in value for {key}")
+        if len(value) > 4096:
+            raise HTTPException(status_code=400, detail=f"Value too long for {key}")
+
+    env_file_path = _get_env_file_path(request)
+
+    # Read existing content
+    existing_lines, _ = _read_env_file(env_file_path)
+
+    # Split into set vs unset
+    to_write: dict[str, str] = {}
+    to_unset: list[str] = []
+    for key, value in env_updates.items():
+        if value.strip():
+            to_write[key] = value
+            os.environ[key] = value
+        else:
+            to_unset.append(key)
+            os.environ.pop(key, None)
+
+    # Remove unset keys from existing lines
+    if to_unset:
+        unset_set = set(to_unset)
+        filtered: list[str] = []
+        for line in existing_lines:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                k, sep, _ = stripped.partition("=")
+                if sep and k in unset_set:
+                    continue
+            filtered.append(line)
+        existing_lines = filtered
+
+    if to_write:
+        try:
+            _write_env_file(env_file_path, existing_lines, to_write)
+        except (OSError, PermissionError):
+            logging.exception("Failed to save environment variables")
+            raise HTTPException(status_code=500, detail="Failed to write .env file. Check directory permissions.")
+    elif to_unset and existing_lines:
+        # Only removals — rewrite without the unset keys
+        content = "\n".join(existing_lines)
+        if not content.endswith("\n"):
+            content += "\n"
+        old_umask = os.umask(0o077)
+        try:
+            env_file_path.write_text(content)
+        finally:
+            os.umask(old_umask)
+        os.chmod(env_file_path, 0o600)
+
+    return JSONResponse({
+        "status": "ok",
+        "path": str(env_file_path),
+        "updated_keys": list(env_updates.keys()),
+    })

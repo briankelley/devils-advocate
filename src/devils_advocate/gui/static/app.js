@@ -52,6 +52,7 @@ const dvad = {
         this.initMaxTokenEditing();
         this.initThinkingToggle();
         this.initSettingsToggle();
+        this.initEnvKeys();
     },
 
     // ── New Review Form (Dashboard) ─────────────────────────────────
@@ -1075,6 +1076,133 @@ const dvad = {
                 }
             });
         });
+    },
+
+    // ── API Key Management ───────────────────────────────────────────
+
+    initEnvKeys() {
+        const section = document.getElementById('env-keys-section');
+        if (!section) return;
+
+        fetch('/api/config/env')
+            .then(resp => {
+                if (!resp.ok) {
+                    throw new Error(`HTTP error ${resp.status}`);
+                }
+                return resp.json();
+            })
+            .then(data => {
+                const list = document.getElementById('env-keys-list');
+                const actions = document.getElementById('env-keys-actions');
+                if (!list) return;
+
+                if (data.status === 'config_dir_unknown') {
+                    list.innerHTML = '<p class="dim">Config directory unknown.</p>';
+                    return;
+                }
+
+                if (!data.env_vars || data.env_vars.length === 0) {
+                    list.innerHTML = '<p class="dim">No API key variables configured in models.</p>';
+                    return;
+                }
+
+                list.innerHTML = '';
+                data.env_vars.forEach(ev => {
+                    if (!/^[A-Z_][A-Z0-9_]*$/.test(ev.env_name)) {
+                        return;
+                    }
+
+                    const row = document.createElement('div');
+                    row.className = 'env-key-row';
+
+                    const label = document.createElement('span');
+                    label.className = 'env-key-label';
+                    label.textContent = ev.env_name;
+                    row.appendChild(label);
+
+                    const input = document.createElement('input');
+                    input.type = 'password';
+                    input.className = 'env-key-input';
+                    input.dataset.envName = ev.env_name;
+                    input.placeholder = 'paste key here';
+                    input.autocomplete = 'off';
+                    row.appendChild(input);
+
+                    const badge = document.createElement('span');
+                    badge.id = `env-status-${ev.env_name}`;
+                    badge.className = `key-status ${ev.is_set ? 'key-set' : 'key-missing'}`;
+                    badge.textContent = ev.is_set ? 'set' : 'MISSING';
+                    row.appendChild(badge);
+
+                    list.appendChild(row);
+
+                    input.addEventListener('dblclick', () => {
+                        input.type = input.type === 'password' ? 'text' : 'password';
+                    });
+                });
+                if (actions) actions.style.display = '';
+            })
+            .catch(err => {
+                const list = document.getElementById('env-keys-list');
+                if (list) list.innerHTML = `<p class="dim">Failed to load: ${err.message}</p>`;
+            });
+    },
+
+    async saveEnvKeys() {
+        const inputs = document.querySelectorAll('.env-key-input');
+        if (!inputs.length) return;
+
+        const envVars = {};
+        inputs.forEach(input => {
+            const name = input.dataset.envName;
+            const value = input.value;
+            envVars[name] = value;
+        });
+
+        if (Object.keys(envVars).length === 0) {
+            const status = document.getElementById('env-save-status');
+            if (status) { status.textContent = 'No keys to save'; status.style.color = 'var(--yellow)'; }
+            return;
+        }
+
+        const status = document.getElementById('env-save-status');
+        if (status) { status.textContent = 'Saving...'; status.style.color = 'var(--text-dim)'; }
+
+        try {
+            const resp = await fetch('/api/config/env', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-DVAD-Token': this.getToken(),
+                },
+                body: JSON.stringify({ env_vars: envVars }),
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                if (status) {
+                    status.textContent = `Saved ${data.updated_keys.length} key(s) to ${data.path}`;
+                    status.style.color = 'var(--green)';
+                }
+                data.updated_keys.forEach(key => {
+                    const badge = document.getElementById('env-status-' + key);
+                    if (badge) {
+                        const isSet = envVars[key].trim() !== '';
+                        badge.textContent = isSet ? 'set' : 'MISSING';
+                        badge.className = `key-status ${isSet ? 'key-set' : 'key-missing'}`;
+                    }
+                });
+            } else {
+                if (status) {
+                    status.textContent = data.detail || 'Save failed';
+                    status.style.color = 'var(--red)';
+                }
+            }
+        } catch (err) {
+            if (status) {
+                status.textContent = 'Network error: ' + err.message;
+                status.style.color = 'var(--red)';
+            }
+        }
     },
 };
 

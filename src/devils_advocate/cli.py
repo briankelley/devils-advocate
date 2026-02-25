@@ -586,6 +586,26 @@ def gui_cmd(port, host, config_path, allow_nonlocal):
 
     import uvicorn
     app = create_app(config_path=config_path)
+
+    # Check for first-run / config issues
+    try:
+        from .config import load_config, get_config_health
+        config = load_config(Path(config_path) if config_path else None)
+        has_errors, error_summary = get_config_health(config)
+        if has_errors:
+            console.print(
+                f"[yellow]Setup incomplete[/yellow] — {error_summary}. "
+                f"Open http://{host}:{port}/config to configure models and API keys."
+            )
+    except FileNotFoundError:
+        console.print(
+            f"[yellow]First run detected[/yellow] — open http://{host}:{port}/config to set up your models."
+        )
+    except Exception as exc:
+        console.print(
+            f"[yellow]Configuration error[/yellow] — {exc}. Open http://{host}:{port}/config to fix."
+        )
+
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

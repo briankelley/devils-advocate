@@ -68,11 +68,16 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
 
     # Load role assignments for display (mirrors config page's Role Assignments table)
     role_assignments = []
+    has_config_errors = False
+    config_error_summary = ""
     try:
-        from ..config import load_config, get_models_by_role
+        from ..config import load_config, get_models_by_role, get_config_health
         config_path = request.app.state.config_path
         config = load_config(Path(config_path) if config_path else None)
         roles = get_models_by_role(config)
+
+        # Check for validation issues
+        has_config_errors, config_error_summary = get_config_health(config)
 
         def _role_entry(label, icon, model):
             return {
@@ -93,7 +98,8 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
             _role_entry("Integration", "puzzle", roles.get("integration")),
         ]
     except Exception:
-        pass
+        has_config_errors = True
+        config_error_summary = "Configuration could not be loaded"
 
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "dashboard.html", {
@@ -104,6 +110,8 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
         "show_test": show_test,
         "dvad_binary": dvad_binary,
         "role_assignments": role_assignments,
+        "has_config_errors": has_config_errors,
+        "config_error_summary": config_error_summary,
         "csrf_token": request.app.state.csrf_token,
     })
 

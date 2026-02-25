@@ -236,6 +236,21 @@ def validate_config(config: dict) -> list[tuple[str, str]]:
     return issues
 
 
+def get_config_health(config: dict) -> tuple[bool, str]:
+    """Check config for errors and return a human-readable summary.
+
+    Returns (has_errors, summary_string).  When has_errors is False the
+    summary is empty.
+    """
+    issues = validate_config(config)
+    errors = [msg for level, msg in issues if level == "error"]
+    if not errors:
+        return False, ""
+    if len(errors) == 1:
+        return True, errors[0]
+    return True, f"{len(errors)} configuration errors found"
+
+
 def get_models_by_role(config: dict) -> dict:
     """Extract models organized by their assigned role.
 

@@ -2,6 +2,17 @@
 {% block title %}Dashboard — dvad{% endblock %}
 {% block content %}
 
+{% if has_config_errors %}
+<div class="onboarding-banner">
+    <span class="onboarding-banner-icon"><i data-lucide="alert-triangle"></i></span>
+    <span class="onboarding-banner-text">
+        <strong>Setup incomplete</strong> — {{ config_error_summary }}.
+        Models and API keys must be configured before running reviews.
+    </span>
+    <a href="/config" class="btn btn-accent btn-sm">Open Settings</a>
+</div>
+{% endif %}
+
 {# ── Mode Selector Cards ───────────────────────────────────────────── #}
 <div class="mode-cards">
     <label class="mode-card mode-card--spec">

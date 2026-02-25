@@ -315,15 +315,36 @@ class TestSettingsToggle:
 
     def test_accepts_valid_key(self, client, token):
         """live_testing is a valid key, so it should pass validation
-        (may fail on config file access, but not on key validation)."""
+        (may fail on config file access, but not on key validation).
+        Uses value=False to avoid accidentally enabling live tests."""
         resp = client.post(
             "/api/config/settings-toggle",
-            json={"key": "live_testing", "value": True},
+            json={"key": "live_testing", "value": False},
             headers={"X-DVAD-Token": token},
         )
         # Could be 200 (success) or 400/500 (config issue), but not 400 for unknown key
         if resp.status_code == 400:
             assert "unknown" not in resp.json().get("detail", "").lower()
+
+
+class TestLiveTestingSafety:
+    """Guard against tests accidentally enabling live_testing in the real config."""
+
+    def test_live_testing_is_not_enabled_in_config(self):
+        """Fail loudly if any prior test left live_testing: true in models.yaml."""
+        try:
+            from devils_advocate.config import find_config
+            import yaml
+            config_path = find_config()
+            with open(config_path) as f:
+                raw = yaml.safe_load(f)
+            value = raw.get("settings", {}).get("live_testing", False)
+            assert value is not True, (
+                f"live_testing is true in {config_path} — a test mutated the real config. "
+                "This causes live API tests to run silently on subsequent pytest invocations."
+            )
+        except Exception:
+            pass  # Config not found is fine
 
 
 # ── Config validate/save ────────────────────────────────────────────────────

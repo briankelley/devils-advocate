@@ -101,6 +101,25 @@
         </div>
 
         <div class="config-panel">
+            <h2>API Keys</h2>
+            <div class="env-keys-section" id="env-keys-section">
+                <p class="dim" style="margin-bottom: var(--pad-sm);">
+                    Keys are saved to <span class="mono">{{ env_file_path }}</span>
+                    {% if env_file_exists %}
+                    <span class="key-status key-set">exists</span>
+                    {% else %}
+                    <span class="key-status key-missing">not created</span>
+                    {% endif %}
+                </p>
+                <div id="env-keys-list">
+                    <p class="dim">Loading...</p>
+                </div>
+                <div class="env-keys-actions" id="env-keys-actions" style="display:none; margin-top: var(--pad-sm);">
+                    <button class="btn btn-accent btn-sm" onclick="dvad.saveEnvKeys()">Save API Keys</button>
+                    <span id="env-save-status" class="dim" style="margin-left: var(--pad-sm);"></span>
+                </div>
+            </div>
+
             <h2>Validation</h2>
             <div class="validation-result" id="validation-result">
                 {% if issues %}

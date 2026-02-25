@@ -1073,3 +1073,63 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 
 .config-paths { line-height: 1.8; }
 .path-row { display: flex; gap: var(--pad-sm); }
+
+/* -- Onboarding Banner -------------------------------------------------- */
+
+.onboarding-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--pad-md);
+    padding: var(--pad-md) var(--pad-lg);
+    margin-bottom: var(--pad-lg);
+    background: #3d3828;
+    border: 1px solid var(--yellow);
+    border-radius: 3px;
+    font-size: 12px;
+}
+.onboarding-banner-icon {
+    flex-shrink: 0;
+    color: var(--yellow);
+    display: inline-flex;
+    align-items: center;
+}
+.onboarding-banner-icon svg { width: 18px; height: 18px; }
+.onboarding-banner-text { flex: 1; }
+.onboarding-banner-text strong { color: var(--yellow); }
+
+/* -- API Keys Section (Config) ------------------------------------------ */
+
+.env-keys-section {
+    margin-bottom: var(--pad-lg);
+}
+.env-key-row {
+    display: flex;
+    align-items: center;
+    gap: var(--pad-sm);
+    padding: var(--pad-xs) 0;
+    font-size: 11px;
+}
+.env-key-label {
+    font-family: var(--font-mono);
+    min-width: 180px;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 11px;
+}
+.env-key-input {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: var(--pad-xs) var(--pad-sm);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    width: 280px;
+}
+.env-key-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.env-key-input::placeholder {
+    color: var(--text-dim);
+}
