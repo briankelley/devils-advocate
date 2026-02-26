@@ -30,6 +30,12 @@ dev = [
     "respx>=0.21",
     "httpx>=0.27",
 ]
+e2e = [
+    "pytest-playwright>=0.5",
+    "playwright>=1.48",
+    "Pillow>=10.0",
+    "pixelmatch>=0.3",
+]
 
 [project.scripts]
 dvad = "devils_advocate.cli:cli"
@@ -38,6 +44,8 @@ dvad = "devils_advocate.cli:cli"
 asyncio_mode = "auto"
 markers = [
     "live: e2e tests that make real API calls (select with '-m live')",
+    "e2e: end-to-end Playwright GUI tests (select with '-m e2e')",
+    "e2e_live: E2E tests requiring local LLM (select with '-m e2e')",
 ]
 
 [tool.hatch.build.targets.wheel]

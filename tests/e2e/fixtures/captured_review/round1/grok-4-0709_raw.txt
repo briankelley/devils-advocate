@@ -1,0 +1,119 @@
+SUGGESTION 1:
+THEME: ux
+TITLE: Auto-focus next field on input
+DESCRIPTION: After entering a dimension (e.g., length), automatically focus the next field (width, then thickness) using keyboard "next" actions or on-text-change listeners, streamlining the rapid entry workflow for users calculating multiple boards quickly and reducing taps.
+CONTEXT: Relates to 3.10 activity_main.xml and 3.11 MainActivity.kt dimension inputs
+
+SUGGESTION 2:
+THEME: features
+TITLE: Unit conversion selector
+DESCRIPTION: Add a dropdown or toggle for dimension units (inches, feet, cm, mm) that auto-converts inputs to inches for the board foot formula, allowing users in different regions or with varied measurement preferences to input comfortably without manual conversions, enhancing global usability.
+CONTEXT: Relates to 3.11 MainActivity.kt calculate() logic
+
+SUGGESTION 3:
+THEME: integrations
+TITLE: Export totals to spreadsheet apps
+DESCRIPTION: Include a button to export the running total and individual calculations as a CSV file shareable via Android's share sheet (e.g., to Google Sheets or email), enabling users like contractors to integrate with their invoicing or inventory tools for seamless workflow continuation.
+CONTEXT: Relates to 3.11 MainActivity.kt totalBoardFeet and totalCost state
+
+SUGGESTION 4:
+THEME: accessibility
+TITLE: Screen reader optimized labels
+DESCRIPTION: Enhance TextInputLayout with content descriptions and hints that include unit expectations (e.g., "Enter length in inches"), ensuring screen readers announce full context for visually impaired users, improving inclusivity without altering the core layout.
+CONTEXT: Relates to 3.10 activity_main.xml input fields
+
+SUGGESTION 5:
+THEME: monetization
+TITLE: Premium ad-free version unlock
+DESCRIPTION: Offer an in-app purchase to remove non-intrusive banner ads (displayed below the total), providing a revenue stream while giving power users an uninterrupted experience, differentiating from free basic calculators.
+CONTEXT: General, as a new area for app sustainability
+
+SUGGESTION 6:
+THEME: data_model
+TITLE: Support fractional input parsing
+DESCRIPTION: Extend dimension parsing to handle fractional inputs like "1 1/2" or "1.5" interchangeably, storing them as decimals in the model, which accommodates users accustomed to carpentry notations and reduces entry errors.
+CONTEXT: Relates to 3.11 MainActivity.kt parse logic for dimensions
+
+SUGGESTION 7:
+THEME: social
+TITLE: Share calculation snapshot
+DESCRIPTION: Add a share button that generates a formatted text or image snapshot of the current result and total (e.g., "Board Foot Calc: 12x6x1 = 0.5 bf @ $5 = $2.50"), shareable via social apps like WhatsApp or Twitter, fostering community discussions among woodworkers.
+CONTEXT: Relates to 3.11 MainActivity.kt result and total displays
+
+SUGGESTION 8:
+THEME: platform
+TITLE: Companion web version integration
+DESCRIPTION: Design for future web export of the calculation logic via Kotlin Multiplatform, allowing users to access the same calculator on desktop browsers with sync via QR code scan, extending usability for office-based planning.
+CONTEXT: General, building on the Android-focused structure in section 2
+
+SUGGESTION 9:
+THEME: security_privacy
+TITLE: Optional local encryption for totals
+DESCRIPTION: If users enable a "save session" feature, encrypt the totalBoardFeet and totalCost using Android Keystore before storing in SharedPreferences, protecting sensitive cost data for professionals without cloud risks.
+CONTEXT: Relates to 3.11 MainActivity.kt state, extending the no-persistence decision
+
+SUGGESTION 10:
+THEME: onboarding
+TITLE: First-launch interactive tutorial
+DESCRIPTION: On first app open, overlay tooltips guiding through entering price, dimensions, and calculating, with a "Got it" button to dismiss, helping new users (e.g., hobbyists) quickly understand the workflow and reduce initial friction.
+CONTEXT: Relates to 3.11 MainActivity.kt onCreate
+
+SUGGESTION 11:
+THEME: ux
+TITLE: Dark mode theme toggle
+DESCRIPTION: Add a settings toggle for dark mode using Material3 dynamic theming, automatically adapting colors.xml for low-light environments, improving eye comfort for users working in workshops or evenings.
+CONTEXT: Relates to 3.9 themes.xml and 3.8 colors.xml
+
+SUGGESTION 12:
+THEME: features
+TITLE: Preset lumber size buttons
+DESCRIPTION: Include quick-select buttons for common sizes (e.g., 2x4, 1x6) that auto-fill dimensions, speeding up repetitive calculations for standard boards and adding convenience for frequent users like builders.
+CONTEXT: Relates to 3.10 activity_main.xml dimensions row
+
+SUGGESTION 13:
+THEME: integrations
+TITLE: Live lumber price API fetch
+DESCRIPTION: Integrate with a public API (e.g., for current wood prices) to auto-populate or suggest the price field based on wood type selection, providing real-time market insights and saving users research time.
+CONTEXT: Relates to 3.10 activity_main.xml price input
+
+SUGGESTION 14:
+THEME: performance_ux
+TITLE: Real-time calculation preview
+DESCRIPTION: As users type dimensions, show a live preview of board feet and cost below the inputs (debounced for smoothness), eliminating the need for the calculate button in simple cases and offering instant feedback for iterative adjustments.
+CONTEXT: Relates to 3.11 MainActivity.kt calculate() function
+
+SUGGESTION 15:
+THEME: content
+TITLE: Educational board foot explainer
+DESCRIPTION: Add an info icon linking to a dialog explaining the board foot formula and examples (e.g., "A board foot is 144 cubic inches of wood"), enriching the app with value for beginners and positioning it as an educational tool.
+CONTEXT: General, as a new content layer atop the core logic
+
+SUGGESTION 16:
+THEME: monetization
+TITLE: Subscription for project saving
+DESCRIPTION: Introduce a monthly subscription to save and load multiple "projects" (grouped calculations with names like "Deck Build"), allowing users to resume work across sessions, creating recurring revenue from professional users.
+CONTEXT: Relates to 3.11 MainActivity.kt state, extending no-persistence
+
+SUGGESTION 17:
+THEME: accessibility
+TITLE: Voice command input support
+DESCRIPTION: Integrate Android's speech-to-text for dictating dimensions and price (e.g., "length twelve width six thickness one"), making the app hands-free for users in workshops where typing is impractical.
+CONTEXT: Relates to 3.10 activity_main.xml input fields
+
+SUGGESTION 18:
+THEME: other
+TITLE: Multi-language localization
+DESCRIPTION: Expand strings.xml with translations for key languages (e.g., Spanish, French) and adapt formats for regional number separators, broadening appeal to international users in the woodworking community.
+CONTEXT: Relates to 3.7 strings.xml
+
+SUGGESTION 19:
+THEME: ux
+TITLE: Undo last calculation button
+DESCRIPTION: Add an "Undo" button that subtracts the most recent board feet and cost from totals and restores dimension fields, helping users correct mistakes in multi-entry sessions without full clear.
+CONTEXT: Relates to 3.11 MainActivity.kt calculate() and clearAll()
+
+SUGGESTION 20:
+THEME: features
+TITLE: Waste factor adjustment slider
+DESCRIPTION: Include a slider to apply a waste percentage (e.g., +10% for cuts), automatically adjusting totals, which helps users plan for real-world material losses and provides more accurate project estimates.
+CONTEXT: Relates to 3.11 MainActivity.kt total accumulation

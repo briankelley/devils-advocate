@@ -1,0 +1,1024 @@
+{
+  "points": [
+    {
+      "point_id": "board-foot.group_001.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "ux",
+      "description": "Auto-focus next field on input: After entering a dimension (e.g., length), automatically focus the next field (width, then thickness) using keyboard \"next\" actions or on-text-change listeners, streamlining the rapid entry workflow for users calculating multiple boards quickly and reducing taps.",
+      "recommendation": "",
+      "location": "Relates to 3.10 activity_main.xml and 3.11 MainActivity.kt dimension inputs"
+    },
+    {
+      "point_id": "board-foot.group_002.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "features",
+      "description": "Unit conversion selector: Add a dropdown or toggle for dimension units (inches, feet, cm, mm) that auto-converts inputs to inches for the board foot formula, allowing users in different regions or with varied measurement preferences to input comfortably without manual conversions, enhancing global usability.",
+      "recommendation": "",
+      "location": "Relates to 3.11 MainActivity.kt calculate() logic"
+    },
+    {
+      "point_id": "board-foot.group_003.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "integrations",
+      "description": "Export totals to spreadsheet apps: Include a button to export the running total and individual calculations as a CSV file shareable via Android's share sheet (e.g., to Google Sheets or email), enabling users like contractors to integrate with their invoicing or inventory tools for seamless workflow continuation.",
+      "recommendation": "",
+      "location": "Relates to 3.11 MainActivity.kt totalBoardFeet and totalCost state"
+    },
+    {
+      "point_id": "board-foot.group_004.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "accessibility",
+      "description": "Screen reader optimized labels: Enhance TextInputLayout with content descriptions and hints that include unit expectations (e.g., \"Enter length in inches\"), ensuring screen readers announce full context for visually impaired users, improving inclusivity without altering the core layout.",
+      "recommendation": "",
+      "location": "Relates to 3.10 activity_main.xml input fields"
+    },
+    {
+      "point_id": "board-foot.group_005.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "monetization",
+      "description": "Premium ad-free version unlock: Offer an in-app purchase to remove non-intrusive banner ads (displayed below the total), providing a revenue stream while giving power users an uninterrupted experience, differentiating from free basic calculators.",
+      "recommendation": "",
+      "location": "General, as a new area for app sustainability"
+    },
+    {
+      "point_id": "board-foot.group_006.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "data_model",
+      "description": "Support fractional input parsing: Extend dimension parsing to handle fractional inputs like \"1 1/2\" or \"1.5\" interchangeably, storing them as decimals in the model, which accommodates users accustomed to carpentry notations and reduces entry errors.",
+      "recommendation": "",
+      "location": "Relates to 3.11 MainActivity.kt parse logic for dimensions"
+    },
+    {
+      "point_id": "board-foot.group_007.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "social",
+      "description": "Share calculation snapshot: Add a share button that generates a formatted text or image snapshot of the current result and total (e.g., \"Board Foot Calc: 12x6x1 = 0.5 bf @ $5 = $2.50\"), shareable via social apps like WhatsApp or Twitter, fostering community discussions among woodworkers.",
+      "recommendation": "",
+      "location": "Relates to 3.11 MainActivity.kt result and total displays"
+    },
+    {
+      "point_id": "board-foot.group_008.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "platform",
+      "description": "Companion web version integration: Design for future web export of the calculation logic via Kotlin Multiplatform, allowing users to access the same calculator on desktop browsers with sync via QR code scan, extending usability for office-based planning.",
+      "recommendation": "",
+      "location": "General, building on the Android-focused structure in section 2"
+    },
+    {
+      "point_id": "board-foot.group_009.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "security_privacy",
+      "description": "Optional local encryption for totals: If users enable a \"save session\" feature, encrypt the totalBoardFeet and totalCost using Android Keystore before storing in SharedPreferences, protecting sensitive cost data for professionals without cloud risks.",
+      "recommendation": "",
+      "location": "Relates to 3.11 MainActivity.kt state, extending the no-persistence decision"
+    },
+    {
+      "point_id": "board-foot.group_010.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "onboarding",
+      "description": "First-launch interactive tutorial: On first app open, overlay tooltips guiding through entering price, dimensions, and calculating, with a \"Got it\" button to dismiss, helping new users (e.g., hobbyists) quickly understand the workflow and reduce initial friction.",
+      "recommendation": "",
+      "location": "Relates to 3.11 MainActivity.kt onCreate"
+    },
+    {
+      "point_id": "board-foot.group_011.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "ux",
+      "description": "Dark mode theme toggle: Add a settings toggle for dark mode using Material3 dynamic theming, automatically adapting colors.xml for low-light environments, improving eye comfort for users working in workshops or evenings.",
+      "recommendation": "",
+      "location": "Relates to 3.9 themes.xml and 3.8 colors.xml"
+    },
+    {
+      "point_id": "board-foot.group_012.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "features",
+      "description": "Preset lumber size buttons: Include quick-select buttons for common sizes (e.g., 2x4, 1x6) that auto-fill dimensions, speeding up repetitive calculations for standard boards and adding convenience for frequent users like builders.",
+      "recommendation": "",
+      "location": "Relates to 3.10 activity_main.xml dimensions row"
+    },
+    {
+      "point_id": "board-foot.group_013.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "integrations",
+      "description": "Live lumber price API fetch: Integrate with a public API (e.g., for current wood prices) to auto-populate or suggest the price field based on wood type selection, providing real-time market insights and saving users research time.",
+      "recommendation": "",
+      "location": "Relates to 3.10 activity_main.xml price input"
+    },
+    {
+      "point_id": "board-foot.group_014.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "performance_ux",
+      "description": "Real-time calculation preview: As users type dimensions, show a live preview of board feet and cost below the inputs (debounced for smoothness), eliminating the need for the calculate button in simple cases and offering instant feedback for iterative adjustments.",
+      "recommendation": "",
+      "location": "Relates to 3.11 MainActivity.kt calculate() function"
+    },
+    {
+      "point_id": "board-foot.group_015.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "content",
+      "description": "Educational board foot explainer: Add an info icon linking to a dialog explaining the board foot formula and examples (e.g., \"A board foot is 144 cubic inches of wood\"), enriching the app with value for beginners and positioning it as an educational tool.",
+      "recommendation": "",
+      "location": "General, as a new content layer atop the core logic"
+    },
+    {
+      "point_id": "board-foot.group_016.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "monetization",
+      "description": "Subscription for project saving: Introduce a monthly subscription to save and load multiple \"projects\" (grouped calculations with names like \"Deck Build\"), allowing users to resume work across sessions, creating recurring revenue from professional users.",
+      "recommendation": "",
+      "location": "Relates to 3.11 MainActivity.kt state, extending no-persistence"
+    },
+    {
+      "point_id": "board-foot.group_017.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "accessibility",
+      "description": "Voice command input support: Integrate Android's speech-to-text for dictating dimensions and price (e.g., \"length twelve width six thickness one\"), making the app hands-free for users in workshops where typing is impractical.",
+      "recommendation": "",
+      "location": "Relates to 3.10 activity_main.xml input fields"
+    },
+    {
+      "point_id": "board-foot.group_018.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "other",
+      "description": "Multi-language localization: Expand strings.xml with translations for key languages (e.g., Spanish, French) and adapt formats for regional number separators, broadening appeal to international users in the woodworking community.",
+      "recommendation": "",
+      "location": "Relates to 3.7 strings.xml"
+    },
+    {
+      "point_id": "board-foot.group_019.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "ux",
+      "description": "Undo last calculation button: Add an \"Undo\" button that subtracts the most recent board feet and cost from totals and restores dimension fields, helping users correct mistakes in multi-entry sessions without full clear.",
+      "recommendation": "",
+      "location": "Relates to 3.11 MainActivity.kt calculate() and clearAll()"
+    },
+    {
+      "point_id": "board-foot.group_020.25FEB2026.2109.a14t.point_001",
+      "reviewer": "grok-4-0709",
+      "severity": "info",
+      "category": "features",
+      "description": "Waste factor adjustment slider: Include a slider to apply a waste percentage (e.g., +10% for cuts), automatically adjusting totals, which helps users plan for real-world material losses and provides more accurate project estimates.",
+      "recommendation": "",
+      "location": "Relates to 3.11 MainActivity.kt total accumulation"
+    },
+    {
+      "point_id": "board-foot.group_002.25FEB2026.2109.a14t.point_002",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "ux",
+      "description": "Add unit selectors with common presets: Add a compact unit selector for dimensions (inches, feet+inches, millimeters) and price basis (per board foot, per cubic foot/meter, per piece). Users often think in different units depending on region and lumber type; unit switching reduces mental math and expands appeal without changing the core workflow.",
+      "recommendation": "",
+      "location": "activity_main.xml inputs + MainActivity.calculate()"
+    },
+    {
+      "point_id": "board-foot.group_002.25FEB2026.2109.a14t.point_003",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "ux",
+      "description": "Support feet-and-inches entry mode: Provide an optional input mode for length/width/thickness like `8' 6 1/2\"` or separate fields (feet + inches). Woodworking contexts commonly use imperial fractional measurements; supporting this directly reduces errors and speeds entry.",
+      "recommendation": "",
+      "location": "Dimensions row + parsing in MainActivity.calculate()"
+    },
+    {
+      "point_id": "board-foot.group_021.25FEB2026.2109.a14t.point_001",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "features",
+      "description": "Quantity multiplier per line item: Add a Quantity field (default 1) so users can price multiple identical boards in one calculation. This is a highly common workflow (e.g., \u201c8 boards at 96 x 6 x 1\u201d) and complements the running total behavior.",
+      "recommendation": "",
+      "location": "activity_main.xml + MainActivity.calculate() accumulation"
+    },
+    {
+      "point_id": "board-foot.group_006.25FEB2026.2109.a14t.point_002",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "content",
+      "description": "Add fractional inch quick-pick chips: Offer optional chips/buttons for common fractions (1/8, 1/4, 3/8, 1/2, 5/8, 3/4) that append to the current dimension field or set thickness quickly. This matches workshop reality where thickness is frequently a standard fraction, reducing typing friction.",
+      "recommendation": "",
+      "location": "Dimensions inputs UI (especially thickness)"
+    },
+    {
+      "point_id": "board-foot.group_022.25FEB2026.2109.a14t.point_001",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "ux",
+      "description": "Inline validation and field-level errors: Instead of only toasts, show inline errors on the specific TextInputLayouts (e.g., \u201cRequired\u201d, \u201cMust be > 0\u201d) and clear them when corrected. This improves clarity, reduces repetitive toast dismissal, and makes the \u201cwhat went wrong\u201d visually obvious.",
+      "recommendation": "",
+      "location": "Validation flow in MainActivity.calculate() + TextInputLayout usage"
+    },
+    {
+      "point_id": "board-foot.group_020.25FEB2026.2109.a14t.point_002",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "features",
+      "description": "Add tax, waste, and discount toggles: Add optional adjustments: sales tax %, waste/overage % (e.g., +10% for defects), and discount % (e.g., contractor pricing). Lumber purchasing frequently includes these factors; exposing them as simple toggles makes totals more \u201creal-world accurate\u201d while keeping defaults off for simplicity.",
+      "recommendation": "",
+      "location": "Totals section + calculation logic"
+    },
+    {
+      "point_id": "board-foot.group_023.25FEB2026.2109.a14t.point_001",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "data_model",
+      "description": "Line-item list with undo/remove: Introduce a simple list of calculated line items (each with dimensions, quantity, bf, cost) beneath the result, with swipe-to-delete and a one-tap Undo snackbar. Running totals become auditable and correctable, which is valuable when entering many boards quickly.",
+      "recommendation": "",
+      "location": "Result/Total area and accumulation model (from pure totals to line items)"
+    },
+    {
+      "point_id": "board-foot.group_024.25FEB2026.2109.a14t.point_001",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "ux",
+      "description": "Quick \u201cRepeat last dimensions\u201d action: Provide a button/icon to reuse the last entered dimensions (and quantity) without retyping, useful when measuring similar boards that only differ slightly or when you accidentally cleared too early. This supports fast repetitive workflows.",
+      "recommendation": "",
+      "location": "After-calculate behavior (dimensions auto-clear)"
+    },
+    {
+      "point_id": "board-foot.group_014.25FEB2026.2109.a14t.point_002",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "performance_ux",
+      "description": "Calculate-as-you-type optional mode: Add a toggle that continuously shows computed board feet and cost as fields are filled (with graceful handling of partial inputs). For many users, immediate feedback reduces taps and makes the app feel more like a \u201ccalculator\u201d than a \u201cform + submit.\u201d",
+      "recommendation": "",
+      "location": "Calculate button flow vs real-time updates"
+    },
+    {
+      "point_id": "board-foot.group_004.25FEB2026.2109.a14t.point_002",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "accessibility",
+      "description": "Improve keyboard navigation and IME actions: Set explicit IME actions (Next/Done), move focus predictably across fields, and ensure TalkBack labels read well (e.g., \u201cThickness in inches\u201d). Also consider larger tap targets and a high-contrast theme option for shop environments with glare/dust.",
+      "recommendation": "",
+      "location": "TextInputEditText configuration + overall theme"
+    },
+    {
+      "point_id": "board-foot.group_007.25FEB2026.2109.a14t.point_002",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "ux",
+      "description": "Add copy/share of result and totals: Provide \u201cCopy\u201d and \u201cShare\u201d actions that export the last result and/or the running total in a clean text format (dimensions, bf, cost, price, adjustments). Users often need to message totals to a customer or keep notes for later.",
+      "recommendation": "",
+      "location": "Result text + Total text area"
+    },
+    {
+      "point_id": "board-foot.group_003.25FEB2026.2109.a14t.point_002",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "integrations",
+      "description": "Export line items to CSV/PDF: Add an export option that generates CSV (for spreadsheets) and/or a simple PDF \u201ccut list / purchase list\u201d including date, supplier, price, and line items. This differentiates from basic calculators and fits contractor/pro workflows.",
+      "recommendation": "",
+      "location": "General (new capability building on calculations)"
+    },
+    {
+      "point_id": "board-foot.group_025.25FEB2026.2109.a14t.point_001",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "data_model",
+      "description": "Save named price presets per species/supplier: Let users save multiple named price presets (e.g., \u201cWalnut S4S $12.50/bf\u201d, \u201cPine rough $3.25/bf\u201d) and switch quickly. Real pricing varies by wood species, grade, and supplier; presets reduce repetitive entry and errors.",
+      "recommendation": "",
+      "location": "Price input + state management"
+    },
+    {
+      "point_id": "board-foot.group_010.25FEB2026.2109.a14t.point_002",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "onboarding",
+      "description": "Add first-run sample and guidance: On first launch, prefill example values (or show a short \u201cHow to measure\u201d tip) and explain what board feet means with a one-screen primer. This helps novices adopt the app without searching externally, increasing retention.",
+      "recommendation": "",
+      "location": "General (new first-run UX around the existing single screen)"
+    },
+    {
+      "point_id": "board-foot.group_005.25FEB2026.2109.a14t.point_002",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "monetization",
+      "description": "Pro tier for exports and presets: Keep the core calculator free, and offer a paid upgrade unlocking advanced features like exports, unlimited presets, saved projects, and branded PDF invoices. This aligns monetization with \u201cpower-user\u201d value while preserving the simple baseline experience.",
+      "recommendation": "",
+      "location": "General (business model extension)"
+    },
+    {
+      "point_id": "board-foot.group_009.25FEB2026.2109.a14t.point_002",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "security_privacy",
+      "description": "Privacy-first stance with optional local backups: Since the spec emphasizes no persistence, consider an explicit privacy statement (\u201cNo network access; data stays on device\u201d) and an optional user-initiated local backup/export file for saved presets/projects. This builds trust while keeping users in control.",
+      "recommendation": "",
+      "location": "Manifest decisions + any future saved data"
+    },
+    {
+      "point_id": "board-foot.group_026.25FEB2026.2109.a14t.point_001",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "platform",
+      "description": "Add home screen widget for quick entry: Provide a lightweight widget where users can enter L/W/T and see board feet instantly, optionally with price. Woodworkers may want quick access without opening the full app, especially in a shop setting with gloves or limited time.",
+      "recommendation": "",
+      "location": "General (Android platform enhancement)"
+    },
+    {
+      "point_id": "board-foot.group_027.25FEB2026.2109.a14t.point_001",
+      "reviewer": "gpt-5.2",
+      "severity": "info",
+      "category": "social",
+      "description": "Community \u201ccommon dimensions\u201d templates: Offer optional templates like \u201c2x4 nominal vs actual,\u201d \u201cdeck boards,\u201d \u201cturning blanks,\u201d etc., that populate fields with typical actual dimensions. This reduces measurement confusion and can become a differentiator via curated domain knowledge.",
+      "recommendation": "",
+      "location": "General (new helper content + presets around dimension entry)"
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "board-foot.group_001.25FEB2026.2109.a14t",
+      "concern": "Auto-Focus Next Field on Input: Automatically focus the next input field (e.g., from length to width to thickness) after entry using keyboard \"next\" actions or on-text-change listeners, streamlining rapid entry workflow for users calculating multiple boards quickly.",
+      "points": [
+        {
+          "point_id": "board-foot.group_001.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "ux",
+          "description": "Auto-focus next field on input: After entering a dimension (e.g., length), automatically focus the next field (width, then thickness) using keyboard \"next\" actions or on-text-change listeners, streamlining the rapid entry workflow for users calculating multiple boards quickly and reducing taps.",
+          "recommendation": "",
+          "location": "Relates to 3.10 activity_main.xml and 3.11 MainActivity.kt dimension inputs"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "ux",
+      "source_reviewers": [
+        "grok-4-0709"
+      ],
+      "guid": "8f5b5366-36a1-40de-88e6-ba177900c6f9"
+    },
+    {
+      "group_id": "board-foot.group_002.25FEB2026.2109.a14t",
+      "concern": "Unit Conversion and Selection: Add unit selectors with common presets for dimensions (inches, feet+inches, mm) and price basis (per board foot, per cubic foot/meter, per piece). Also support feet-and-inches entry mode (e.g., 8' 6 1/2\") and fractional inputs to reduce mental math and accommodate different regional measurement preferences.",
+      "points": [
+        {
+          "point_id": "board-foot.group_002.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "features",
+          "description": "Unit conversion selector: Add a dropdown or toggle for dimension units (inches, feet, cm, mm) that auto-converts inputs to inches for the board foot formula, allowing users in different regions or with varied measurement preferences to input comfortably without manual conversions, enhancing global usability.",
+          "recommendation": "",
+          "location": "Relates to 3.11 MainActivity.kt calculate() logic"
+        },
+        {
+          "point_id": "board-foot.group_002.25FEB2026.2109.a14t.point_002",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "ux",
+          "description": "Add unit selectors with common presets: Add a compact unit selector for dimensions (inches, feet+inches, millimeters) and price basis (per board foot, per cubic foot/meter, per piece). Users often think in different units depending on region and lumber type; unit switching reduces mental math and expands appeal without changing the core workflow.",
+          "recommendation": "",
+          "location": "activity_main.xml inputs + MainActivity.calculate()"
+        },
+        {
+          "point_id": "board-foot.group_002.25FEB2026.2109.a14t.point_003",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "ux",
+          "description": "Support feet-and-inches entry mode: Provide an optional input mode for length/width/thickness like `8' 6 1/2\"` or separate fields (feet + inches). Woodworking contexts commonly use imperial fractional measurements; supporting this directly reduces errors and speeds entry.",
+          "recommendation": "",
+          "location": "Dimensions row + parsing in MainActivity.calculate()"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "features",
+      "source_reviewers": [
+        "grok-4-0709",
+        "gpt-5.2"
+      ],
+      "guid": "79fcee8a-5a8b-4d3a-b468-41f51f4e28ab"
+    },
+    {
+      "group_id": "board-foot.group_003.25FEB2026.2109.a14t",
+      "concern": "Export Data to Spreadsheet/CSV: Include a button to export running totals and individual calculations as a CSV file shareable via Android's share sheet (e.g., to Google Sheets or email). Optionally generate PDF \"cut lists\" with line items, dates, and supplier info for contractor workflows.",
+      "points": [
+        {
+          "point_id": "board-foot.group_003.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "integrations",
+          "description": "Export totals to spreadsheet apps: Include a button to export the running total and individual calculations as a CSV file shareable via Android's share sheet (e.g., to Google Sheets or email), enabling users like contractors to integrate with their invoicing or inventory tools for seamless workflow continuation.",
+          "recommendation": "",
+          "location": "Relates to 3.11 MainActivity.kt totalBoardFeet and totalCost state"
+        },
+        {
+          "point_id": "board-foot.group_003.25FEB2026.2109.a14t.point_002",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "integrations",
+          "description": "Export line items to CSV/PDF: Add an export option that generates CSV (for spreadsheets) and/or a simple PDF \u201ccut list / purchase list\u201d including date, supplier, price, and line items. This differentiates from basic calculators and fits contractor/pro workflows.",
+          "recommendation": "",
+          "location": "General (new capability building on calculations)"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "integrations",
+      "source_reviewers": [
+        "grok-4-0709",
+        "gpt-5.2"
+      ],
+      "guid": "00b843b1-e0ba-4a52-8a20-d028737701cc"
+    },
+    {
+      "group_id": "board-foot.group_004.25FEB2026.2109.a14t",
+      "concern": "Screen Reader and Keyboard Navigation Optimization: Enhance accessibility with content descriptions and hints that include unit expectations (e.g., \"Enter length in inches\"), set explicit IME actions (Next/Done), move focus predictably across fields, ensure TalkBack labels read well, and consider larger tap targets and high-contrast themes for shop environments.",
+      "points": [
+        {
+          "point_id": "board-foot.group_004.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "accessibility",
+          "description": "Screen reader optimized labels: Enhance TextInputLayout with content descriptions and hints that include unit expectations (e.g., \"Enter length in inches\"), ensuring screen readers announce full context for visually impaired users, improving inclusivity without altering the core layout.",
+          "recommendation": "",
+          "location": "Relates to 3.10 activity_main.xml input fields"
+        },
+        {
+          "point_id": "board-foot.group_004.25FEB2026.2109.a14t.point_002",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "accessibility",
+          "description": "Improve keyboard navigation and IME actions: Set explicit IME actions (Next/Done), move focus predictably across fields, and ensure TalkBack labels read well (e.g., \u201cThickness in inches\u201d). Also consider larger tap targets and a high-contrast theme option for shop environments with glare/dust.",
+          "recommendation": "",
+          "location": "TextInputEditText configuration + overall theme"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "accessibility",
+      "source_reviewers": [
+        "grok-4-0709",
+        "gpt-5.2"
+      ],
+      "guid": "be085c52-8bb7-499a-8d0b-7e05edd329cb"
+    },
+    {
+      "group_id": "board-foot.group_005.25FEB2026.2109.a14t",
+      "concern": "Premium Ad-Free Version and Pro Tier: Offer an in-app purchase to remove non-intrusive banner ads, and provide a paid Pro tier unlocking advanced features like exports, unlimited presets, saved projects, and branded PDF invoices. This differentiates power users from the free basic calculator while creating revenue streams.",
+      "points": [
+        {
+          "point_id": "board-foot.group_005.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "monetization",
+          "description": "Premium ad-free version unlock: Offer an in-app purchase to remove non-intrusive banner ads (displayed below the total), providing a revenue stream while giving power users an uninterrupted experience, differentiating from free basic calculators.",
+          "recommendation": "",
+          "location": "General, as a new area for app sustainability"
+        },
+        {
+          "point_id": "board-foot.group_005.25FEB2026.2109.a14t.point_002",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "monetization",
+          "description": "Pro tier for exports and presets: Keep the core calculator free, and offer a paid upgrade unlocking advanced features like exports, unlimited presets, saved projects, and branded PDF invoices. This aligns monetization with \u201cpower-user\u201d value while preserving the simple baseline experience.",
+          "recommendation": "",
+          "location": "General (business model extension)"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "monetization",
+      "source_reviewers": [
+        "grok-4-0709",
+        "gpt-5.2"
+      ],
+      "guid": "a6eb3e64-5ceb-4682-8348-39964b68132d"
+    },
+    {
+      "group_id": "board-foot.group_006.25FEB2026.2109.a14t",
+      "concern": "Fractional Input Parsing and Quick-Pick Chips: Extend dimension parsing to handle fractional inputs like \"1 1/2\" or \"1.5\" interchangeably, storing them as decimals in the model. Additionally offer optional chips/buttons for common fractions (1/8, 1/4, 3/8, 1/2, 5/8, 3/4) that append to the current dimension field, reducing typing friction for users accustomed to carpentry notations.",
+      "points": [
+        {
+          "point_id": "board-foot.group_006.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "data_model",
+          "description": "Support fractional input parsing: Extend dimension parsing to handle fractional inputs like \"1 1/2\" or \"1.5\" interchangeably, storing them as decimals in the model, which accommodates users accustomed to carpentry notations and reduces entry errors.",
+          "recommendation": "",
+          "location": "Relates to 3.11 MainActivity.kt parse logic for dimensions"
+        },
+        {
+          "point_id": "board-foot.group_006.25FEB2026.2109.a14t.point_002",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "content",
+          "description": "Add fractional inch quick-pick chips: Offer optional chips/buttons for common fractions (1/8, 1/4, 3/8, 1/2, 5/8, 3/4) that append to the current dimension field or set thickness quickly. This matches workshop reality where thickness is frequently a standard fraction, reducing typing friction.",
+          "recommendation": "",
+          "location": "Dimensions inputs UI (especially thickness)"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "data_model",
+      "source_reviewers": [
+        "grok-4-0709",
+        "gpt-5.2"
+      ],
+      "guid": "6c3df1ad-50dd-4ba0-9121-060ab7d0eed0"
+    },
+    {
+      "group_id": "board-foot.group_007.25FEB2026.2109.a14t",
+      "concern": "Share Calculation Snapshot: Add share functionality that generates a formatted text or image snapshot of results and totals (e.g., \"Board Foot Calc: 12x6x1 = 0.5 bf @ $5 = $2.50\"), shareable via social apps like WhatsApp, Twitter, or messaging. Also provide copy functionality for clean text export.",
+      "points": [
+        {
+          "point_id": "board-foot.group_007.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "social",
+          "description": "Share calculation snapshot: Add a share button that generates a formatted text or image snapshot of the current result and total (e.g., \"Board Foot Calc: 12x6x1 = 0.5 bf @ $5 = $2.50\"), shareable via social apps like WhatsApp or Twitter, fostering community discussions among woodworkers.",
+          "recommendation": "",
+          "location": "Relates to 3.11 MainActivity.kt result and total displays"
+        },
+        {
+          "point_id": "board-foot.group_007.25FEB2026.2109.a14t.point_002",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "ux",
+          "description": "Add copy/share of result and totals: Provide \u201cCopy\u201d and \u201cShare\u201d actions that export the last result and/or the running total in a clean text format (dimensions, bf, cost, price, adjustments). Users often need to message totals to a customer or keep notes for later.",
+          "recommendation": "",
+          "location": "Result text + Total text area"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "social",
+      "source_reviewers": [
+        "grok-4-0709",
+        "gpt-5.2"
+      ],
+      "guid": "9cf2d9b0-2274-4ee7-894f-bc14348fd5bd"
+    },
+    {
+      "group_id": "board-foot.group_008.25FEB2026.2109.a14t",
+      "concern": "Companion Web Version Integration: Design for future web export of calculation logic via Kotlin Multiplatform, allowing users to access the same calculator on desktop browsers with sync via QR code scan, extending usability for office-based planning.",
+      "points": [
+        {
+          "point_id": "board-foot.group_008.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "platform",
+          "description": "Companion web version integration: Design for future web export of the calculation logic via Kotlin Multiplatform, allowing users to access the same calculator on desktop browsers with sync via QR code scan, extending usability for office-based planning.",
+          "recommendation": "",
+          "location": "General, building on the Android-focused structure in section 2"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "platform",
+      "source_reviewers": [
+        "grok-4-0709"
+      ],
+      "guid": "5a72e146-faf9-45b2-bd4c-df547dabd3a6"
+    },
+    {
+      "group_id": "board-foot.group_009.25FEB2026.2109.a14t",
+      "concern": "Optional Local Encryption for Totals: If users enable a \"save session\" feature, encrypt the totalBoardFeet and totalCost using Android Keystore before storing in SharedPreferences, protecting sensitive cost data for professionals without cloud risks. Also include an explicit privacy statement (\"No network access; data stays on device\") and optional user-initiated local backup/export file.",
+      "points": [
+        {
+          "point_id": "board-foot.group_009.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "security_privacy",
+          "description": "Optional local encryption for totals: If users enable a \"save session\" feature, encrypt the totalBoardFeet and totalCost using Android Keystore before storing in SharedPreferences, protecting sensitive cost data for professionals without cloud risks.",
+          "recommendation": "",
+          "location": "Relates to 3.11 MainActivity.kt state, extending the no-persistence decision"
+        },
+        {
+          "point_id": "board-foot.group_009.25FEB2026.2109.a14t.point_002",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "security_privacy",
+          "description": "Privacy-first stance with optional local backups: Since the spec emphasizes no persistence, consider an explicit privacy statement (\u201cNo network access; data stays on device\u201d) and an optional user-initiated local backup/export file for saved presets/projects. This builds trust while keeping users in control.",
+          "recommendation": "",
+          "location": "Manifest decisions + any future saved data"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "security_privacy",
+      "source_reviewers": [
+        "grok-4-0709",
+        "gpt-5.2"
+      ],
+      "guid": "62ab2f8b-dc7f-4a67-a7ff-aa1094dab3a5"
+    },
+    {
+      "group_id": "board-foot.group_010.25FEB2026.2109.a14t",
+      "concern": "First-Launch Interactive Tutorial and Guidance: On first app open, overlay tooltips guiding through entering price, dimensions, and calculating with a \"Got it\" button to dismiss. Additionally, prefill example values or show a short \"How to measure\" tip and explain what board feet means with a one-screen primer to help novices adopt the app.",
+      "points": [
+        {
+          "point_id": "board-foot.group_010.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "onboarding",
+          "description": "First-launch interactive tutorial: On first app open, overlay tooltips guiding through entering price, dimensions, and calculating, with a \"Got it\" button to dismiss, helping new users (e.g., hobbyists) quickly understand the workflow and reduce initial friction.",
+          "recommendation": "",
+          "location": "Relates to 3.11 MainActivity.kt onCreate"
+        },
+        {
+          "point_id": "board-foot.group_010.25FEB2026.2109.a14t.point_002",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "onboarding",
+          "description": "Add first-run sample and guidance: On first launch, prefill example values (or show a short \u201cHow to measure\u201d tip) and explain what board feet means with a one-screen primer. This helps novices adopt the app without searching externally, increasing retention.",
+          "recommendation": "",
+          "location": "General (new first-run UX around the existing single screen)"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "onboarding",
+      "source_reviewers": [
+        "grok-4-0709",
+        "gpt-5.2"
+      ],
+      "guid": "e93aec8f-4dca-4d60-8534-d956dbff8ebe"
+    },
+    {
+      "group_id": "board-foot.group_011.25FEB2026.2109.a14t",
+      "concern": "Dark Mode Theme Toggle: Add a settings toggle for dark mode using Material3 dynamic theming, automatically adapting colors.xml for low-light environments, improving eye comfort for users working in workshops or evenings.",
+      "points": [
+        {
+          "point_id": "board-foot.group_011.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "ux",
+          "description": "Dark mode theme toggle: Add a settings toggle for dark mode using Material3 dynamic theming, automatically adapting colors.xml for low-light environments, improving eye comfort for users working in workshops or evenings.",
+          "recommendation": "",
+          "location": "Relates to 3.9 themes.xml and 3.8 colors.xml"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "ux",
+      "source_reviewers": [
+        "grok-4-0709"
+      ],
+      "guid": "35b98625-f38c-43f0-b26f-5cd757e0ae4b"
+    },
+    {
+      "group_id": "board-foot.group_012.25FEB2026.2109.a14t",
+      "concern": "Preset Lumber Size Buttons: Include quick-select buttons for common lumber sizes (e.g., 2x4, 1x6) that auto-fill dimensions, speeding up repetitive calculations for standard boards and adding convenience for frequent users like builders.",
+      "points": [
+        {
+          "point_id": "board-foot.group_012.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "features",
+          "description": "Preset lumber size buttons: Include quick-select buttons for common sizes (e.g., 2x4, 1x6) that auto-fill dimensions, speeding up repetitive calculations for standard boards and adding convenience for frequent users like builders.",
+          "recommendation": "",
+          "location": "Relates to 3.10 activity_main.xml dimensions row"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "features",
+      "source_reviewers": [
+        "grok-4-0709"
+      ],
+      "guid": "1c952ce8-91fd-4a67-a749-fd8c04d810c2"
+    },
+    {
+      "group_id": "board-foot.group_013.25FEB2026.2109.a14t",
+      "concern": "Live Lumber Price API Fetch: Integrate with a public API (e.g., for current wood prices) to auto-populate or suggest the price field based on wood type selection, providing real-time market insights and saving users research time.",
+      "points": [
+        {
+          "point_id": "board-foot.group_013.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "integrations",
+          "description": "Live lumber price API fetch: Integrate with a public API (e.g., for current wood prices) to auto-populate or suggest the price field based on wood type selection, providing real-time market insights and saving users research time.",
+          "recommendation": "",
+          "location": "Relates to 3.10 activity_main.xml price input"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "integrations",
+      "source_reviewers": [
+        "grok-4-0709"
+      ],
+      "guid": "e2fa813b-fcc9-4b2b-9735-2a945fa4af9d"
+    },
+    {
+      "group_id": "board-foot.group_014.25FEB2026.2109.a14t",
+      "concern": "Real-Time Calculation Preview: As users type dimensions, show a live preview of board feet and cost below the inputs (debounced for smoothness), eliminating the need for the calculate button in simple cases and offering instant feedback for iterative adjustments. Include an optional toggle for continuous calculation.",
+      "points": [
+        {
+          "point_id": "board-foot.group_014.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "performance_ux",
+          "description": "Real-time calculation preview: As users type dimensions, show a live preview of board feet and cost below the inputs (debounced for smoothness), eliminating the need for the calculate button in simple cases and offering instant feedback for iterative adjustments.",
+          "recommendation": "",
+          "location": "Relates to 3.11 MainActivity.kt calculate() function"
+        },
+        {
+          "point_id": "board-foot.group_014.25FEB2026.2109.a14t.point_002",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "performance_ux",
+          "description": "Calculate-as-you-type optional mode: Add a toggle that continuously shows computed board feet and cost as fields are filled (with graceful handling of partial inputs). For many users, immediate feedback reduces taps and makes the app feel more like a \u201ccalculator\u201d than a \u201cform + submit.\u201d",
+          "recommendation": "",
+          "location": "Calculate button flow vs real-time updates"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "performance_ux",
+      "source_reviewers": [
+        "grok-4-0709",
+        "gpt-5.2"
+      ],
+      "guid": "648dc3b1-c14c-4770-a7a6-14d4646de464"
+    },
+    {
+      "group_id": "board-foot.group_015.25FEB2026.2109.a14t",
+      "concern": "Educational Board Foot Explainer: Add an info icon linking to a dialog explaining the board foot formula and examples (e.g., \"A board foot is 144 cubic inches of wood\"), enriching the app with value for beginners and positioning it as an educational tool.",
+      "points": [
+        {
+          "point_id": "board-foot.group_015.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "content",
+          "description": "Educational board foot explainer: Add an info icon linking to a dialog explaining the board foot formula and examples (e.g., \"A board foot is 144 cubic inches of wood\"), enriching the app with value for beginners and positioning it as an educational tool.",
+          "recommendation": "",
+          "location": "General, as a new content layer atop the core logic"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "content",
+      "source_reviewers": [
+        "grok-4-0709"
+      ],
+      "guid": "3d449690-75e7-4c8a-97f5-408b5446cca4"
+    },
+    {
+      "group_id": "board-foot.group_016.25FEB2026.2109.a14t",
+      "concern": "Subscription for Project Saving: Introduce a monthly subscription to save and load multiple \"projects\" (grouped calculations with names like \"Deck Build\"), allowing users to resume work across sessions, creating recurring revenue from professional users.",
+      "points": [
+        {
+          "point_id": "board-foot.group_016.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "monetization",
+          "description": "Subscription for project saving: Introduce a monthly subscription to save and load multiple \"projects\" (grouped calculations with names like \"Deck Build\"), allowing users to resume work across sessions, creating recurring revenue from professional users.",
+          "recommendation": "",
+          "location": "Relates to 3.11 MainActivity.kt state, extending no-persistence"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "monetization",
+      "source_reviewers": [
+        "grok-4-0709"
+      ],
+      "guid": "76ed2084-c297-44ff-9f21-2b63db49aa1e"
+    },
+    {
+      "group_id": "board-foot.group_017.25FEB2026.2109.a14t",
+      "concern": "Voice Command Input Support: Integrate Android's speech-to-text for dictating dimensions and price (e.g., \"length twelve width six thickness one\"), making the app hands-free for users in workshops where typing is impractical.",
+      "points": [
+        {
+          "point_id": "board-foot.group_017.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "accessibility",
+          "description": "Voice command input support: Integrate Android's speech-to-text for dictating dimensions and price (e.g., \"length twelve width six thickness one\"), making the app hands-free for users in workshops where typing is impractical.",
+          "recommendation": "",
+          "location": "Relates to 3.10 activity_main.xml input fields"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "accessibility",
+      "source_reviewers": [
+        "grok-4-0709"
+      ],
+      "guid": "a8cb9ead-02a5-42e7-aab6-f3c2ab6fec24"
+    },
+    {
+      "group_id": "board-foot.group_018.25FEB2026.2109.a14t",
+      "concern": "Multi-Language Localization: Expand strings.xml with translations for key languages (e.g., Spanish, French) and adapt formats for regional number separators, broadening appeal to international users in the woodworking community.",
+      "points": [
+        {
+          "point_id": "board-foot.group_018.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "other",
+          "description": "Multi-language localization: Expand strings.xml with translations for key languages (e.g., Spanish, French) and adapt formats for regional number separators, broadening appeal to international users in the woodworking community.",
+          "recommendation": "",
+          "location": "Relates to 3.7 strings.xml"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "other",
+      "source_reviewers": [
+        "grok-4-0709"
+      ],
+      "guid": "78f400c9-d711-46d8-99d0-da57106499f8"
+    },
+    {
+      "group_id": "board-foot.group_019.25FEB2026.2109.a14t",
+      "concern": "Undo Last Calculation Button: Add an \"Undo\" button that subtracts the most recent board feet and cost from totals and restores dimension fields, helping users correct mistakes in multi-entry sessions without full clear.",
+      "points": [
+        {
+          "point_id": "board-foot.group_019.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "ux",
+          "description": "Undo last calculation button: Add an \"Undo\" button that subtracts the most recent board feet and cost from totals and restores dimension fields, helping users correct mistakes in multi-entry sessions without full clear.",
+          "recommendation": "",
+          "location": "Relates to 3.11 MainActivity.kt calculate() and clearAll()"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "ux",
+      "source_reviewers": [
+        "grok-4-0709"
+      ],
+      "guid": "0e91af5c-2f1e-434c-b810-fbf82cf224c1"
+    },
+    {
+      "group_id": "board-foot.group_020.25FEB2026.2109.a14t",
+      "concern": "Waste Factor Adjustment and Other Toggles: Include a slider or toggles to apply waste percentage (e.g., +10% for cuts), sales tax %, and discount % (e.g., contractor pricing), automatically adjusting totals to help users plan for real-world material losses and provide more accurate project estimates.",
+      "points": [
+        {
+          "point_id": "board-foot.group_020.25FEB2026.2109.a14t.point_001",
+          "reviewer": "grok-4-0709",
+          "severity": "info",
+          "category": "features",
+          "description": "Waste factor adjustment slider: Include a slider to apply a waste percentage (e.g., +10% for cuts), automatically adjusting totals, which helps users plan for real-world material losses and provides more accurate project estimates.",
+          "recommendation": "",
+          "location": "Relates to 3.11 MainActivity.kt total accumulation"
+        },
+        {
+          "point_id": "board-foot.group_020.25FEB2026.2109.a14t.point_002",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "features",
+          "description": "Add tax, waste, and discount toggles: Add optional adjustments: sales tax %, waste/overage % (e.g., +10% for defects), and discount % (e.g., contractor pricing). Lumber purchasing frequently includes these factors; exposing them as simple toggles makes totals more \u201creal-world accurate\u201d while keeping defaults off for simplicity.",
+          "recommendation": "",
+          "location": "Totals section + calculation logic"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "features",
+      "source_reviewers": [
+        "grok-4-0709",
+        "gpt-5.2"
+      ],
+      "guid": "8380cfcc-e6a0-4d89-99a2-4a1a0f8e40c6"
+    },
+    {
+      "group_id": "board-foot.group_021.25FEB2026.2109.a14t",
+      "concern": "Quantity Multiplier Per Line Item: Add a Quantity field (default 1) so users can price multiple identical boards in one calculation. This is a highly common workflow (e.g., \"8 boards at 96 x 6 x 1\") and complements the running total behavior.",
+      "points": [
+        {
+          "point_id": "board-foot.group_021.25FEB2026.2109.a14t.point_001",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "features",
+          "description": "Quantity multiplier per line item: Add a Quantity field (default 1) so users can price multiple identical boards in one calculation. This is a highly common workflow (e.g., \u201c8 boards at 96 x 6 x 1\u201d) and complements the running total behavior.",
+          "recommendation": "",
+          "location": "activity_main.xml + MainActivity.calculate() accumulation"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "features",
+      "source_reviewers": [
+        "gpt-5.2"
+      ],
+      "guid": "6e109161-99c3-4f37-a660-472769cf2ee7"
+    },
+    {
+      "group_id": "board-foot.group_022.25FEB2026.2109.a14t",
+      "concern": "Inline Validation and Field-Level Errors: Instead of only toasts, show inline errors on specific TextInputLayouts (e.g., \"Required\", \"Must be > 0\") and clear them when corrected, improving clarity and making \"what went wrong\" visually obvious.",
+      "points": [
+        {
+          "point_id": "board-foot.group_022.25FEB2026.2109.a14t.point_001",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "ux",
+          "description": "Inline validation and field-level errors: Instead of only toasts, show inline errors on the specific TextInputLayouts (e.g., \u201cRequired\u201d, \u201cMust be > 0\u201d) and clear them when corrected. This improves clarity, reduces repetitive toast dismissal, and makes the \u201cwhat went wrong\u201d visually obvious.",
+          "recommendation": "",
+          "location": "Validation flow in MainActivity.calculate() + TextInputLayout usage"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "ux",
+      "source_reviewers": [
+        "gpt-5.2"
+      ],
+      "guid": "5903d4a2-b7f9-4c1e-b16e-b7688513d17b"
+    },
+    {
+      "group_id": "board-foot.group_023.25FEB2026.2109.a14t",
+      "concern": "Line-Item List with Undo/Remove: Introduce a simple list of calculated line items (each with dimensions, quantity, bf, cost) beneath the result, with swipe-to-delete and a one-tap Undo snackbar. Running totals become auditable and correctable when entering many boards quickly.",
+      "points": [
+        {
+          "point_id": "board-foot.group_023.25FEB2026.2109.a14t.point_001",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "data_model",
+          "description": "Line-item list with undo/remove: Introduce a simple list of calculated line items (each with dimensions, quantity, bf, cost) beneath the result, with swipe-to-delete and a one-tap Undo snackbar. Running totals become auditable and correctable, which is valuable when entering many boards quickly.",
+          "recommendation": "",
+          "location": "Result/Total area and accumulation model (from pure totals to line items)"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "data_model",
+      "source_reviewers": [
+        "gpt-5.2"
+      ],
+      "guid": "c9f23a8f-4179-4b72-a9a6-35ca6c41aa7e"
+    },
+    {
+      "group_id": "board-foot.group_024.25FEB2026.2109.a14t",
+      "concern": "Quick \"Repeat Last Dimensions\" Action: Provide a button/icon to reuse the last entered dimensions (and quantity) without retyping, useful when measuring similar boards that only differ slightly or when you accidentally cleared too early, supporting fast repetitive workflows.",
+      "points": [
+        {
+          "point_id": "board-foot.group_024.25FEB2026.2109.a14t.point_001",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "ux",
+          "description": "Quick \u201cRepeat last dimensions\u201d action: Provide a button/icon to reuse the last entered dimensions (and quantity) without retyping, useful when measuring similar boards that only differ slightly or when you accidentally cleared too early. This supports fast repetitive workflows.",
+          "recommendation": "",
+          "location": "After-calculate behavior (dimensions auto-clear)"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "ux",
+      "source_reviewers": [
+        "gpt-5.2"
+      ],
+      "guid": "45c4afb1-502f-43cf-bfcf-42a837a66e25"
+    },
+    {
+      "group_id": "board-foot.group_025.25FEB2026.2109.a14t",
+      "concern": "Save Named Price Presets Per Species/Supplier: Let users save multiple named price presets (e.g., \"Walnut S4S $12.50/bf\", \"Pine rough $3.25/bf\") and switch quickly. Real pricing varies by wood species, grade, and supplier; presets reduce repetitive entry and errors.",
+      "points": [
+        {
+          "point_id": "board-foot.group_025.25FEB2026.2109.a14t.point_001",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "data_model",
+          "description": "Save named price presets per species/supplier: Let users save multiple named price presets (e.g., \u201cWalnut S4S $12.50/bf\u201d, \u201cPine rough $3.25/bf\u201d) and switch quickly. Real pricing varies by wood species, grade, and supplier; presets reduce repetitive entry and errors.",
+          "recommendation": "",
+          "location": "Price input + state management"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "data_model",
+      "source_reviewers": [
+        "gpt-5.2"
+      ],
+      "guid": "e52e949f-fed5-4260-91e2-b9fd8bef9bfc"
+    },
+    {
+      "group_id": "board-foot.group_026.25FEB2026.2109.a14t",
+      "concern": "Home Screen Widget for Quick Entry: Provide a lightweight widget where users can enter L/W/T and see board feet instantly, optionally with price. Woodworkers may want quick access without opening the full app, especially in a shop setting with gloves or limited time.",
+      "points": [
+        {
+          "point_id": "board-foot.group_026.25FEB2026.2109.a14t.point_001",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "platform",
+          "description": "Add home screen widget for quick entry: Provide a lightweight widget where users can enter L/W/T and see board feet instantly, optionally with price. Woodworkers may want quick access without opening the full app, especially in a shop setting with gloves or limited time.",
+          "recommendation": "",
+          "location": "General (Android platform enhancement)"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "platform",
+      "source_reviewers": [
+        "gpt-5.2"
+      ],
+      "guid": "5fbaa3b6-be66-47c0-ad20-a56ce1e57a5f"
+    },
+    {
+      "group_id": "board-foot.group_027.25FEB2026.2109.a14t",
+      "concern": "Community \"Common Dimensions\" Templates: Offer optional templates like \"2x4 nominal vs actual,\" \"deck boards,\" \"turning blanks,\" etc., that populate fields with typical actual dimensions. This reduces measurement confusion and can become a differentiator via curated domain knowledge.",
+      "points": [
+        {
+          "point_id": "board-foot.group_027.25FEB2026.2109.a14t.point_001",
+          "reviewer": "gpt-5.2",
+          "severity": "info",
+          "category": "social",
+          "description": "Community \u201ccommon dimensions\u201d templates: Offer optional templates like \u201c2x4 nominal vs actual,\u201d \u201cdeck boards,\u201d \u201cturning blanks,\u201d etc., that populate fields with typical actual dimensions. This reduces measurement confusion and can become a differentiator via curated domain knowledge.",
+          "recommendation": "",
+          "location": "General (new helper content + presets around dimension entry)"
+        }
+      ],
+      "combined_severity": "info",
+      "combined_category": "social",
+      "source_reviewers": [
+        "gpt-5.2"
+      ],
+      "guid": "c0f5c94c-46a7-4c47-86b3-0a50e43cbdf7"
+    }
+  ]
+}

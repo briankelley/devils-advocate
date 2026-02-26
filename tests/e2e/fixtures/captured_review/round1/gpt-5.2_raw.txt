@@ -1,0 +1,107 @@
+SUGGESTION 1:
+THEME: ux
+TITLE: Add unit selectors with common presets
+DESCRIPTION: Add a compact unit selector for dimensions (inches, feet+inches, millimeters) and price basis (per board foot, per cubic foot/meter, per piece). Users often think in different units depending on region and lumber type; unit switching reduces mental math and expands appeal without changing the core workflow.
+CONTEXT: activity_main.xml inputs + MainActivity.calculate()
+
+SUGGESTION 2:
+THEME: ux
+TITLE: Support feet-and-inches entry mode
+DESCRIPTION: Provide an optional input mode for length/width/thickness like `8' 6 1/2"` or separate fields (feet + inches). Woodworking contexts commonly use imperial fractional measurements; supporting this directly reduces errors and speeds entry.
+CONTEXT: Dimensions row + parsing in MainActivity.calculate()
+
+SUGGESTION 3:
+THEME: features
+TITLE: Quantity multiplier per line item
+DESCRIPTION: Add a Quantity field (default 1) so users can price multiple identical boards in one calculation. This is a highly common workflow (e.g., “8 boards at 96 x 6 x 1”) and complements the running total behavior.
+CONTEXT: activity_main.xml + MainActivity.calculate() accumulation
+
+SUGGESTION 4:
+THEME: content
+TITLE: Add fractional inch quick-pick chips
+DESCRIPTION: Offer optional chips/buttons for common fractions (1/8, 1/4, 3/8, 1/2, 5/8, 3/4) that append to the current dimension field or set thickness quickly. This matches workshop reality where thickness is frequently a standard fraction, reducing typing friction.
+CONTEXT: Dimensions inputs UI (especially thickness)
+
+SUGGESTION 5:
+THEME: ux
+TITLE: Inline validation and field-level errors
+DESCRIPTION: Instead of only toasts, show inline errors on the specific TextInputLayouts (e.g., “Required”, “Must be > 0”) and clear them when corrected. This improves clarity, reduces repetitive toast dismissal, and makes the “what went wrong” visually obvious.
+CONTEXT: Validation flow in MainActivity.calculate() + TextInputLayout usage
+
+SUGGESTION 6:
+THEME: features
+TITLE: Add tax, waste, and discount toggles
+DESCRIPTION: Add optional adjustments: sales tax %, waste/overage % (e.g., +10% for defects), and discount % (e.g., contractor pricing). Lumber purchasing frequently includes these factors; exposing them as simple toggles makes totals more “real-world accurate” while keeping defaults off for simplicity.
+CONTEXT: Totals section + calculation logic
+
+SUGGESTION 7:
+THEME: data_model
+TITLE: Line-item list with undo/remove
+DESCRIPTION: Introduce a simple list of calculated line items (each with dimensions, quantity, bf, cost) beneath the result, with swipe-to-delete and a one-tap Undo snackbar. Running totals become auditable and correctable, which is valuable when entering many boards quickly.
+CONTEXT: Result/Total area and accumulation model (from pure totals to line items)
+
+SUGGESTION 8:
+THEME: ux
+TITLE: Quick “Repeat last dimensions” action
+DESCRIPTION: Provide a button/icon to reuse the last entered dimensions (and quantity) without retyping, useful when measuring similar boards that only differ slightly or when you accidentally cleared too early. This supports fast repetitive workflows.
+CONTEXT: After-calculate behavior (dimensions auto-clear)
+
+SUGGESTION 9:
+THEME: performance_ux
+TITLE: Calculate-as-you-type optional mode
+DESCRIPTION: Add a toggle that continuously shows computed board feet and cost as fields are filled (with graceful handling of partial inputs). For many users, immediate feedback reduces taps and makes the app feel more like a “calculator” than a “form + submit.”
+CONTEXT: Calculate button flow vs real-time updates
+
+SUGGESTION 10:
+THEME: accessibility
+TITLE: Improve keyboard navigation and IME actions
+DESCRIPTION: Set explicit IME actions (Next/Done), move focus predictably across fields, and ensure TalkBack labels read well (e.g., “Thickness in inches”). Also consider larger tap targets and a high-contrast theme option for shop environments with glare/dust.
+CONTEXT: TextInputEditText configuration + overall theme
+
+SUGGESTION 11:
+THEME: ux
+TITLE: Add copy/share of result and totals
+DESCRIPTION: Provide “Copy” and “Share” actions that export the last result and/or the running total in a clean text format (dimensions, bf, cost, price, adjustments). Users often need to message totals to a customer or keep notes for later.
+CONTEXT: Result text + Total text area
+
+SUGGESTION 12:
+THEME: integrations
+TITLE: Export line items to CSV/PDF
+DESCRIPTION: Add an export option that generates CSV (for spreadsheets) and/or a simple PDF “cut list / purchase list” including date, supplier, price, and line items. This differentiates from basic calculators and fits contractor/pro workflows.
+CONTEXT: General (new capability building on calculations)
+
+SUGGESTION 13:
+THEME: data_model
+TITLE: Save named price presets per species/supplier
+DESCRIPTION: Let users save multiple named price presets (e.g., “Walnut S4S $12.50/bf”, “Pine rough $3.25/bf”) and switch quickly. Real pricing varies by wood species, grade, and supplier; presets reduce repetitive entry and errors.
+CONTEXT: Price input + state management
+
+SUGGESTION 14:
+THEME: onboarding
+TITLE: Add first-run sample and guidance
+DESCRIPTION: On first launch, prefill example values (or show a short “How to measure” tip) and explain what board feet means with a one-screen primer. This helps novices adopt the app without searching externally, increasing retention.
+CONTEXT: General (new first-run UX around the existing single screen)
+
+SUGGESTION 15:
+THEME: monetization
+TITLE: Pro tier for exports and presets
+DESCRIPTION: Keep the core calculator free, and offer a paid upgrade unlocking advanced features like exports, unlimited presets, saved projects, and branded PDF invoices. This aligns monetization with “power-user” value while preserving the simple baseline experience.
+CONTEXT: General (business model extension)
+
+SUGGESTION 16:
+THEME: security_privacy
+TITLE: Privacy-first stance with optional local backups
+DESCRIPTION: Since the spec emphasizes no persistence, consider an explicit privacy statement (“No network access; data stays on device”) and an optional user-initiated local backup/export file for saved presets/projects. This builds trust while keeping users in control.
+CONTEXT: Manifest decisions + any future saved data
+
+SUGGESTION 17:
+THEME: platform
+TITLE: Add home screen widget for quick entry
+DESCRIPTION: Provide a lightweight widget where users can enter L/W/T and see board feet instantly, optionally with price. Woodworkers may want quick access without opening the full app, especially in a shop setting with gloves or limited time.
+CONTEXT: General (Android platform enhancement)
+
+SUGGESTION 18:
+THEME: social
+TITLE: Community “common dimensions” templates
+DESCRIPTION: Offer optional templates like “2x4 nominal vs actual,” “deck boards,” “turning blanks,” etc., that populate fields with typical actual dimensions. This reduces measurement confusion and can become a differentiator via curated domain knowledge.
+CONTEXT: General (new helper content + presets around dimension entry)

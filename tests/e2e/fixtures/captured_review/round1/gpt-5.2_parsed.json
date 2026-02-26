@@ -1,0 +1,164 @@
+[
+  {
+    "point_id": "temp_001",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "ux",
+    "description": "Add unit selectors with common presets: Add a compact unit selector for dimensions (inches, feet+inches, millimeters) and price basis (per board foot, per cubic foot/meter, per piece). Users often think in different units depending on region and lumber type; unit switching reduces mental math and expands appeal without changing the core workflow.",
+    "recommendation": "",
+    "location": "activity_main.xml inputs + MainActivity.calculate()"
+  },
+  {
+    "point_id": "temp_002",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "ux",
+    "description": "Support feet-and-inches entry mode: Provide an optional input mode for length/width/thickness like `8' 6 1/2\"` or separate fields (feet + inches). Woodworking contexts commonly use imperial fractional measurements; supporting this directly reduces errors and speeds entry.",
+    "recommendation": "",
+    "location": "Dimensions row + parsing in MainActivity.calculate()"
+  },
+  {
+    "point_id": "temp_003",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "features",
+    "description": "Quantity multiplier per line item: Add a Quantity field (default 1) so users can price multiple identical boards in one calculation. This is a highly common workflow (e.g., \u201c8 boards at 96 x 6 x 1\u201d) and complements the running total behavior.",
+    "recommendation": "",
+    "location": "activity_main.xml + MainActivity.calculate() accumulation"
+  },
+  {
+    "point_id": "temp_004",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "content",
+    "description": "Add fractional inch quick-pick chips: Offer optional chips/buttons for common fractions (1/8, 1/4, 3/8, 1/2, 5/8, 3/4) that append to the current dimension field or set thickness quickly. This matches workshop reality where thickness is frequently a standard fraction, reducing typing friction.",
+    "recommendation": "",
+    "location": "Dimensions inputs UI (especially thickness)"
+  },
+  {
+    "point_id": "temp_005",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "ux",
+    "description": "Inline validation and field-level errors: Instead of only toasts, show inline errors on the specific TextInputLayouts (e.g., \u201cRequired\u201d, \u201cMust be > 0\u201d) and clear them when corrected. This improves clarity, reduces repetitive toast dismissal, and makes the \u201cwhat went wrong\u201d visually obvious.",
+    "recommendation": "",
+    "location": "Validation flow in MainActivity.calculate() + TextInputLayout usage"
+  },
+  {
+    "point_id": "temp_006",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "features",
+    "description": "Add tax, waste, and discount toggles: Add optional adjustments: sales tax %, waste/overage % (e.g., +10% for defects), and discount % (e.g., contractor pricing). Lumber purchasing frequently includes these factors; exposing them as simple toggles makes totals more \u201creal-world accurate\u201d while keeping defaults off for simplicity.",
+    "recommendation": "",
+    "location": "Totals section + calculation logic"
+  },
+  {
+    "point_id": "temp_007",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "data_model",
+    "description": "Line-item list with undo/remove: Introduce a simple list of calculated line items (each with dimensions, quantity, bf, cost) beneath the result, with swipe-to-delete and a one-tap Undo snackbar. Running totals become auditable and correctable, which is valuable when entering many boards quickly.",
+    "recommendation": "",
+    "location": "Result/Total area and accumulation model (from pure totals to line items)"
+  },
+  {
+    "point_id": "temp_008",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "ux",
+    "description": "Quick \u201cRepeat last dimensions\u201d action: Provide a button/icon to reuse the last entered dimensions (and quantity) without retyping, useful when measuring similar boards that only differ slightly or when you accidentally cleared too early. This supports fast repetitive workflows.",
+    "recommendation": "",
+    "location": "After-calculate behavior (dimensions auto-clear)"
+  },
+  {
+    "point_id": "temp_009",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "performance_ux",
+    "description": "Calculate-as-you-type optional mode: Add a toggle that continuously shows computed board feet and cost as fields are filled (with graceful handling of partial inputs). For many users, immediate feedback reduces taps and makes the app feel more like a \u201ccalculator\u201d than a \u201cform + submit.\u201d",
+    "recommendation": "",
+    "location": "Calculate button flow vs real-time updates"
+  },
+  {
+    "point_id": "temp_010",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "accessibility",
+    "description": "Improve keyboard navigation and IME actions: Set explicit IME actions (Next/Done), move focus predictably across fields, and ensure TalkBack labels read well (e.g., \u201cThickness in inches\u201d). Also consider larger tap targets and a high-contrast theme option for shop environments with glare/dust.",
+    "recommendation": "",
+    "location": "TextInputEditText configuration + overall theme"
+  },
+  {
+    "point_id": "temp_011",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "ux",
+    "description": "Add copy/share of result and totals: Provide \u201cCopy\u201d and \u201cShare\u201d actions that export the last result and/or the running total in a clean text format (dimensions, bf, cost, price, adjustments). Users often need to message totals to a customer or keep notes for later.",
+    "recommendation": "",
+    "location": "Result text + Total text area"
+  },
+  {
+    "point_id": "temp_012",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "integrations",
+    "description": "Export line items to CSV/PDF: Add an export option that generates CSV (for spreadsheets) and/or a simple PDF \u201ccut list / purchase list\u201d including date, supplier, price, and line items. This differentiates from basic calculators and fits contractor/pro workflows.",
+    "recommendation": "",
+    "location": "General (new capability building on calculations)"
+  },
+  {
+    "point_id": "temp_013",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "data_model",
+    "description": "Save named price presets per species/supplier: Let users save multiple named price presets (e.g., \u201cWalnut S4S $12.50/bf\u201d, \u201cPine rough $3.25/bf\u201d) and switch quickly. Real pricing varies by wood species, grade, and supplier; presets reduce repetitive entry and errors.",
+    "recommendation": "",
+    "location": "Price input + state management"
+  },
+  {
+    "point_id": "temp_014",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "onboarding",
+    "description": "Add first-run sample and guidance: On first launch, prefill example values (or show a short \u201cHow to measure\u201d tip) and explain what board feet means with a one-screen primer. This helps novices adopt the app without searching externally, increasing retention.",
+    "recommendation": "",
+    "location": "General (new first-run UX around the existing single screen)"
+  },
+  {
+    "point_id": "temp_015",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "monetization",
+    "description": "Pro tier for exports and presets: Keep the core calculator free, and offer a paid upgrade unlocking advanced features like exports, unlimited presets, saved projects, and branded PDF invoices. This aligns monetization with \u201cpower-user\u201d value while preserving the simple baseline experience.",
+    "recommendation": "",
+    "location": "General (business model extension)"
+  },
+  {
+    "point_id": "temp_016",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "security_privacy",
+    "description": "Privacy-first stance with optional local backups: Since the spec emphasizes no persistence, consider an explicit privacy statement (\u201cNo network access; data stays on device\u201d) and an optional user-initiated local backup/export file for saved presets/projects. This builds trust while keeping users in control.",
+    "recommendation": "",
+    "location": "Manifest decisions + any future saved data"
+  },
+  {
+    "point_id": "temp_017",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "platform",
+    "description": "Add home screen widget for quick entry: Provide a lightweight widget where users can enter L/W/T and see board feet instantly, optionally with price. Woodworkers may want quick access without opening the full app, especially in a shop setting with gloves or limited time.",
+    "recommendation": "",
+    "location": "General (Android platform enhancement)"
+  },
+  {
+    "point_id": "temp_018",
+    "reviewer": "gpt-5.2",
+    "severity": "info",
+    "category": "social",
+    "description": "Community \u201ccommon dimensions\u201d templates: Offer optional templates like \u201c2x4 nominal vs actual,\u201d \u201cdeck boards,\u201d \u201cturning blanks,\u201d etc., that populate fields with typical actual dimensions. This reduces measurement confusion and can become a differentiator via curated domain knowledge.",
+    "recommendation": "",
+    "location": "General (new helper content + presets around dimension entry)"
+  }
+]
