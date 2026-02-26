@@ -171,6 +171,7 @@ def dvad_server(seeded_data_dir, e2e_config_path):
     port = _find_free_port()
     env = {**os.environ}
     env["DVAD_HOME"] = str(seeded_data_dir)
+    env.setdefault("E2E_LOCAL_KEY", "e2e-dummy-key")
     if e2e_config_path:
         env["DVAD_E2E_CONFIG"] = str(e2e_config_path)
 
