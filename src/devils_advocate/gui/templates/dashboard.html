@@ -196,7 +196,7 @@
         <pre id="command-preview-text"></pre>
         <button class="btn btn-sm" onclick="dvad.copyCommand()">Copy</button>
     </div>
-    <p class="dim" style="font-size: 0.8em; margin-top: 0.3em;">Note: file paths are filenames only — replace with absolute paths before running.</p>
+
     <div class="interstitial-actions">
         <button class="btn" onclick="dvad.cancelInterstitial()">Back</button>
         <button class="btn btn-accent" id="run-review-btn" onclick="dvad.executeReview()">Run Review</button>
@@ -219,23 +219,27 @@
     <table class="data-table" id="reviews-table">
         <thead>
             <tr>
-                <th class="th-sortable" data-col="0" data-sort-type="string">Project<span class="sort-indicator"></span></th>
-                <th class="th-sortable" data-col="1" data-sort-type="string">Result<span class="sort-indicator"></span></th>
-                <th class="th-sortable" data-col="2" data-sort-type="string">Mode<span class="sort-indicator"></span></th>
-                <th class="th-sortable" data-col="3" data-sort-type="string">Date<span class="sort-indicator"></span></th>
-                <th class="num th-sortable" data-col="4" data-sort-type="numeric">Points<span class="sort-indicator"></span></th>
-                <th class="num th-sortable" data-col="5" data-sort-type="numeric">Groups<span class="sort-indicator"></span></th>
-                <th class="num th-sortable" data-col="6" data-sort-type="numeric">Escalated<span class="sort-indicator"></span></th>
-                <th class="num th-sortable" data-col="7" data-sort-type="numeric">Cost<span class="sort-indicator"></span></th>
+                <th class="th-sortable" data-col="0" data-sort-type="string">Review ID<span class="sort-indicator"></span></th>
+                <th class="th-sortable" data-col="1" data-sort-type="string">Project<span class="sort-indicator"></span></th>
+                <th class="th-sortable" data-col="2" data-sort-type="string">Result<span class="sort-indicator"></span></th>
+                <th class="th-sortable" data-col="3" data-sort-type="string">Mode<span class="sort-indicator"></span></th>
+                <th class="th-sortable" data-col="4" data-sort-type="string">Date<span class="sort-indicator"></span></th>
+                <th class="num th-sortable" data-col="5" data-sort-type="numeric">Points<span class="sort-indicator"></span></th>
+                <th class="num th-sortable" data-col="6" data-sort-type="numeric">Groups<span class="sort-indicator"></span></th>
+                <th class="num th-sortable" data-col="7" data-sort-type="numeric">Escalated<span class="sort-indicator"></span></th>
+                <th class="num th-sortable" data-col="8" data-sort-type="numeric">Cost<span class="sort-indicator"></span></th>
             </tr>
         </thead>
         <tbody>
             {% for r in reviews %}
             <tr class="clickable-row" data-href="/review/{{ r.review_id }}">
+                <td class="mono" data-sort-val="{{ r.review_id }}">{{ r.review_id[:20] }}</td>
                 <td data-sort-val="{{ r.get('project', '—')|lower }}">{{ r.get('project', '—') }}</td>
-                <td data-sort-val="{{ r.get('result', 'complete') }}">
-                    {% set res = r.get('result', 'complete') %}
-                    {% if res == 'complete' %}<span class="badge badge-low">Complete</span>
+                <td data-sort-val="{{ r.get('result', 'success') }}">
+                    {% set res = r.get('result', 'success') %}
+                    {% if res == 'success' %}<span class="badge badge-low">Success</span>
+                    {% elif res == 'complete' %}<span class="badge badge-low">Success</span>
+                    {% elif res == 'completed' %}<span class="badge badge-warning">Completed</span>
                     {% elif res == 'dry_run' %}<span class="badge badge-info">Dry Run</span>
                     {% elif res == 'cost_exceeded' %}<span class="badge badge-high">Cost Exceeded</span>
                     {% elif res == 'cost_aborted' %}<span class="badge badge-high">Cost Aborted</span>
@@ -252,7 +256,7 @@
             </tr>
             {% endfor %}
             {% if not reviews %}
-            <tr><td colspan="8" class="empty-state">No reviews found.</td></tr>
+            <tr><td colspan="9" class="empty-state">No reviews found.</td></tr>
             {% endif %}
         </tbody>
     </table>

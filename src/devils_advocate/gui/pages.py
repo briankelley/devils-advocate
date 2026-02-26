@@ -232,20 +232,44 @@ async def review_detail(request: Request, review_id: str):
 
     # Build per-role cost rows for the completed cost table
     role_cost_rows: list[tuple[str, str, float]] = []
-    if ledger.get("author_model"):
-        role_cost_rows.append(("author", ledger["author_model"], role_costs.get("author", 0.0)))
-    reviewer_models = ledger.get("reviewer_models", [])
-    for i, rv in enumerate(reviewer_models, 1):
-        role_key = f"reviewer_{i}"
-        label = f"reviewer {i}" if len(reviewer_models) > 1 else "reviewer"
-        role_cost_rows.append((label, rv, role_costs.get(role_key, 0.0)))
-    if ledger.get("dedup_model"):
-        role_cost_rows.append(("dedup", ledger["dedup_model"], role_costs.get("dedup", 0.0)))
-    if normalization_model != "\u2014":
-        role_cost_rows.append(("normalization", normalization_model, role_costs.get("normalization", 0.0)))
-    if revision_model != "\u2014" and role_costs.get("revision", 0.0) > 0:
-        role_cost_rows.append(("revision", revision_model, role_costs.get("revision", 0.0)))
+    result_type = ledger.get("result", "success")
+    no_cost_results = ("dry_run", "cost_exceeded", "cost_aborted", "failed")
+
+    if result_type in no_cost_results:
+        # For stub ledgers, use role_assignments dict if available
+        ra = ledger.get("role_assignments", {})
+        if ra:
+            if ra.get("author"):
+                role_cost_rows.append(("author", ra["author"], 0.0))
+            for i, rv in enumerate(ra.get("reviewers", []), 1):
+                label = f"reviewer {i}" if len(ra.get("reviewers", [])) > 1 else "reviewer"
+                role_cost_rows.append((label, rv, 0.0))
+            if ra.get("dedup"):
+                role_cost_rows.append(("dedup", ra["dedup"], 0.0))
+            if ra.get("normalization"):
+                role_cost_rows.append(("normalization", ra["normalization"], 0.0))
+            if ra.get("revision"):
+                role_cost_rows.append(("revision", ra["revision"], 0.0))
+            if ra.get("integration"):
+                role_cost_rows.append(("integration", ra["integration"], 0.0))
+    else:
+        if ledger.get("author_model"):
+            role_cost_rows.append(("author", ledger["author_model"], role_costs.get("author", 0.0)))
+        reviewer_models = ledger.get("reviewer_models", [])
+        for i, rv in enumerate(reviewer_models, 1):
+            role_key = f"reviewer_{i}"
+            label = f"reviewer {i}" if len(reviewer_models) > 1 else "reviewer"
+            role_cost_rows.append((label, rv, role_costs.get(role_key, 0.0)))
+        if ledger.get("dedup_model"):
+            role_cost_rows.append(("dedup", ledger["dedup_model"], role_costs.get("dedup", 0.0)))
+        if normalization_model != "\u2014":
+            role_cost_rows.append(("normalization", normalization_model, role_costs.get("normalization", 0.0)))
+        if revision_model != "\u2014" and role_costs.get("revision", 0.0) > 0:
+            role_cost_rows.append(("revision", revision_model, role_costs.get("revision", 0.0)))
     total_cost = ledger.get("cost", {}).get("total_usd", 0.0)
+
+    # Cost estimate rows (for dry_run details page)
+    cost_estimate_rows = ledger.get("cost_estimate_rows", [])
 
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "review_detail.html", {
@@ -267,6 +291,7 @@ async def review_detail(request: Request, review_id: str):
         "role_cost_rows": role_cost_rows,
         "total_cost": total_cost,
         "input_files_manifest": input_files_manifest,
+        "cost_estimate_rows": cost_estimate_rows,
         "csrf_token": request.app.state.csrf_token,
     })
 

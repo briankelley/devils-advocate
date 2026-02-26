@@ -58,11 +58,6 @@
                         <div class="field-row">
                             <span class="field-label">api_key_env:</span>
                             <span class="mono">{{ m.api_key_env }}</span>
-                            {% if m.api_key %}
-                            <span class="key-status key-set">set</span>
-                            {% else %}
-                            <span class="key-status key-missing">MISSING</span>
-                            {% endif %}
                         </div>
                         {% if m.api_base %}
                         <div class="field-row">
@@ -113,10 +108,6 @@
                 </p>
                 <div id="env-keys-list">
                     <p class="dim">Loading...</p>
-                </div>
-                <div class="env-keys-actions" id="env-keys-actions" style="display:none; margin-top: var(--pad-sm);">
-                    <button class="btn btn-accent btn-sm" onclick="dvad.saveEnvKeys()">Save API Keys</button>
-                    <span id="env-save-status" class="dim" style="margin-left: var(--pad-sm);"></span>
                 </div>
             </div>
 

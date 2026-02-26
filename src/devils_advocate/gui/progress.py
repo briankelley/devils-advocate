@@ -66,6 +66,7 @@ _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     (r"Cost limit exceeded: \$(.+) >= \$(.+)", "cost_exceeded", {}),
 
     # Revision
+    (r"Revision: large context .+ expect ~(\d+) min", "revision_duration_estimate", {}),
     (r"Revision: calling (.+?)(?:\s*\(|$)", "revision_calling", {}),
     (r"Revision: (.+) responded \((\d+) output tokens\)", "revision_responded", {}),
     (r"Revision: no actionable findings", "revision_skip", {}),

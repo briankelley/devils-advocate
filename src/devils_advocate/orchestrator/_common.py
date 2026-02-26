@@ -57,6 +57,7 @@ from ..ui import console
 # these names from ._common, so we re-export them here.
 
 from ._display import (  # noqa: F401
+    _build_dry_run_estimate_rows,
     _estimate_total_cost,
     _print_dry_run,
     _print_governance_summary,
@@ -82,7 +83,7 @@ def _save_stub_ledger(
     timestamp: str | None = None,
     **kwargs,
 ) -> None:
-    """Save a minimal ledger for dry runs, cost-exceeded, and cost-aborted reviews."""
+    """Save a minimal ledger for dry runs, cost-exceeded, cost-aborted, and failed reviews."""
     from datetime import datetime, timezone as tz
 
     ts = timestamp or datetime.now(tz.utc).isoformat()
@@ -114,6 +115,16 @@ def _save_stub_ledger(
             "breakdown": {k: round(v, 6) for k, v in ct.breakdown().items()},
             "role_costs": {k: round(v, 6) for k, v in ct.role_costs.items()},
         }
+    # Save role assignments if provided
+    if "role_assignments" in kwargs:
+        ra = kwargs["role_assignments"]
+        ledger["author_model"] = ra.get("author", "")
+        ledger["reviewer_models"] = ra.get("reviewers", [])
+        ledger["dedup_model"] = ra.get("dedup", "")
+        ledger["role_assignments"] = ra
+    # Save cost estimate rows if provided (for dry run display)
+    if "cost_estimate_rows" in kwargs:
+        ledger["cost_estimate_rows"] = kwargs["cost_estimate_rows"]
     storage.save_review_artifacts(review_id, "", ledger, {}, {})
 
 

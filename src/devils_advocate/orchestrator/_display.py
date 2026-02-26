@@ -52,6 +52,82 @@ def _estimate_total_cost(
     return total
 
 
+def _build_dry_run_estimate_rows(
+    content: str,
+    author: ModelConfig,
+    reviewers: list[ModelConfig],
+    dedup: ModelConfig,
+    revision_model: ModelConfig | None = None,
+) -> list[dict]:
+    """Build cost estimate rows for dry run display (CLI table + GUI details page)."""
+    rows = []
+    input_tokens = estimate_tokens(content)
+
+    for r in reviewers:
+        cost = estimate_cost(r, input_tokens, MAX_OUTPUT_TOKENS)
+        rows.append({
+            "step": "Round 1 (review)",
+            "model": r.name,
+            "est_input_tokens": input_tokens,
+            "est_output_tokens": MAX_OUTPUT_TOKENS,
+            "est_cost_usd": round(cost, 6),
+        })
+
+    rows.append({
+        "step": "Normalization (if needed)",
+        "model": author.name,
+        "est_input_tokens": MAX_OUTPUT_TOKENS,
+        "est_output_tokens": MAX_OUTPUT_TOKENS,
+        "est_cost_usd": round(estimate_cost(author, MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS), 6),
+    })
+
+    dedup_in = input_tokens // 2
+    rows.append({
+        "step": "Deduplication",
+        "model": dedup.name,
+        "est_input_tokens": dedup_in,
+        "est_output_tokens": MAX_OUTPUT_TOKENS // 2,
+        "est_cost_usd": round(estimate_cost(dedup, dedup_in, MAX_OUTPUT_TOKENS // 2), 6),
+    })
+
+    r2_in = input_tokens * 2
+    rows.append({
+        "step": "Round 1 (author response)",
+        "model": author.name,
+        "est_input_tokens": r2_in,
+        "est_output_tokens": AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
+        "est_cost_usd": round(estimate_cost(author, r2_in, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS), 6),
+    })
+
+    for r in reviewers:
+        rows.append({
+            "step": "Round 2 (rebuttal)",
+            "model": r.name,
+            "est_input_tokens": r2_in,
+            "est_output_tokens": MAX_OUTPUT_TOKENS,
+            "est_cost_usd": round(estimate_cost(r, r2_in, MAX_OUTPUT_TOKENS), 6),
+        })
+
+    rows.append({
+        "step": "Round 2 (author final, if challenges)",
+        "model": author.name,
+        "est_input_tokens": r2_in,
+        "est_output_tokens": AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS // 2,
+        "est_cost_usd": round(estimate_cost(author, r2_in, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS // 2), 6),
+    })
+
+    rev = revision_model or author
+    rows.append({
+        "step": "Revision (post-governance)",
+        "model": rev.name,
+        "est_input_tokens": r2_in,
+        "est_output_tokens": REVISION_MAX_OUTPUT_TOKENS,
+        "est_cost_usd": round(estimate_cost(rev, r2_in, REVISION_MAX_OUTPUT_TOKENS), 6),
+    })
+
+    return rows
+
+
 def _print_dry_run(
     mode: str,
     content: str,
@@ -75,78 +151,15 @@ def _print_dry_run(
     table.add_column("Est. Output Tokens")
     table.add_column("Est. Cost (USD)")
 
-    input_tokens = estimate_tokens(content)
-
-    for r in reviewers:
-        cost = estimate_cost(r, input_tokens, MAX_OUTPUT_TOKENS)
+    rows = _build_dry_run_estimate_rows(content, author, reviewers, dedup, revision_model)
+    for row in rows:
         table.add_row(
-            "Round 1 (review)",
-            r.name,
-            str(input_tokens),
-            str(MAX_OUTPUT_TOKENS),
-            f"${cost:.4f}",
+            row["step"],
+            row["model"],
+            str(row["est_input_tokens"]),
+            str(row["est_output_tokens"]),
+            f"${row['est_cost_usd']:.4f}",
         )
-
-    # Normalization fallback (potential)
-    table.add_row(
-        "Normalization (if needed)",
-        author.name,
-        str(MAX_OUTPUT_TOKENS),
-        str(MAX_OUTPUT_TOKENS),
-        f"${estimate_cost(author, MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS):.4f}",
-    )
-
-    dedup_in = input_tokens // 2
-    cost_d = estimate_cost(dedup, dedup_in, MAX_OUTPUT_TOKENS // 2)
-    table.add_row(
-        "Deduplication",
-        dedup.name,
-        str(dedup_in),
-        str(MAX_OUTPUT_TOKENS // 2),
-        f"${cost_d:.4f}",
-    )
-
-    r2_in = input_tokens * 2
-    cost_a = estimate_cost(author, r2_in, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS)
-    table.add_row(
-        "Round 1 (author response)",
-        author.name,
-        str(r2_in),
-        str(AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS),
-        f"${cost_a:.4f}",
-    )
-
-    # Round 2: reviewer rebuttal
-    for r in reviewers:
-        cost_rb = estimate_cost(r, r2_in, MAX_OUTPUT_TOKENS)
-        table.add_row(
-            "Round 2 (rebuttal)",
-            r.name,
-            str(r2_in),
-            str(MAX_OUTPUT_TOKENS),
-            f"${cost_rb:.4f}",
-        )
-
-    # Round 2: author final (if challenges)
-    cost_af = estimate_cost(author, r2_in, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS // 2)
-    table.add_row(
-        "Round 2 (author final, if challenges)",
-        author.name,
-        str(r2_in),
-        str(AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS // 2),
-        f"${cost_af:.4f}",
-    )
-
-    # Revision (post-governance)
-    rev = revision_model or author
-    cost_rev = estimate_cost(rev, r2_in, REVISION_MAX_OUTPUT_TOKENS)
-    table.add_row(
-        "Revision (post-governance)",
-        rev.name,
-        str(r2_in),
-        str(REVISION_MAX_OUTPUT_TOKENS),
-        f"${cost_rev:.4f}",
-    )
 
     console.print(table)
 

@@ -137,6 +137,7 @@ class ReviewRunner:
     ) -> None:
         """Execute the review orchestrator in a background task."""
         tmpdir = None
+        storage = None
         try:
             from ..config import load_config
             from ..storage import StorageManager
@@ -249,6 +250,17 @@ class ReviewRunner:
             self.statuses[review_id] = "failed"
             if review_id in self.active:
                 self.active[review_id]["state"] = "failed"
+            # Best-effort: save a stub ledger so the review appears in history
+            try:
+                if storage is not None:
+                    from ..orchestrator._common import _save_stub_ledger
+                    _save_stub_ledger(
+                        storage, review_id, mode, project,
+                        str(input_files[0]) if input_files else "unknown",
+                        "failed",
+                    )
+            except Exception:
+                pass
             self.emit_event(review_id, make_terminal_event(False, "Review cancelled"))
             raise
 
@@ -257,6 +269,17 @@ class ReviewRunner:
             self.statuses[review_id] = "failed"
             if review_id in self.active:
                 self.active[review_id]["state"] = "failed"
+            # Best-effort: save a stub ledger so the review appears in history
+            try:
+                if storage is not None:
+                    from ..orchestrator._common import _save_stub_ledger
+                    _save_stub_ledger(
+                        storage, review_id, mode, project,
+                        str(input_files[0]) if input_files else "unknown",
+                        "failed",
+                    )
+            except Exception:
+                pass
             self.emit_event(review_id, make_terminal_event(False, str(exc)))
 
         finally:

@@ -41,6 +41,7 @@ from ..storage import StorageManager
 from ..ui import console
 
 from ._common import (
+    _build_dry_run_estimate_rows,
     _call_reviewer,
     _check_cost_guardrail,
     _group_to_dict,
@@ -146,9 +147,20 @@ async def run_spec_review(
     # Dry run
     if dry_run:
         _print_spec_dry_run(content, active_reviewers, dedup_model, revision_model, max_cost)
+        cost_estimate_rows = _build_dry_run_estimate_rows(
+            content, revision_model, active_reviewers, dedup_model, revision_model,
+        )
+        role_assignments = {
+            "author": "",
+            "reviewers": [r.name for r in active_reviewers],
+            "dedup": dedup_model.name,
+            "normalization": normalization_model.name,
+            "revision": revision_model.name,
+        }
         _save_stub_ledger(
             storage, review_id, "spec", project, str(primary_file),
-            "dry_run", timestamp=timestamp,
+            "dry_run", timestamp=timestamp, role_assignments=role_assignments,
+            cost_estimate_rows=cost_estimate_rows,
         )
         return None
 
@@ -160,9 +172,17 @@ async def run_spec_review(
                 f"[red]Error:[/red] Estimated cost ${est_cost:.4f} exceeds "
                 f"--max-cost ${max_cost:.2f}. Aborting."
             )
+            role_assignments = {
+                "author": "",
+                "reviewers": [r.name for r in active_reviewers],
+                "dedup": dedup_model.name,
+                "normalization": normalization_model.name,
+                "revision": revision_model.name,
+            }
             _save_stub_ledger(
                 storage, review_id, "spec", project, str(primary_file),
                 "cost_exceeded", timestamp=timestamp, est_cost=est_cost,
+                role_assignments=role_assignments,
             )
             return None
         storage.log(f"Estimated cost: ${est_cost:.4f} (limit: ${max_cost:.2f})")

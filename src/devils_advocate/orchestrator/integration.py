@@ -26,6 +26,7 @@ from ..ui import console
 
 from ._common import (
     PipelineInputs,
+    _build_dry_run_estimate_rows,
     _check_cost_guardrail,
     _print_dry_run,
     _run_adversarial_pipeline,
@@ -143,10 +144,23 @@ async def run_integration_review(
             dedup_model,
             max_cost,
         )
+        revision_model = roles["revision"]
+        cost_estimate_rows = _build_dry_run_estimate_rows(
+            combined, author, [integ_reviewer], dedup_model, revision_model,
+        )
+        role_assignments = {
+            "author": author.name,
+            "reviewers": [integ_reviewer.name],
+            "dedup": dedup_model.name,
+            "normalization": normalization_model.name,
+            "revision": roles["revision"].name if roles.get("revision") else "",
+            "integration": integ_reviewer.name,
+        }
         _save_stub_ledger(
             storage, review_id, "integration", project,
             ", ".join(files_to_review.keys()),
-            "dry_run", timestamp=timestamp,
+            "dry_run", timestamp=timestamp, role_assignments=role_assignments,
+            cost_estimate_rows=cost_estimate_rows,
         )
         return None
 

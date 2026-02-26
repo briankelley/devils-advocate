@@ -28,21 +28,6 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_FILES = 25
 
 
-def _get_git_info(filepath: Path) -> dict:
-    """Get git commit hash for a file, or 'not tracked'."""
-    import subprocess
-    try:
-        result = subprocess.run(
-            ["git", "log", "-1", "--format=%H", "--", str(filepath)],
-            capture_output=True, text=True, timeout=5,
-            cwd=str(filepath.parent),
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return {"git_hash": result.stdout.strip()[:12], "git_status": "tracked"}
-    except Exception:
-        pass
-    return {"git_hash": None, "git_status": "not tracked"}
-
 
 def _check_csrf(request: Request) -> None:
     """Validate CSRF token on mutating requests."""
@@ -210,7 +195,6 @@ async def start_review(request: Request):
             "size_bytes": f.stat().st_size,
             "copied": not use_path_mode,
         }
-        entry.update(_get_git_info(f))
         manifest["files"].append(entry)
 
     if spec_path:
@@ -221,7 +205,6 @@ async def start_review(request: Request):
             "size_bytes": spec_path.stat().st_size,
             "copied": not use_path_mode,
         }
-        entry.update(_get_git_info(spec_path))
         manifest["files"].append(entry)
 
     runner = request.app.state.runner
@@ -842,10 +825,19 @@ async def get_env_vars(request: Request):
     allowed_env_names = _get_allowed_env_names(config)
     env_vars: list[dict] = []
     for env_name in sorted(allowed_env_names):
+        raw_value = file_kv.get(env_name, "")
+        is_present = env_name in file_kv and bool(raw_value.strip())
+        # Build abbreviated display: prefix + ... + last 4 chars
+        abbreviated = ""
+        if is_present and len(raw_value) > 8:
+            abbreviated = raw_value[:4] + "..." + raw_value[-4:]
+        elif is_present:
+            abbreviated = "****"
         env_vars.append({
             "env_name": env_name,
             "is_set": bool(os.environ.get(env_name)),
-            "in_env_file": env_name in file_kv,
+            "in_env_file": is_present,
+            "abbreviated": abbreviated,
         })
 
     return JSONResponse({
@@ -853,6 +845,98 @@ async def get_env_vars(request: Request):
         "env_file_exists": env_file_path.is_file(),
         "env_vars": env_vars,
     })
+
+
+@router.put("/config/env/{env_name}")
+async def save_single_env_var(request: Request, env_name: str):
+    """Save a single API key environment variable to the .env file."""
+    _check_csrf(request)
+
+    # Validate env_name
+    from ..config import load_config
+    config_path = request.app.state.config_path
+    try:
+        config = await asyncio.to_thread(
+            load_config, Path(config_path) if config_path else None
+        )
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to load configuration")
+
+    allowed_env_names = _get_allowed_env_names(config)
+    if env_name not in allowed_env_names:
+        raise HTTPException(status_code=400, detail=f"Unknown environment variable: {env_name}")
+
+    body = await request.json()
+    value = body.get("value", "")
+
+    key_regex = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+    if not key_regex.match(env_name):
+        raise HTTPException(status_code=400, detail=f"Invalid key name: {env_name}")
+    if any(c in value for c in "\r\n\0"):
+        raise HTTPException(status_code=400, detail=f"Invalid characters in value")
+    if len(value) > 4096:
+        raise HTTPException(status_code=400, detail=f"Value too long")
+    if not value.strip():
+        raise HTTPException(status_code=400, detail="Value cannot be empty")
+
+    env_file_path = _get_env_file_path(request)
+    existing_lines, _ = _read_env_file(env_file_path)
+
+    try:
+        _write_env_file(env_file_path, existing_lines, {env_name: value})
+        os.environ[env_name] = value
+    except (OSError, PermissionError):
+        raise HTTPException(status_code=500, detail="Failed to write .env file")
+
+    return JSONResponse({"status": "ok", "env_name": env_name})
+
+
+@router.delete("/config/env/{env_name}")
+async def clear_single_env_var(request: Request, env_name: str):
+    """Clear a single API key environment variable from the .env file."""
+    _check_csrf(request)
+
+    from ..config import load_config
+    config_path = request.app.state.config_path
+    try:
+        config = await asyncio.to_thread(
+            load_config, Path(config_path) if config_path else None
+        )
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to load configuration")
+
+    allowed_env_names = _get_allowed_env_names(config)
+    if env_name not in allowed_env_names:
+        raise HTTPException(status_code=400, detail=f"Unknown environment variable: {env_name}")
+
+    env_file_path = _get_env_file_path(request)
+    existing_lines, file_kv = _read_env_file(env_file_path)
+
+    if env_name not in file_kv:
+        return JSONResponse({"status": "ok", "env_name": env_name, "message": "Not present"})
+
+    # Remove the key from existing lines
+    filtered: list[str] = []
+    for line in existing_lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            k, sep, _ = stripped.partition("=")
+            if sep and k == env_name:
+                continue
+        filtered.append(line)
+
+    content = "\n".join(filtered)
+    if not content.endswith("\n"):
+        content += "\n"
+    old_umask = os.umask(0o077)
+    try:
+        env_file_path.write_text(content)
+    finally:
+        os.umask(old_umask)
+    os.chmod(env_file_path, 0o600)
+    os.environ.pop(env_name, None)
+
+    return JSONResponse({"status": "ok", "env_name": env_name})
 
 
 @router.post("/config/env")

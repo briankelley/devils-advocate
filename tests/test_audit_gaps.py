@@ -451,49 +451,6 @@ class TestCancelReview:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# gui/api.py — _get_git_info
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-class TestGetGitInfo:
-    """Tests for the _get_git_info helper."""
-
-    def test_tracked_file_returns_hash(self, tmp_path):
-        """A file in a git repo should return a hash."""
-        from devils_advocate.gui.api import _get_git_info
-
-        # Create a tiny git repo
-        subprocess.run(["git", "init", str(tmp_path)], capture_output=True)
-        f = tmp_path / "test.txt"
-        f.write_text("content")
-        subprocess.run(
-            ["git", "-C", str(tmp_path), "add", "test.txt"],
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(tmp_path), "commit", "-m", "init",
-             "--author", "Test <test@test.com>"],
-            capture_output=True,
-            env={**os.environ, "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@test.com"},
-        )
-
-        info = _get_git_info(f)
-        assert info["git_status"] == "tracked"
-        assert info["git_hash"] is not None
-        assert len(info["git_hash"]) == 12
-
-    def test_untracked_file_returns_not_tracked(self, tmp_path):
-        """A file outside a git repo should return 'not tracked'."""
-        from devils_advocate.gui.api import _get_git_info
-
-        f = tmp_path / "notrack.txt"
-        f.write_text("no git here")
-        info = _get_git_info(f)
-        assert info["git_status"] == "not tracked"
-        assert info["git_hash"] is None
-
-
-# ═══════════════════════════════════════════════════════════════════════════
 # gui/pages.py — _list_reviews_cached TTL
 # ═══════════════════════════════════════════════════════════════════════════
 

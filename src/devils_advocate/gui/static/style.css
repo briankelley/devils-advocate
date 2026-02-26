@@ -198,6 +198,7 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .badge-high { background: #453d2a; color: var(--yellow); }
 .badge-medium { background: #3d3d2a; color: #b8a860; }
 .badge-low { background: #2d3d32; color: var(--green); }
+.badge-warning { background: #3d3828; color: #c9a84c; }
 .badge-info { background: #2d3840; color: var(--accent); }
 .badge-cat { background: #353840; color: var(--text-dim); }
 .badge-running { background: #2d3840; color: var(--accent); animation: pulse 1.5s infinite; }
@@ -784,6 +785,15 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     margin: 4px 0;
 }
 
+/* ── Cost Estimate Table (Dry Run) ────────────────────────────────── */
+
+.estimate-table { max-width: 800px; }
+.estimate-table td, .estimate-table th { padding: var(--pad-sm) var(--pad-md); }
+.estimate-table tfoot td { border-top: 2px solid var(--border); }
+.estimate-high td:last-child { color: var(--red); }
+.estimate-mid td:last-child { color: var(--yellow); }
+.estimate-low td:last-child { color: var(--green); }
+
 .completed-cost-table {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -1009,7 +1019,7 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .manifest-type { flex-shrink: 0; }
 .manifest-name { flex-shrink: 0; font-weight: 600; }
 .manifest-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.manifest-git { flex-shrink: 0; font-size: 10px; }
+
 
 /* ── Role Summary Vendor + CoT columns ───────────────────────────── */
 
@@ -1147,6 +1157,12 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 }
 .env-key-input::placeholder {
     color: var(--text-dim);
+}
+.env-key-abbreviated {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: var(--pad-sm);
 }
 
 /* ── File Picker Modal ──────────────────────────────────────────────── */

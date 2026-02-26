@@ -39,13 +39,13 @@ const dvad = {
             });
         });
 
-        // Project filter (Project is now column 0)
+        // Project filter (Project is column 1, after Review ID)
         const filter = document.getElementById('project-filter');
         if (filter) {
             filter.addEventListener('input', () => {
                 const val = filter.value.toLowerCase();
                 document.querySelectorAll('#reviews-table tbody tr').forEach(tr => {
-                    const project = tr.children[0]?.textContent?.toLowerCase() || '';
+                    const project = tr.children[1]?.textContent?.toLowerCase() || '';
                     tr.style.display = project.includes(val) ? '' : 'none';
                 });
             });
@@ -1140,21 +1140,17 @@ const dvad = {
 
         fetch('/api/config/env')
             .then(resp => {
-                if (!resp.ok) {
-                    throw new Error(`HTTP error ${resp.status}`);
-                }
+                if (!resp.ok) throw new Error(`HTTP error ${resp.status}`);
                 return resp.json();
             })
             .then(data => {
                 const list = document.getElementById('env-keys-list');
-                const actions = document.getElementById('env-keys-actions');
                 if (!list) return;
 
                 if (data.status === 'config_dir_unknown') {
                     list.innerHTML = '<p class="dim">Config directory unknown.</p>';
                     return;
                 }
-
                 if (!data.env_vars || data.env_vars.length === 0) {
                     list.innerHTML = '<p class="dim">No API key variables configured in models.</p>';
                     return;
@@ -1162,39 +1158,9 @@ const dvad = {
 
                 list.innerHTML = '';
                 data.env_vars.forEach(ev => {
-                    if (!/^[A-Z_][A-Z0-9_]*$/.test(ev.env_name)) {
-                        return;
-                    }
-
-                    const row = document.createElement('div');
-                    row.className = 'env-key-row';
-
-                    const label = document.createElement('span');
-                    label.className = 'env-key-label';
-                    label.textContent = ev.env_name;
-                    row.appendChild(label);
-
-                    const input = document.createElement('input');
-                    input.type = 'password';
-                    input.className = 'env-key-input';
-                    input.dataset.envName = ev.env_name;
-                    input.placeholder = 'paste key here';
-                    input.autocomplete = 'off';
-                    row.appendChild(input);
-
-                    const badge = document.createElement('span');
-                    badge.id = `env-status-${ev.env_name}`;
-                    badge.className = `key-status ${ev.is_set ? 'key-set' : 'key-missing'}`;
-                    badge.textContent = ev.is_set ? 'set' : 'MISSING';
-                    row.appendChild(badge);
-
-                    list.appendChild(row);
-
-                    input.addEventListener('dblclick', () => {
-                        input.type = input.type === 'password' ? 'text' : 'password';
-                    });
+                    if (!/^[A-Z_][A-Z0-9_]*$/.test(ev.env_name)) return;
+                    this._renderEnvKeyRow(list, ev);
                 });
-                if (actions) actions.style.display = '';
             })
             .catch(err => {
                 const list = document.getElementById('env-keys-list');
@@ -1202,61 +1168,114 @@ const dvad = {
             });
     },
 
-    async saveEnvKeys() {
-        const inputs = document.querySelectorAll('.env-key-input');
-        if (!inputs.length) return;
+    _renderEnvKeyRow(container, ev) {
+        const row = document.createElement('div');
+        row.className = 'env-key-row';
+        row.id = `env-row-${ev.env_name}`;
 
-        const envVars = {};
-        inputs.forEach(input => {
-            const name = input.dataset.envName;
-            const value = input.value;
-            envVars[name] = value;
-        });
+        const label = document.createElement('span');
+        label.className = 'env-key-label';
+        label.textContent = ev.env_name;
+        row.appendChild(label);
 
-        if (Object.keys(envVars).length === 0) {
-            const status = document.getElementById('env-save-status');
-            if (status) { status.textContent = 'No keys to save'; status.style.color = 'var(--yellow)'; }
-            return;
+        if (ev.in_env_file && ev.abbreviated) {
+            // Key is present: show "present" badge + abbreviated key + Clear button
+            const badge = document.createElement('span');
+            badge.className = 'key-status key-set';
+            badge.textContent = 'present';
+            row.appendChild(badge);
+
+            const abbr = document.createElement('span');
+            abbr.className = 'env-key-abbreviated mono';
+            abbr.textContent = ev.abbreviated;
+            row.appendChild(abbr);
+
+            const clearBtn = document.createElement('button');
+            clearBtn.className = 'btn btn-sm btn-cancel';
+            clearBtn.textContent = 'Clear';
+            clearBtn.addEventListener('click', () => this._clearEnvVar(ev.env_name));
+            row.appendChild(clearBtn);
+        } else {
+            // Key not present: show input + Save button
+            const input = document.createElement('input');
+            input.type = 'password';
+            input.className = 'env-key-input';
+            input.dataset.envName = ev.env_name;
+            input.placeholder = 'paste key here';
+            input.autocomplete = 'off';
+            row.appendChild(input);
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'btn btn-sm btn-accent';
+            saveBtn.textContent = 'Save';
+            saveBtn.addEventListener('click', () => this._saveEnvVar(ev.env_name, input.value));
+            row.appendChild(saveBtn);
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); this._saveEnvVar(ev.env_name, input.value); }
+            });
+            input.addEventListener('dblclick', () => {
+                input.type = input.type === 'password' ? 'text' : 'password';
+            });
         }
 
-        const status = document.getElementById('env-save-status');
-        if (status) { status.textContent = 'Saving...'; status.style.color = 'var(--text-dim)'; }
+        container.appendChild(row);
+    },
+
+    async _saveEnvVar(name, value) {
+        if (!value || !value.trim()) return;
 
         try {
-            const resp = await fetch('/api/config/env', {
-                method: 'POST',
+            const resp = await fetch(`/api/config/env/${encodeURIComponent(name)}`, {
+                method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-DVAD-Token': this.getToken(),
                 },
-                body: JSON.stringify({ env_vars: envVars }),
+                body: JSON.stringify({ value }),
             });
-            const data = await resp.json();
             if (resp.ok) {
-                if (status) {
-                    status.textContent = `Saved ${data.updated_keys.length} key(s) to ${data.path}`;
-                    status.style.color = 'var(--green)';
-                }
-                data.updated_keys.forEach(key => {
-                    const badge = document.getElementById('env-status-' + key);
-                    if (badge) {
-                        const isSet = envVars[key].trim() !== '';
-                        badge.textContent = isSet ? 'set' : 'MISSING';
-                        badge.className = `key-status ${isSet ? 'key-set' : 'key-missing'}`;
-                    }
-                });
+                // Re-render this row as "present"
+                this._refreshEnvKeys();
             } else {
-                if (status) {
-                    status.textContent = data.detail || 'Save failed';
-                    status.style.color = 'var(--red)';
-                }
+                const data = await resp.json();
+                alert(data.detail || 'Save failed');
             }
         } catch (err) {
-            if (status) {
-                status.textContent = 'Network error: ' + err.message;
-                status.style.color = 'var(--red)';
-            }
+            alert('Network error: ' + err.message);
         }
+    },
+
+    async _clearEnvVar(name) {
+        try {
+            const resp = await fetch(`/api/config/env/${encodeURIComponent(name)}`, {
+                method: 'DELETE',
+                headers: { 'X-DVAD-Token': this.getToken() },
+            });
+            if (resp.ok) {
+                this._refreshEnvKeys();
+            } else {
+                const data = await resp.json();
+                alert(data.detail || 'Clear failed');
+            }
+        } catch (err) {
+            alert('Network error: ' + err.message);
+        }
+    },
+
+    _refreshEnvKeys() {
+        // Re-fetch and re-render all env key rows
+        const list = document.getElementById('env-keys-list');
+        if (!list) return;
+        fetch('/api/config/env')
+            .then(r => r.json())
+            .then(data => {
+                list.innerHTML = '';
+                (data.env_vars || []).forEach(ev => {
+                    if (!/^[A-Z_][A-Z0-9_]*$/.test(ev.env_name)) return;
+                    this._renderEnvKeyRow(list, ev);
+                });
+            });
     },
     // ── File Picker ─────────────────────────────────────────────────
 
