@@ -795,7 +795,9 @@ const dvad = {
                 this._markRolesDirty();
             });
         });
-        this._updateRoleSummary();
+        if (typeof modelThinking !== 'undefined') {
+            this._updateRoleSummary();
+        }
     },
 
     _markRolesDirty() {
@@ -1071,6 +1073,9 @@ const dvad = {
 
     // ── Thinking Toggle ─────────────────────────────────────────────
     initThinkingToggle() {
+        if (this._thinkingToggleInitialized) return;
+        this._thinkingToggleInitialized = true;
+
         document.querySelectorAll('.thinking-icon').forEach(el => {
             el.addEventListener('click', async (e) => {
                 e.stopPropagation();
