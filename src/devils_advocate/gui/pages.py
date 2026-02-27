@@ -55,7 +55,7 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
     reviews = sorted(reviews, key=lambda r: r.get("timestamp", ""), reverse=True)
 
     if not show_test:
-        reviews = [r for r in reviews if r.get("project", "") != "test-project"]
+        reviews = [r for r in reviews if "test" not in r.get("project", "").lower()]
 
     per_page = 25
     total = len(reviews)

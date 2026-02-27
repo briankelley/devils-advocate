@@ -760,6 +760,14 @@ async def _run_adversarial_pipeline(
                 f"  [yellow]Warning: Revision failed: {e}[/yellow]"
             )
             storage.log(f"Revision failed (non-fatal): {e}")
+            revised_output = ""
+
+        if not revised_output:
+            # Downgrade result from success → completed (non-fatal revision failure)
+            ledger_dict["result"] = "completed"
+            storage.save_review_artifacts(
+                review_id, report_str, ledger_dict, round1_data, round2_data
+            )
     else:
         console.print("  [dim]No actionable findings — skipping revision[/dim]")
 

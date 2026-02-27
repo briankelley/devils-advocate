@@ -254,7 +254,7 @@ def generate_ledger(result: ReviewResult) -> dict:
 
     return {
         "review_id": result.review_id,
-        "result": "complete",
+        "result": "success",
         "mode": result.mode,
         "input_file": result.input_file,
         "project": result.project,
