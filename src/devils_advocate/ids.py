@@ -25,18 +25,6 @@ def _format_id_timestamp(dt: datetime) -> str:
     return dt.strftime("%d%b%Y.%H%M").upper()
 
 
-def extract_random_suffix(id_str: str) -> str:
-    """Extract the 4-char random suffix from a new-format ID.
-
-    E.g. 'atlas-voice.group_001.14FEB2026.1826.4g9a' -> '4g9a'
-    Returns empty string if not a new-format ID.
-    """
-    parts = id_str.split(".")
-    if len(parts) >= 5:
-        return parts[-1]
-    return ""
-
-
 # ─── ID Generators ────────────────────────────────────────────────────────────
 
 

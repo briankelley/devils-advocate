@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import tempfile
 import time
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 from .progress import ProgressEvent, classify_log_message, make_terminal_event
 
@@ -136,7 +133,6 @@ class ReviewRunner:
         file_manifest: dict | None = None,
     ) -> None:
         """Execute the review orchestrator in a background task."""
-        tmpdir = None
         storage = None
         try:
             from ..config import load_config
@@ -285,12 +281,6 @@ class ReviewRunner:
         finally:
             self.current_review_id = None
             self.current_task = None
-            if tmpdir:
-                try:
-                    import shutil
-                    shutil.rmtree(tmpdir, ignore_errors=True)
-                except Exception:
-                    pass
 
     def cancel_review(self, review_id: str) -> bool:
         """Cancel a running review. Returns True if cancelled."""

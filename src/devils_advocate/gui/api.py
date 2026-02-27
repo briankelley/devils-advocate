@@ -23,6 +23,20 @@ from .progress import ProgressEvent
 
 router = APIRouter()
 
+
+async def _load_app_config(request: Request) -> dict:
+    """Load config using the app's config_path. Raises HTTPException on failure."""
+    from ..config import load_config
+
+    config_path = request.app.state.config_path
+    try:
+        return await asyncio.to_thread(
+            load_config, Path(config_path) if config_path else None
+        )
+    except Exception as exc:
+        logging.exception("Failed to load configuration")
+        raise HTTPException(status_code=500, detail=str(exc))
+
 # Limits
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_FILES = 25
@@ -373,13 +387,10 @@ async def revise_review(request: Request, review_id: str):
     original_content = await asyncio.to_thread(oc_path.read_text)
 
     # Load config and resolve revision model
-    from ..config import load_config, get_models_by_role
+    from ..config import get_models_by_role
     from ..types import CostTracker
 
-    config_path = request.app.state.config_path
-    config = await asyncio.to_thread(
-        load_config, Path(config_path) if config_path else None
-    )
+    config = await _load_app_config(request)
     roles = get_models_by_role(config)
     revision_model = roles["revision"]
 
@@ -471,15 +482,7 @@ async def download_revised(request: Request, review_id: str):
 @router.get("/config")
 async def get_config_json(request: Request):
     """Return current config as JSON."""
-    from ..config import load_config
-
-    config_path = request.app.state.config_path
-    try:
-        config = await asyncio.to_thread(
-            load_config, Path(config_path) if config_path else None
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    config = await _load_app_config(request)
 
     # Serialize models
     models_data = {}
@@ -758,19 +761,27 @@ def _read_env_file(path: Path) -> tuple[list[str], dict[str, str]]:
     return lines, kv
 
 
-def _write_env_file(path: Path, existing_lines: list[str], updates: dict[str, str]) -> None:
+def _write_env_file(
+    path: Path,
+    existing_lines: list[str],
+    updates: dict[str, str] | None = None,
+    remove_keys: set[str] | None = None,
+) -> None:
     """Write updates to a .env file, preserving comments and existing structure.
 
     Keys present in updates replace their existing lines; new keys are appended.
-    File is written with 0o600 permissions.
+    Keys in remove_keys are dropped. File is written with 0o600 permissions.
     """
-    remaining = dict(updates)
+    remaining = dict(updates) if updates else {}
+    remove = remove_keys or set()
     new_lines: list[str] = []
 
     for line in existing_lines:
         stripped = line.strip()
         if stripped and not stripped.startswith("#"):
             key, sep, _ = stripped.partition("=")
+            if sep and key in remove:
+                continue
             if sep and key in remaining:
                 new_lines.append(f"{key}={remaining.pop(key)}")
                 continue
@@ -799,16 +810,7 @@ def _write_env_file(path: Path, existing_lines: list[str], updates: dict[str, st
 @router.get("/config/env")
 async def get_env_vars(request: Request):
     """Return environment variable names needed by configured models and their status."""
-    from ..config import load_config
-
-    config_path = request.app.state.config_path
-    try:
-        config = await asyncio.to_thread(
-            load_config, Path(config_path) if config_path else None
-        )
-    except Exception:
-        logging.exception("Failed to load configuration")
-        raise HTTPException(status_code=500, detail="Failed to load configuration")
+    config = await _load_app_config(request)
 
     try:
         env_file_path = _get_env_file_path(request)
@@ -852,16 +854,7 @@ async def save_single_env_var(request: Request, env_name: str):
     """Save a single API key environment variable to the .env file."""
     _check_csrf(request)
 
-    # Validate env_name
-    from ..config import load_config
-    config_path = request.app.state.config_path
-    try:
-        config = await asyncio.to_thread(
-            load_config, Path(config_path) if config_path else None
-        )
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to load configuration")
-
+    config = await _load_app_config(request)
     allowed_env_names = _get_allowed_env_names(config)
     if env_name not in allowed_env_names:
         raise HTTPException(status_code=400, detail=f"Unknown environment variable: {env_name}")
@@ -896,15 +889,7 @@ async def clear_single_env_var(request: Request, env_name: str):
     """Clear a single API key environment variable from the .env file."""
     _check_csrf(request)
 
-    from ..config import load_config
-    config_path = request.app.state.config_path
-    try:
-        config = await asyncio.to_thread(
-            load_config, Path(config_path) if config_path else None
-        )
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to load configuration")
-
+    config = await _load_app_config(request)
     allowed_env_names = _get_allowed_env_names(config)
     if env_name not in allowed_env_names:
         raise HTTPException(status_code=400, detail=f"Unknown environment variable: {env_name}")
@@ -915,25 +900,7 @@ async def clear_single_env_var(request: Request, env_name: str):
     if env_name not in file_kv:
         return JSONResponse({"status": "ok", "env_name": env_name, "message": "Not present"})
 
-    # Remove the key from existing lines
-    filtered: list[str] = []
-    for line in existing_lines:
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#"):
-            k, sep, _ = stripped.partition("=")
-            if sep and k == env_name:
-                continue
-        filtered.append(line)
-
-    content = "\n".join(filtered)
-    if not content.endswith("\n"):
-        content += "\n"
-    old_umask = os.umask(0o077)
-    try:
-        env_file_path.write_text(content)
-    finally:
-        os.umask(old_umask)
-    os.chmod(env_file_path, 0o600)
+    _write_env_file(env_file_path, existing_lines, remove_keys={env_name})
     os.environ.pop(env_name, None)
 
     return JSONResponse({"status": "ok", "env_name": env_name})
@@ -949,17 +916,7 @@ async def save_env_vars(request: Request):
     if not env_updates:
         raise HTTPException(status_code=400, detail="No environment variables provided")
 
-    # Validate: only allow known api_key_env names from models
-    from ..config import load_config
-
-    config_path = request.app.state.config_path
-    try:
-        config = await asyncio.to_thread(
-            load_config, Path(config_path) if config_path else None
-        )
-    except Exception:
-        logging.exception("Failed to load configuration")
-        raise HTTPException(status_code=500, detail="Failed to load configuration")
+    config = await _load_app_config(request)
 
     allowed_env_names = _get_allowed_env_names(config)
 
@@ -994,36 +951,16 @@ async def save_env_vars(request: Request):
             to_unset.append(key)
             os.environ.pop(key, None)
 
-    # Remove unset keys from existing lines
-    if to_unset:
-        unset_set = set(to_unset)
-        filtered: list[str] = []
-        for line in existing_lines:
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#"):
-                k, sep, _ = stripped.partition("=")
-                if sep and k in unset_set:
-                    continue
-            filtered.append(line)
-        existing_lines = filtered
-
-    if to_write:
-        try:
-            _write_env_file(env_file_path, existing_lines, to_write)
-        except (OSError, PermissionError):
-            logging.exception("Failed to save environment variables")
-            raise HTTPException(status_code=500, detail="Failed to write .env file. Check directory permissions.")
-    elif to_unset and existing_lines:
-        # Only removals — rewrite without the unset keys
-        content = "\n".join(existing_lines)
-        if not content.endswith("\n"):
-            content += "\n"
-        old_umask = os.umask(0o077)
-        try:
-            env_file_path.write_text(content)
-        finally:
-            os.umask(old_umask)
-        os.chmod(env_file_path, 0o600)
+    try:
+        _write_env_file(
+            env_file_path,
+            existing_lines,
+            updates=to_write or None,
+            remove_keys=set(to_unset) if to_unset else None,
+        )
+    except (OSError, PermissionError):
+        logging.exception("Failed to save environment variables")
+        raise HTTPException(status_code=500, detail="Failed to write .env file. Check directory permissions.")
 
     return JSONResponse({
         "status": "ok",

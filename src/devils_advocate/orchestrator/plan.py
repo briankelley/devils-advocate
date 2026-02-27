@@ -27,6 +27,7 @@ from ..ui import console
 from ._common import (
     PipelineInputs,
     _build_dry_run_estimate_rows,
+    _build_role_assignments,
     _call_reviewer,
     _check_cost_guardrail,
     _estimate_total_cost,
@@ -137,13 +138,7 @@ async def run_plan_review(
         cost_estimate_rows = _build_dry_run_estimate_rows(
             content, author, active_reviewers, dedup_model, revision_model,
         )
-        role_assignments = {
-            "author": author.name,
-            "reviewers": [r.name for r in active_reviewers],
-            "dedup": dedup_model.name,
-            "normalization": normalization_model.name,
-            "revision": roles["revision"].name if roles.get("revision") else "",
-        }
+        role_assignments = _build_role_assignments(roles, active_reviewers)
         _save_stub_ledger(
             storage, review_id, "plan", project, str(primary_file),
             "dry_run", timestamp=timestamp, role_assignments=role_assignments,
@@ -159,13 +154,7 @@ async def run_plan_review(
                 f"[red]Error:[/red] Estimated cost ${est_cost:.4f} exceeds "
                 f"--max-cost ${max_cost:.2f}. Aborting."
             )
-            role_assignments = {
-                "author": author.name,
-                "reviewers": [r.name for r in active_reviewers],
-                "dedup": dedup_model.name,
-                "normalization": normalization_model.name,
-                "revision": roles["revision"].name if roles.get("revision") else "",
-            }
+            role_assignments = _build_role_assignments(roles, active_reviewers)
             _save_stub_ledger(
                 storage, review_id, "plan", project, str(primary_file),
                 "cost_exceeded", timestamp=timestamp, est_cost=est_cost,

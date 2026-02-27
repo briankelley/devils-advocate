@@ -11,6 +11,29 @@ from .providers import MAX_OUTPUT_TOKENS, call_with_retry
 from .parser import parse_dedup_response, parse_spec_dedup_response
 
 
+def promote_points_to_groups(
+    points: list[ReviewPoint],
+    ctx: ReviewContext,
+) -> list[ReviewGroup]:
+    """Promote each point to its own group (dedup fallback).
+
+    Used when dedup is skipped (e.g. context overflow or partial reviewer failure).
+    """
+    groups: list[ReviewGroup] = []
+    for i, p in enumerate(points):
+        gid = ctx.make_group_id(i + 1)
+        p.point_id = ctx.make_point_id(gid, 1)
+        groups.append(ReviewGroup(
+            group_id=gid,
+            concern=p.description,
+            points=[p],
+            combined_severity=p.severity,
+            combined_category=p.category,
+            source_reviewers=[p.reviewer],
+        ))
+    return groups
+
+
 def format_points_for_dedup(points: list[ReviewPoint]) -> str:
     """Format review points into the text block expected by the dedup prompt."""
     lines: list[str] = []
@@ -71,20 +94,7 @@ async def deduplicate_points(
                 f"  Dedup input ({est} tokens) exceeds {model.name} context ({limit}). "
                 "Skipping dedup -- each point becomes its own group."
             )
-        # Fall back: each point is its own group
-        groups: list[ReviewGroup] = []
-        for i, p in enumerate(all_points):
-            gid = ctx.make_group_id(i + 1)
-            p.point_id = ctx.make_point_id(gid, 1)
-            groups.append(ReviewGroup(
-                group_id=gid,
-                concern=p.description,
-                points=[p],
-                combined_severity=p.severity,
-                combined_category=p.category,
-                source_reviewers=[p.reviewer],
-            ))
-        return groups
+        return promote_points_to_groups(all_points, ctx)
 
     if log_fn:
         log_fn(f"  Deduplication: calling {model.name} ({len(all_points)} points)")

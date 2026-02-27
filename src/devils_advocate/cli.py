@@ -636,8 +636,7 @@ def install_cmd(port, no_start, force):
         console.print(f"[red]Error:[/red] {err}")
         sys.exit(1)
 
-
-    # 3. Binary detection
+    # 2. Binary detection
     try:
         dvad_bin = detect_dvad_binary()
     except FileNotFoundError as e:

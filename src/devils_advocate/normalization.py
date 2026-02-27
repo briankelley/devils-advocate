@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import httpx
 
-from .types import APIError, CostTracker, ModelConfig, ReviewPoint
+from .types import CostTracker, ModelConfig, ReviewPoint
 from .prompts import build_normalization_prompt
 from .providers import MAX_OUTPUT_TOKENS, call_with_retry
 from .parser import parse_review_response
@@ -46,7 +46,7 @@ async def normalize_review_response(
                 role="normalization",
             )
         return parse_review_response(text, reviewer_name, start_index)
-    except (APIError, Exception) as e:
+    except Exception as e:
         if log_fn:
             log_fn(f"  Normalization failed for {reviewer_name}: {e}")
         return []

@@ -11,7 +11,6 @@ from rich.panel import Panel
 from ..types import (
     CostTracker,
     ReviewContext,
-    ReviewGroup,
     ReviewResult,
 )
 from ..ids import assign_guids, generate_review_id
@@ -27,8 +26,10 @@ from ..ui import console
 from ._common import (
     PipelineInputs,
     _build_dry_run_estimate_rows,
+    _build_role_assignments,
     _check_cost_guardrail,
     _print_dry_run,
+    _promote_points_to_groups,
     _run_adversarial_pipeline,
     _save_stub_ledger,
 )
@@ -37,7 +38,7 @@ from ._common import (
 async def run_integration_review(
     config: dict,
     project: str,
-    input_files: list | None = None,
+    input_files: list[str | Path] | None = None,
     spec_file: Path | None = None,
     project_dir: Path | None = None,
     max_cost: float | None = None,
@@ -148,14 +149,8 @@ async def run_integration_review(
         cost_estimate_rows = _build_dry_run_estimate_rows(
             combined, author, [integ_reviewer], dedup_model, revision_model,
         )
-        role_assignments = {
-            "author": author.name,
-            "reviewers": [integ_reviewer.name],
-            "dedup": dedup_model.name,
-            "normalization": normalization_model.name,
-            "revision": roles["revision"].name if roles.get("revision") else "",
-            "integration": integ_reviewer.name,
-        }
+        role_assignments = _build_role_assignments(roles, [integ_reviewer])
+        role_assignments["integration"] = integ_reviewer.name
         _save_stub_ledger(
             storage, review_id, "integration", project,
             ", ".join(files_to_review.keys()),
@@ -219,20 +214,7 @@ async def run_integration_review(
             console.print(f"  {len(points)} integration points identified")
 
             # For integration review, each point is its own group (single reviewer)
-            groups: list[ReviewGroup] = []
-            for i, p in enumerate(points):
-                gid = ctx.make_group_id(i + 1)
-                p.point_id = ctx.make_point_id(gid, 1)
-                groups.append(
-                    ReviewGroup(
-                        group_id=gid,
-                        concern=p.description,
-                        points=[p],
-                        combined_severity=p.severity,
-                        combined_category=p.category,
-                        source_reviewers=[integ_reviewer.name],
-                    )
-                )
+            groups = _promote_points_to_groups(points, ctx)
             assign_guids(groups)
 
             # Cost guardrail checkpoint

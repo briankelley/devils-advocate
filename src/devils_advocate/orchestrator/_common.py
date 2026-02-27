@@ -46,6 +46,7 @@ from ..parser import (
     parse_review_response,
 )
 from ..normalization import normalize_review_response
+from ..dedup import promote_points_to_groups as _promote_points_to_groups
 from ..governance import apply_governance
 from ..output import generate_ledger, generate_report
 from ..revision import run_revision
@@ -128,28 +129,18 @@ def _save_stub_ledger(
     storage.save_review_artifacts(review_id, "", ledger, {}, {})
 
 
-def _promote_points_to_groups(
-    points: list[ReviewPoint],
-    ctx: "ReviewContext",
-) -> list[ReviewGroup]:
-    """Promote each point to its own group (dedup fallback).
+# _promote_points_to_groups is imported from ..dedup (canonical implementation)
 
-    Used when dedup is skipped because not all reviewers succeeded.
-    Mirrors the context-overflow fallback in dedup.py.
-    """
-    groups: list[ReviewGroup] = []
-    for i, p in enumerate(points):
-        gid = ctx.make_group_id(i + 1)
-        p.point_id = ctx.make_point_id(gid, 1)
-        groups.append(ReviewGroup(
-            group_id=gid,
-            concern=p.description,
-            points=[p],
-            combined_severity=p.severity,
-            combined_category=p.category,
-            source_reviewers=[p.reviewer],
-        ))
-    return groups
+
+def _build_role_assignments(roles: dict, active_reviewers: list) -> dict:
+    """Build the role_assignments dict used in stub ledgers."""
+    return {
+        "author": roles["author"].name if roles.get("author") else "",
+        "reviewers": [r.name for r in active_reviewers],
+        "dedup": roles["dedup"].name if roles.get("dedup") else "",
+        "normalization": roles["normalization"].name if roles.get("normalization") else "",
+        "revision": roles["revision"].name if roles.get("revision") else "",
+    }
 
 
 # ---- Reviewer call -----------------------------------------------------------
