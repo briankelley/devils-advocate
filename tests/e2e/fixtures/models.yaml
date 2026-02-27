@@ -10,12 +10,25 @@ models:
     max_out_configured: 4096
     thinking: false
 
+  e2e-thinker:
+    provider: openai
+    model_id: dolphin-mistral-24b-Q4_K_M.gguf
+    api_key_env: E2E_LOCAL_KEY
+    api_base: http://localhost:8080/v1
+    context_window: 32768
+    timeout: 300
+    max_out_stated: 8192
+    max_out_configured: 4096
+    thinking: true
+
 roles:
   author: e2e-local
   reviewers:
     - e2e-local
-    - e2e-local
+    - e2e-thinker
   deduplication: e2e-local
+  normalization: e2e-thinker
+  revision: e2e-thinker
   integration_reviewer: e2e-local
 
 settings:

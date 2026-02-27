@@ -59,3 +59,82 @@ def test_config_api_returns_json(page, dvad_server):
     data = resp.json()
     assert "models" in data
     assert "config_path" in data
+
+
+# --- Role & CoT icon state tests (fixture: e2e-local + e2e-thinker) ---
+
+# Expected role assignments from fixtures/models.yaml
+_ROLE_MAP = {
+    "author": ["e2e-local"],
+    "reviewer": ["e2e-local", "e2e-thinker"],
+    "deduplication": ["e2e-local"],
+    "normalization": ["e2e-thinker"],
+    "revision": ["e2e-thinker"],
+    "integration_reviewer": ["e2e-local"],
+}
+_ALL_MODELS = ["e2e-local", "e2e-thinker"]
+_ALL_ROLES = list(_ROLE_MAP.keys())
+
+
+def test_role_icon_active_states(page, dvad_server):
+    """Role icons have role-active class only for assigned (model, role) pairs."""
+    page.goto(f"{dvad_server}/config")
+    page.wait_for_load_state("networkidle")
+
+    for role in _ALL_ROLES:
+        for model in _ALL_MODELS:
+            icon = page.locator(f'.role-icon[data-role="{role}"][data-model="{model}"]')
+            if model in _ROLE_MAP[role]:
+                expect(icon).to_have_class(r".*\brole-active\b.*")
+            else:
+                expect(icon).not_to_have_class(r".*\brole-active\b.*")
+
+
+def test_thinking_icon_states(page, dvad_server):
+    """Thinking icons reflect the model's thinking flag."""
+    page.goto(f"{dvad_server}/config")
+    page.wait_for_load_state("networkidle")
+
+    expect(
+        page.locator('.thinking-icon[data-model="e2e-thinker"]')
+    ).to_have_class(r".*\bthinking-active\b.*")
+    expect(
+        page.locator('.thinking-icon[data-model="e2e-local"]')
+    ).not_to_have_class(r".*\bthinking-active\b.*")
+
+
+def test_role_summary_values(page, dvad_server):
+    """Role summary section shows correct model names for each role."""
+    page.goto(f"{dvad_server}/config")
+    page.wait_for_load_state("networkidle")
+
+    expectations = {
+        "rs-author": "e2e-local",
+        "rs-reviewer1": "e2e-local",
+        "rs-reviewer2": "e2e-thinker",
+        "rs-deduplication": "e2e-local",
+        "rs-normalization": "e2e-thinker",
+        "rs-revision": "e2e-thinker",
+        "rs-integration_reviewer": "e2e-local",
+    }
+    for element_id, expected_text in expectations.items():
+        expect(page.locator(f"#{element_id}")).to_have_text(expected_text)
+
+
+def test_role_summary_cot_icons(page, dvad_server):
+    """Role summary CoT icons reflect thinking state of assigned model."""
+    page.goto(f"{dvad_server}/config")
+    page.wait_for_load_state("networkidle")
+
+    cot_active = ["rsc-reviewer2", "rsc-normalization", "rsc-revision"]
+    cot_inactive = [
+        "rsc-author",
+        "rsc-reviewer1",
+        "rsc-deduplication",
+        "rsc-integration_reviewer",
+    ]
+
+    for element_id in cot_active:
+        expect(page.locator(f"#{element_id}")).to_have_class(r".*\bcot-active\b.*")
+    for element_id in cot_inactive:
+        expect(page.locator(f"#{element_id}")).not_to_have_class(r".*\bcot-active\b.*")
