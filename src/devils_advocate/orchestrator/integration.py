@@ -28,6 +28,7 @@ from ._common import (
     _build_dry_run_estimate_rows,
     _build_role_assignments,
     _check_cost_guardrail,
+    _estimate_total_cost,
     _print_dry_run,
     _promote_points_to_groups,
     _run_adversarial_pipeline,
@@ -84,6 +85,8 @@ async def run_integration_review(
                 if task.get("status") == "completed":
                     for fp in task.get("files", []):
                         p = Path(fp)
+                        if not p.is_absolute() and project_dir:
+                            p = project_dir / p
                         if p.exists():
                             files_to_review[str(p)] = p.read_text()
             # Look for strategic summary from manifest dir if not yet found
@@ -110,7 +113,8 @@ async def run_integration_review(
         )
     combined = "\n\n".join(file_sections)
 
-    review_id = generate_review_id(combined)
+    # Reuse review_id from caller (GUI runner) if already set, otherwise generate
+    review_id = storage.current_review_id or generate_review_id(combined)
     storage.set_review_id(review_id)
     timestamp = datetime.now(timezone.utc).isoformat()
     cost_tracker = CostTracker(max_cost=max_cost, _log_fn=storage.log)
@@ -159,6 +163,25 @@ async def run_integration_review(
         )
         return None
 
+    # Pre-flight cost estimate (abort before any LLM calls if over budget)
+    if max_cost is not None:
+        est_cost = _estimate_total_cost(combined, author, [integ_reviewer], dedup_model)
+        if est_cost > max_cost:
+            console.print(
+                f"[red]Error:[/red] Estimated cost ${est_cost:.4f} exceeds "
+                f"--max-cost ${max_cost:.2f}. Aborting."
+            )
+            role_assignments = _build_role_assignments(roles, [integ_reviewer])
+            role_assignments["integration"] = integ_reviewer.name
+            _save_stub_ledger(
+                storage, review_id, "integration", project,
+                ", ".join(files_to_review.keys()),
+                "cost_exceeded", timestamp=timestamp, est_cost=est_cost,
+                role_assignments=role_assignments,
+            )
+            return None
+        storage.log(f"Estimated cost: ${est_cost:.4f} (limit: ${max_cost:.2f})")
+
     if not storage.acquire_lock():
         console.print("[red]Error:[/red] Lock held.")
         return None
@@ -166,7 +189,9 @@ async def run_integration_review(
     try:
         revision_model = roles["revision"]
 
-        async with httpx.AsyncClient() as client:
+        from ..http import make_async_client
+
+        async with make_async_client() as client:
             console.print(
                 Panel(
                     "[bold]Integration Review:[/bold] Analyzing codebase...",

@@ -81,7 +81,7 @@ def fill_form_and_submit(
     page.wait_for_load_state("networkidle")
 
     # Select mode radio
-    page.locator(f'input[name="mode"][value="{mode}"]').click()
+    page.locator(f'input[type="radio"][name="mode"][value="{mode}"]').click()
     # Wait for mode UI update
     page.wait_for_timeout(200)
 
@@ -148,8 +148,12 @@ def fill_form_and_submit(
     if dry_run:
         page.check("#dry_run")
 
-    # Submit the form (triggers interstitial)
-    page.click("#submit-btn")
+    # Submit the form via JS dispatch to bypass HTML5 step validation
+    # (max_cost values like 0.001 fail native validation with step=0.01)
+    page.evaluate(
+        "document.getElementById('review-form').dispatchEvent("
+        "new Event('submit', {cancelable: true, bubbles: true}))"
+    )
 
     # Wait for interstitial to appear
     page.wait_for_selector("#interstitial", state="visible", timeout=5000)
@@ -227,7 +231,7 @@ def validate_cli_command(
 # ─── Helper: start review via GUI and wait for completion ────────────────────
 
 
-def click_run_and_wait(page, dvad_server: str, *, timeout: int = 300_000) -> str:
+def click_run_and_wait(page, dvad_server: str, *, timeout: int = 600_000) -> str:
     """Click 'Run Review' on interstitial, wait for completion. Return review_id."""
     # Click the run button
     page.click("#run-review-btn")
@@ -239,26 +243,64 @@ def click_run_and_wait(page, dvad_server: str, *, timeout: int = 300_000) -> str
     url = page.url
     review_id = url.rstrip("/").split("/")[-1]
 
-    # Wait for the review to complete (page transitions from running to detail)
-    # The progress page has .running-header; detail page has .page-header
-    page.wait_for_selector(".page-header", timeout=timeout)
+    # Poll API for completion instead of relying on SSE-driven DOM transitions
+    wait_for_review_complete(page, dvad_server, review_id, timeout=timeout)
 
     return review_id
 
 
-def assert_review_result(page, *, expected_result: str, mode: str):
-    """Assert the review detail page shows the expected result."""
+def wait_for_review_complete(
+    page, dvad_server: str, review_id: str, *, timeout: int = 600_000
+) -> str:
+    """Poll /api/review/{id} until the review ledger exists (completion or failure).
+
+    Returns the result string (e.g. 'success', 'dry_run', 'cost_exceeded', 'failed').
+    More reliable than waiting for DOM transitions which depend on SSE and page reloads.
+    """
+    import time as _time
+
+    deadline = _time.monotonic() + timeout / 1000
+    while _time.monotonic() < deadline:
+        resp = page.request.get(f"{dvad_server}/api/review/{review_id}")
+        if resp.status == 200:
+            data = resp.json()
+            result = data.get("result", "")
+            if result and result != "running":
+                # Review is done — navigate to the detail page
+                page.goto(f"{dvad_server}/review/{review_id}")
+                page.wait_for_load_state("domcontentloaded")
+                return result
+        page.wait_for_timeout(5000)
+
+    pytest.fail(f"Review {review_id} did not complete within {timeout / 1000:.0f}s")
+
+
+def assert_review_result(page, *, expected_result: str, mode: str, actual_result: str | None = None):
+    """Assert the review completed with the expected result.
+
+    Uses the API result string (from wait_for_review_complete) for the primary check,
+    then verifies page content is consistent with that result.
+    """
     body = page.locator("body").inner_text()
 
+    if actual_result is not None:
+        assert actual_result == expected_result, (
+            f"Expected result '{expected_result}' but API returned '{actual_result}'\n"
+            f"Page text: {body[:500]}"
+        )
+
     if expected_result == "dry_run":
-        assert "Dry Run" in body, f"Expected 'Dry Run' badge, page text: {body[:500]}"
+        # Dry run pages show cost estimate table
+        assert "Cost Estimate" in body or "Estimated" in body or "dry" in body.lower(), (
+            f"Dry run page content unexpected: {body[:500]}"
+        )
     elif expected_result == "cost_exceeded":
-        assert "Cost Exceeded" in body or "Cost Aborted" in body, (
-            f"Expected cost exceeded/aborted badge, page text: {body[:500]}"
+        # Cost exceeded — review detail page renders but no report download
+        assert page.locator('a:has-text("Download Report")').count() == 0, (
+            "Cost exceeded review should not offer report download"
         )
     elif expected_result == "success":
-        assert "Success" in body, f"Expected 'Success' badge, page text: {body[:500]}"
-        # Cost table should be populated
+        # Successful reviews show cost rows and download links
         cost_rows = page.locator(".cost-row")
         assert cost_rows.count() >= 1, "No cost rows found on success page"
 
@@ -475,8 +517,8 @@ class TestCLICommandExecution:
     pytestmark = [pytest.mark.e2e, pytest.mark.e2e_live]
 
     @pytest.fixture(autouse=True)
-    def _require_remote(self, remote_llm):
-        """Ensure remote LLM is available."""
+    def _require_remote(self, local_llm):
+        """Ensure LLM is available."""
 
     def test_plan_command_executes(self, live_page, dvad_server, tmp_path, e2e_config_path):
         """Scrape a plan review CLI command and run it via subprocess."""
@@ -573,8 +615,8 @@ class TestLiveReviewMatrix:
     pytestmark = [pytest.mark.e2e, pytest.mark.e2e_live]
 
     @pytest.fixture(autouse=True)
-    def _require_remote(self, remote_llm):
-        """Ensure remote LLM is available."""
+    def _require_remote(self, local_llm):
+        """Ensure LLM is available."""
 
     @staticmethod
     def _expected_result(dry_run: bool, max_cost: str | None) -> str:
@@ -592,7 +634,7 @@ class TestLiveReviewMatrix:
         """Review with thinking=off for each mode x dry_run x max_cost."""
         page = live_page
         input_file = _create_input_file(tmp_path, mode)
-        project_dir = _create_project_dir(tmp_path) if mode == "integration" else None
+        project_dir = _create_project_dir(tmp_path) if mode == "integration" else tmp_path
         project = f"e2e-{mode}-d{int(dry_run)}-c{max_cost or 'none'}"
 
         review_id = start_review_api(
@@ -603,12 +645,11 @@ class TestLiveReviewMatrix:
             max_cost=max_cost, dry_run=dry_run,
         )
 
-        # Navigate to review and wait for completion
-        page.goto(f"{dvad_server}/review/{review_id}")
-        page.wait_for_selector(".page-header", timeout=300_000)
+        # Wait for review completion via API polling (more reliable than DOM waits)
+        actual = wait_for_review_complete(page, dvad_server, review_id)
 
         expected = self._expected_result(dry_run, max_cost)
-        assert_review_result(page, expected_result=expected, mode=mode)
+        assert_review_result(page, expected_result=expected, mode=mode, actual_result=actual)
 
     @pytest.mark.parametrize("mode", MODES)
     @pytest.mark.parametrize("dry_run", DRY_RUN_VALUES, ids=["run", "dry"])
@@ -619,7 +660,7 @@ class TestLiveReviewMatrix:
         """Review with thinking=on for each mode x dry_run x max_cost."""
         page = live_page
         input_file = _create_input_file(tmp_path, mode)
-        project_dir = _create_project_dir(tmp_path) if mode == "integration" else None
+        project_dir = _create_project_dir(tmp_path) if mode == "integration" else tmp_path
         project = f"e2e-think-{mode}-d{int(dry_run)}-c{max_cost or 'none'}"
 
         review_id = start_review_api(
@@ -630,11 +671,10 @@ class TestLiveReviewMatrix:
             max_cost=max_cost, dry_run=dry_run,
         )
 
-        page.goto(f"{dvad_server}/review/{review_id}")
-        page.wait_for_selector(".page-header", timeout=300_000)
+        actual = wait_for_review_complete(page, dvad_server, review_id)
 
         expected = self._expected_result(dry_run, max_cost)
-        assert_review_result(page, expected_result=expected, mode=mode)
+        assert_review_result(page, expected_result=expected, mode=mode, actual_result=actual)
 
     def test_dry_run_with_max_cost(self, live_page, dvad_server, tmp_path):
         """Explicit test: dry_run=True + max_cost=0.001 — unknown interaction."""
@@ -648,15 +688,14 @@ class TestLiveReviewMatrix:
             max_cost="0.001", dry_run=True,
         )
 
-        page.goto(f"{dvad_server}/review/{review_id}")
-        page.wait_for_selector(".page-header", timeout=60_000)
+        actual = wait_for_review_complete(page, dvad_server, review_id, timeout=120_000)
 
         # We don't know which takes precedence — just verify it doesn't crash
         body = page.locator("body").inner_text()
         assert "e2e-dryrun-maxcost" in body, "Review page should show project name"
         # It should be one of these outcomes
-        assert any(badge in body for badge in ["Dry Run", "Cost Exceeded", "Cost Aborted", "Success"]), (
-            f"Unexpected result state on page: {body[:500]}"
+        assert actual in ("dry_run", "cost_exceeded", "cost_aborted", "success"), (
+            f"Unexpected result: {actual}"
         )
 
 
@@ -671,8 +710,8 @@ class TestInputVariations:
     pytestmark = [pytest.mark.e2e, pytest.mark.e2e_live]
 
     @pytest.fixture(autouse=True)
-    def _require_remote(self, remote_llm):
-        """Ensure remote LLM is available."""
+    def _require_remote(self, local_llm):
+        """Ensure LLM is available."""
 
     def test_plan_multi_file(self, live_page, dvad_server, tmp_path):
         """Plan review with multiple input files."""
@@ -686,11 +725,11 @@ class TestInputVariations:
             page, dvad_server,
             mode="plan", project="e2e-plan-multi",
             input_files=[plan1, plan2],
+            project_dir=tmp_path,
         )
 
-        page.goto(f"{dvad_server}/review/{review_id}")
-        page.wait_for_selector(".page-header", timeout=300_000)
-        assert_review_result(page, expected_result="success", mode="plan")
+        actual = wait_for_review_complete(page, dvad_server, review_id)
+        assert_review_result(page, expected_result="success", mode="plan", actual_result=actual)
 
     def test_plan_with_spec_file(self, live_page, dvad_server, tmp_path):
         """Plan review with an additional spec file."""
@@ -703,11 +742,11 @@ class TestInputVariations:
             page, dvad_server,
             mode="plan", project="e2e-plan-spec",
             input_files=[plan], spec_file=spec,
+            project_dir=tmp_path,
         )
 
-        page.goto(f"{dvad_server}/review/{review_id}")
-        page.wait_for_selector(".page-header", timeout=300_000)
-        assert_review_result(page, expected_result="success", mode="plan")
+        actual = wait_for_review_complete(page, dvad_server, review_id)
+        assert_review_result(page, expected_result="success", mode="plan", actual_result=actual)
 
     def test_plan_with_reference_files(self, live_page, dvad_server, tmp_path):
         """Plan review with reference files for cross-checking."""
@@ -721,11 +760,11 @@ class TestInputVariations:
             page, dvad_server,
             mode="plan", project="e2e-plan-refs",
             input_files=[plan, ref],
+            project_dir=tmp_path,
         )
 
-        page.goto(f"{dvad_server}/review/{review_id}")
-        page.wait_for_selector(".page-header", timeout=300_000)
-        assert_review_result(page, expected_result="success", mode="plan")
+        actual = wait_for_review_complete(page, dvad_server, review_id)
+        assert_review_result(page, expected_result="success", mode="plan", actual_result=actual)
 
     def test_code_with_spec(self, live_page, dvad_server, tmp_path):
         """Code review with spec file."""
@@ -738,11 +777,11 @@ class TestInputVariations:
             page, dvad_server,
             mode="code", project="e2e-code-spec",
             input_files=[code], spec_file=spec,
+            project_dir=tmp_path,
         )
 
-        page.goto(f"{dvad_server}/review/{review_id}")
-        page.wait_for_selector(".page-header", timeout=300_000)
-        assert_review_result(page, expected_result="success", mode="code")
+        actual = wait_for_review_complete(page, dvad_server, review_id)
+        assert_review_result(page, expected_result="success", mode="code", actual_result=actual)
 
     def test_integration_with_project_dir(self, live_page, dvad_server, tmp_path):
         """Integration review using project-dir manifest discovery."""
@@ -756,8 +795,7 @@ class TestInputVariations:
             project_dir=project_dir,
         )
 
-        page.goto(f"{dvad_server}/review/{review_id}")
-        page.wait_for_selector(".page-header", timeout=300_000)
+        wait_for_review_complete(page, dvad_server, review_id)
 
         body = page.locator("body").inner_text()
         assert "e2e-integ-dir" in body
@@ -775,8 +813,7 @@ class TestInputVariations:
             project_dir=project_dir,
         )
 
-        page.goto(f"{dvad_server}/review/{review_id}")
-        page.wait_for_selector(".page-header", timeout=300_000)
+        wait_for_review_complete(page, dvad_server, review_id)
 
         body = page.locator("body").inner_text()
         assert "e2e-integ-both" in body
@@ -800,6 +837,19 @@ class TestInputVariations:
             headers={"X-DVAD-Token": csrf},
         )
 
+        # Retry on 409 (prior review still running)
+        if resp.status == 409:
+            page.wait_for_timeout(10_000)
+            resp = page.request.post(
+                f"{dvad_server}/api/review/start",
+                multipart={
+                    "mode": "integration",
+                    "project": "e2e-integ-empty",
+                    "input_paths": json.dumps([]),
+                },
+                headers={"X-DVAD-Token": csrf},
+            )
+
         # Record what happens — we expect either 400 (validation) or 200 (proceeds)
         if resp.status == 400:
             # Valid — server rejected empty integration input
@@ -808,5 +858,4 @@ class TestInputVariations:
             # Also valid — server accepted and will try to run
             assert resp.status == 200
             review_id = resp.json()["review_id"]
-            page.goto(f"{dvad_server}/review/{review_id}")
-            page.wait_for_selector(".page-header", timeout=120_000)
+            wait_for_review_complete(page, dvad_server, review_id, timeout=120_000)

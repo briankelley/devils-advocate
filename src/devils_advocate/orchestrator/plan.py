@@ -80,7 +80,7 @@ async def run_plan_review(
     else:
         content = primary_content
 
-    review_id = generate_review_id(content)
+    review_id = storage.current_review_id or generate_review_id(content)
     storage.set_review_id(review_id)
     timestamp = datetime.now(timezone.utc).isoformat()
     cost_tracker = CostTracker(max_cost=max_cost, _log_fn=storage.log)
@@ -179,7 +179,9 @@ async def run_plan_review(
         all_points: list[ReviewPoint] = []
         revision_model = roles["revision"]
 
-        async with httpx.AsyncClient() as client:
+        from ..http import make_async_client
+
+        async with make_async_client() as client:
             # Fire all reviewer calls in parallel
             tasks = [
                 _call_reviewer(

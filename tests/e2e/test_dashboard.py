@@ -44,9 +44,10 @@ def test_dashboard_review_table_columns(page, dvad_server):
     page.goto(dvad_server)
     headers = page.locator("#reviews-table thead th")
     header_texts = [h.lower() for h in headers.all_inner_texts()]
-    assert "project" in header_texts[0]
-    assert "result" in header_texts[1]
-    assert "mode" in header_texts[2]
+    assert "review id" in header_texts[0]
+    assert "project" in header_texts[1]
+    assert "result" in header_texts[2]
+    assert "mode" in header_texts[3]
 
 
 def test_dashboard_review_row_clickable(page, dvad_server):

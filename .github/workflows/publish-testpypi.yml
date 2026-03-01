@@ -1,0 +1,50 @@
+name: Publish to TestPyPI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Bump build version
+        run: |
+          current=$(grep '^version' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          major=$(echo "$current" | cut -d. -f1)
+          minor=$(echo "$current" | cut -d. -f2)
+          build=$(echo "$current" | cut -d. -f3)
+          new="${major}.${minor}.$((build + 1))"
+          sed -i "s/^version = \"${current}\"/version = \"${new}\"/" pyproject.toml
+          echo "VERSION=${new}" >> "$GITHUB_ENV"
+          echo "Bumped ${current} -> ${new}"
+
+      - name: Build package
+        run: python -m build
+
+      - name: Upload to TestPyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
+        run: python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add pyproject.toml
+          git commit -m "build: bump version to ${VERSION} [skip ci]"
+          git push

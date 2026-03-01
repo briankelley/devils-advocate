@@ -397,11 +397,11 @@ async def revise_review(request: Request, review_id: str):
     cost_tracker = CostTracker()
 
     # Run revision
-    import httpx
+    from ..http import make_async_client
     from ..revision import run_revision
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with make_async_client() as client:
             revised = await run_revision(
                 client, revision_model, original_content, ledger,
                 mode=mode, cost_tracker=cost_tracker,

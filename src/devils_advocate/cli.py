@@ -508,8 +508,8 @@ def revise(project, review_id, config_path, project_dir, max_cost, input_overrid
     cost_tracker = CostTracker(max_cost=max_cost)
 
     async def _run():
-        import httpx
-        async with httpx.AsyncClient() as client:
+        from .http import make_async_client
+        async with make_async_client() as client:
             return await run_revision(
                 client,
                 revision_model,

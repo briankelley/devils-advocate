@@ -186,6 +186,11 @@ class StorageManager:
 
     # ─── Incremental Logging ─────────────────────────────────────────────────
 
+    @property
+    def current_review_id(self) -> str | None:
+        """The current review ID, or None if not yet set."""
+        return self._review_id
+
     def set_review_id(self, review_id: str) -> None:
         """Set the review ID for log file naming. Call before first log()."""
         self._review_id = review_id

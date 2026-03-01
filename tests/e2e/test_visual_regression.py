@@ -46,7 +46,7 @@ def _compare_or_create(page, name: str, full_page: bool = True):
 
     # Resize to match if dimensions differ (viewport variance)
     if actual.size != expected.size:
-        actual = actual.resize(expected.size, Image.LANCZOS)
+        actual = actual.resize(expected.size, Image.Resampling.LANCZOS)
 
     diff_img = Image.new("RGBA", expected.size)
     num_diff = pm(expected, actual, diff_img, threshold=_THRESHOLD)

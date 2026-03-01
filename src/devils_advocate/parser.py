@@ -206,6 +206,7 @@ def parse_review_response(
     points = []
 
     # Strip known reasoning delimiters before parsing
+    raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL | re.IGNORECASE)
     raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL | re.IGNORECASE)
     raw = re.sub(r'<reasoning>.*?</reasoning>', '', raw, flags=re.DOTALL | re.IGNORECASE)
     raw = re.sub(r'\*\*Thinking:\*\*.*?(?=REVIEW\s+POINT|\Z)', '', raw, flags=re.DOTALL)
@@ -272,6 +273,7 @@ def parse_spec_response(
     points = []
 
     # Strip reasoning delimiters
+    raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL | re.IGNORECASE)
     raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL | re.IGNORECASE)
     raw = re.sub(r'<reasoning>.*?</reasoning>', '', raw, flags=re.DOTALL | re.IGNORECASE)
 

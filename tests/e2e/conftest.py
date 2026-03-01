@@ -86,12 +86,49 @@ def _disable_ssl_verify():
         yield
 
 
+# ─── Local LLM thinking prompt injection ─────────────────────────────────────
+
+_LOCAL_THINKING_PROMPT = (
+    "Think deeply and carefully about the user's request. "
+    "Compose your thoughts about the user's prompt between "
+    "<think> and </think> tags, then output the final answer "
+    "based on your thoughts."
+)
+
+_original_async_post = httpx.AsyncClient.post
+
+
+async def _patched_async_post(self, url, **kwargs):
+    """Inject thinking system prompt for local LLM requests."""
+    url_str = str(url)
+    if "127.0.0.1:8080" in url_str and "chat/completions" in url_str:
+        json_body = kwargs.get("json")
+        if json_body and isinstance(json_body, dict):
+            messages = json_body.get("messages", [])
+            # Check if any system message already mentions thinking
+            has_thinking_system = any(
+                m.get("role") == "system" and "<think>" in (m.get("content") or "")
+                for m in messages
+            )
+            if not has_thinking_system:
+                # Prepend thinking instruction as first system message
+                messages.insert(0, {"role": "system", "content": _LOCAL_THINKING_PROMPT})
+    return await _original_async_post(self, url, **kwargs)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _inject_local_thinking():
+    """Inject thinking system prompt for all local LLM requests during E2E tests."""
+    with patch.object(httpx.AsyncClient, "post", _patched_async_post):
+        yield
+
+
 # ─── Local LLM server management (kept for backward compat) ─────────────────
 
 LLAMA_SERVER_BIN = Path("/media/kelleyb/DATA2/LLM/llama.cpp/build/bin/llama-server")
 LLAMA_LIB_DIR = LLAMA_SERVER_BIN.parent
 LLAMA_MODEL = Path(
-    "/media/kelleyb/DATA2/LLM/models/gguf/dolphin-mistral-24b-Q4_K_M.gguf"
+    "/media/kelleyb/DATA2/LLM/models/gguf/gemma-3-12b-Thinking.i1-Q3_K_L.gguf"
 )
 LOCAL_LLM_URL = "http://127.0.0.1:8080"
 
@@ -127,11 +164,16 @@ def local_llm():
         [
             str(LLAMA_SERVER_BIN),
             "-m", str(LLAMA_MODEL),
-            "-ngl", "40",
+            "--host", "127.0.0.1",
+            "--port", "8080",
+            "-ngl", "99",
             "-c", "32768",
             "-t", "12",
             "--mlock",
             "--parallel", "1",
+            "--cache-type-k", "q4_0",
+            "--cache-type-v", "q4_0",
+            "--seed", "42",
         ],
         env=env,
         stdout=subprocess.PIPE,
@@ -183,12 +225,15 @@ def seeded_data_dir(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
-def e2e_config_path():
-    """Path to the E2E-specific models.yaml."""
-    path = FIXTURES / "models.yaml"
-    if path.exists():
-        return path
-    return None
+def e2e_config_path(tmp_path_factory):
+    """Copy E2E models.yaml to a temp dir so API mutations don't corrupt the fixture."""
+    src = FIXTURES / "models.yaml"
+    if not src.exists():
+        return None
+    tmp = tmp_path_factory.mktemp("dvad_config")
+    dst = tmp / "models.yaml"
+    shutil.copy2(src, dst)
+    return dst
 
 
 # ─── Server management ───────────────────────────────────────────────────────
@@ -216,7 +261,7 @@ def _wait_for_ready(url: str, timeout: float = 15):
 
 
 @pytest.fixture(scope="session")
-def dvad_server(seeded_data_dir, e2e_config_path):
+def dvad_server(seeded_data_dir, e2e_config_path, tmp_path_factory):
     """Start a dvad GUI server for E2E tests, or connect to an external one."""
     url = os.environ.get("DVAD_E2E_URL")
     if url:
@@ -226,10 +271,16 @@ def dvad_server(seeded_data_dir, e2e_config_path):
     port = _find_free_port()
     env = {**os.environ}
     env["DVAD_HOME"] = str(seeded_data_dir)
+    env["DVAD_SSL_VERIFY"] = "0"
     env.setdefault("E2E_LOCAL_KEY", "e2e-dummy-key")
     if e2e_config_path:
         env["DVAD_E2E_CONFIG"] = str(e2e_config_path)
 
+    # Use DEVNULL for stdout to prevent pipe buffer deadlock: Rich console
+    # output from long-running reviews can fill the 64KB pipe buffer, blocking
+    # the server's event loop when no reader drains the pipe.
+    server_log = tmp_path_factory.mktemp("dvad_server") / "server.log"
+    server_log_fh = open(server_log, "w")
     proc = subprocess.Popen(
         [
             sys.executable, "-m", "uvicorn",
@@ -240,8 +291,8 @@ def dvad_server(seeded_data_dir, e2e_config_path):
             "--log-level", "warning",
         ],
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=server_log_fh,
+        stderr=subprocess.STDOUT,
     )
 
     base_url = f"http://127.0.0.1:{port}"
@@ -250,10 +301,10 @@ def dvad_server(seeded_data_dir, e2e_config_path):
     except TimeoutError:
         proc.terminate()
         proc.wait(timeout=5)
-        stdout = proc.stdout.read().decode() if proc.stdout else ""
-        stderr = proc.stderr.read().decode() if proc.stderr else ""
+        server_log_fh.close()
+        log_content = server_log.read_text()[-4000:]
         pytest.fail(
-            f"dvad server failed to start.\nstdout: {stdout}\nstderr: {stderr}"
+            f"dvad server failed to start.\nlog: {log_content}"
         )
 
     yield base_url
@@ -264,6 +315,7 @@ def dvad_server(seeded_data_dir, e2e_config_path):
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
+    server_log_fh.close()
 
 
 # ─── Thinking config toggle ─────────────────────────────────────────────────
@@ -271,26 +323,39 @@ def dvad_server(seeded_data_dir, e2e_config_path):
 
 @pytest.fixture
 def enable_thinking(dvad_server, live_page):
-    """Enable thinking on all e2e models, restore after test."""
+    """Enable thinking on all e2e models, restore after test.
+
+    Original state: e2e-remote=False, e2e-remote-thinker=True.
+    This fixture sets both to True, then restores originals on teardown.
+    """
     page = live_page
     page.goto(dvad_server)
     page.wait_for_load_state("networkidle")
     csrf = page.locator('meta[name="csrf-token"]').get_attribute("content")
 
-    models = ["e2e-remote", "e2e-remote-thinker"]
-    for model in models:
-        page.request.post(
-            f"{dvad_server}/api/config/model-thinking",
-            data=json.dumps({"model_name": model, "thinking": True}),
-            headers={"X-DVAD-Token": csrf, "Content-Type": "application/json"},
-        )
+    # Only e2e-remote needs to be changed (e2e-remote-thinker is already True)
+    page.request.post(
+        f"{dvad_server}/api/config/model-thinking",
+        data=json.dumps({"model_name": "e2e-remote", "thinking": True}),
+        headers={"X-DVAD-Token": csrf, "Content-Type": "application/json"},
+    )
     yield
-    for model in models:
+    # Restore: e2e-remote=False, e2e-remote-thinker=True (original fixture state)
+    try:
         page.request.post(
             f"{dvad_server}/api/config/model-thinking",
-            data=json.dumps({"model_name": model, "thinking": False}),
+            data=json.dumps({"model_name": "e2e-remote", "thinking": False}),
             headers={"X-DVAD-Token": csrf, "Content-Type": "application/json"},
+            timeout=60_000,
         )
+        page.request.post(
+            f"{dvad_server}/api/config/model-thinking",
+            data=json.dumps({"model_name": "e2e-remote-thinker", "thinking": True}),
+            headers={"X-DVAD-Token": csrf, "Content-Type": "application/json"},
+            timeout=60_000,
+        )
+    except Exception:
+        pass  # Best-effort; temp config copy protects the fixture file
 
 
 # ─── Playwright fixtures ────────────────────────────────────────────────────

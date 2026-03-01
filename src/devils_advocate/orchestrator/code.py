@@ -59,7 +59,7 @@ async def run_code_review(
 
     content = input_file.read_text()
     spec_content = spec_file.read_text() if spec_file else None
-    review_id = generate_review_id(content)
+    review_id = storage.current_review_id or generate_review_id(content)
     storage.set_review_id(review_id)
     timestamp = datetime.now(timezone.utc).isoformat()
     cost_tracker = CostTracker(max_cost=max_cost, _log_fn=storage.log)
@@ -130,7 +130,9 @@ async def run_code_review(
         all_points: list[ReviewPoint] = []
         revision_model = roles["revision"]
 
-        async with httpx.AsyncClient() as client:
+        from ..http import make_async_client
+
+        async with make_async_client() as client:
             # Round 1
             console.print(
                 Panel("[bold]Round 1:[/bold] Sending to reviewers...", style="blue")

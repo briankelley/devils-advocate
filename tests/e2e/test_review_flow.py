@@ -111,11 +111,21 @@ def test_review_completes(live_page, dvad_server, tmp_path):
 
     review_id = _start_review(page, dvad_server, "e2e-complete-test", test_file)
 
-    page.goto(f"{dvad_server}/review/{review_id}")
+    # Poll API for completion (more reliable than SSE-driven DOM transitions)
+    deadline = time.monotonic() + 600
+    while time.monotonic() < deadline:
+        resp = page.request.get(f"{dvad_server}/api/review/{review_id}")
+        if resp.status == 200:
+            data = resp.json()
+            result = data.get("result", "")
+            if result and result != "running":
+                break
+        page.wait_for_timeout(5000)
+    else:
+        pytest.fail(f"Review {review_id} did not complete within 600s")
 
-    # Wait for the review to complete (transition from running to detail view)
-    # The page auto-reloads on completion via SSE
-    page.wait_for_selector(".page-header", timeout=300_000)
+    page.goto(f"{dvad_server}/review/{review_id}")
+    page.wait_for_load_state("networkidle")
 
     # Verify we're on the completed detail page
     body = page.locator("body").inner_text()

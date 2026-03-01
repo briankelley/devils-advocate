@@ -202,45 +202,84 @@ class ReviewRunner:
                 ),
             )
 
-            import httpx
+            # Each orchestrator creates its own HTTP client — no shared client needed.
+            # Wrap in a timeout so a hung orchestrator doesn't kill the server.
+            # Use create_task + cancel instead of wait_for so we don't block
+            # waiting for the cancelled task's cleanup (httpx client close can hang).
+            _REVIEW_TIMEOUT = 1800  # 30 minutes
 
-            async with httpx.AsyncClient() as client:
-                if mode == "plan":
-                    from ..orchestrator import run_plan_review
-                    result = await run_plan_review(
-                        config, input_files, project, max_cost, dry_run,
-                        storage=storage,
-                    )
-                elif mode == "code":
-                    from ..orchestrator import run_code_review
-                    result = await run_code_review(
-                        config, input_files[0], project, spec_file, max_cost, dry_run,
-                        storage=storage,
-                    )
-                elif mode == "integration":
-                    from ..orchestrator import run_integration_review
-                    result = await run_integration_review(
-                        config, project,
-                        input_files=input_files if input_files else None,
-                        spec_file=spec_file,
-                        project_dir=project_dir,
-                        max_cost=max_cost,
-                        dry_run=dry_run,
-                        storage=storage,
-                    )
-                elif mode == "spec":
-                    from ..orchestrator import run_spec_review
-                    result = await run_spec_review(
-                        config, input_files, project, max_cost, dry_run,
-                        storage=storage,
-                    )
+            if mode == "plan":
+                from ..orchestrator import run_plan_review
+                coro = run_plan_review(
+                    config, input_files, project, max_cost, dry_run,
+                    storage=storage,
+                )
+            elif mode == "code":
+                from ..orchestrator import run_code_review
+                coro = run_code_review(
+                    config, input_files[0], project, spec_file, max_cost, dry_run,
+                    storage=storage,
+                )
+            elif mode == "integration":
+                from ..orchestrator import run_integration_review
+                coro = run_integration_review(
+                    config, project,
+                    input_files=input_files if input_files else None,
+                    spec_file=spec_file,
+                    project_dir=project_dir,
+                    max_cost=max_cost,
+                    dry_run=dry_run,
+                    storage=storage,
+                )
+            elif mode == "spec":
+                from ..orchestrator import run_spec_review
+                coro = run_spec_review(
+                    config, input_files, project, max_cost, dry_run,
+                    storage=storage,
+                )
+            else:
+                raise ValueError(f"Unknown mode: {mode}")
+
+            inner_task = asyncio.create_task(coro)
+            try:
+                result = await asyncio.wait_for(
+                    asyncio.shield(inner_task), timeout=_REVIEW_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                logger.error("Review %s timed out after %ds", review_id, _REVIEW_TIMEOUT)
+                inner_task.cancel()
+                # Don't await the cancelled task — its cleanup may block
+                result = None
+
+            if result is None:
+                # Check if orchestrator already saved a ledger (dry_run, cost_exceeded, etc.)
+                existing = storage.load_review(review_id) if storage else None
+                if existing and existing.get("result") not in (None, "", "running"):
+                    # Orchestrator handled it — use its result
+                    self.statuses[review_id] = "complete"
+                    if review_id in self.active:
+                        self.active[review_id]["state"] = "complete"
+                    self.emit_event(review_id, make_terminal_event(True))
                 else:
-                    raise ValueError(f"Unknown mode: {mode}")
-
-            self.statuses[review_id] = "complete"
-            if review_id in self.active:
-                self.active[review_id]["state"] = "complete"
-            self.emit_event(review_id, make_terminal_event(True))
+                    # Genuinely failed — no ledger saved by orchestrator
+                    self.statuses[review_id] = "failed"
+                    if review_id in self.active:
+                        self.active[review_id]["state"] = "failed"
+                    try:
+                        from ..orchestrator._common import _save_stub_ledger
+                        _save_stub_ledger(
+                            storage, review_id, mode, project,
+                            str(input_files[0]) if input_files else "none",
+                            "failed",
+                        )
+                    except Exception:
+                        pass
+                    self.emit_event(review_id, make_terminal_event(False, "Review returned no result"))
+            else:
+                self.statuses[review_id] = "complete"
+                if review_id in self.active:
+                    self.active[review_id]["state"] = "complete"
+                self.emit_event(review_id, make_terminal_event(True))
 
         except asyncio.CancelledError:
             self.statuses[review_id] = "failed"
