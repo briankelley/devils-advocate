@@ -98,7 +98,7 @@ dvad review --mode plan --input plan.md --project myproject --dry-run
 
 ## Design Notes
 
-- **No vendor SDKs.** All provider calls use `httpx` directly — full control over request shape and retry behavior.
+- **No vendor SDKs.** All provider calls use `httpx` directly - full control over request shape and retry behavior.
 - **Deterministic governance.** Zero LLM calls. Every outcome is reproducible from the same inputs.
 - **Atomic operations.** File writes use `mkstemp` + `os.replace`. Locking uses `O_CREAT | O_EXCL`.
 - **XDG-compliant.** Config and data paths follow the XDG Base Directory specification.
