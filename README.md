@@ -55,7 +55,7 @@ dvad config --show
 
 ## Web GUI
 
-The primary way to use Devil's Advocate. Covers the full workflow — submitting reviews, monitoring progress in real time, resolving escalated findings, and generating revised artifacts.
+The primary way to use Devil's Advocate. Covers the full workflow - submitting reviews, monitoring progress in real time, resolving escalated findings, and generating revised artifacts.
 
 ```bash
 dvad gui
@@ -67,12 +67,12 @@ By default the GUI refuses to bind to non-localhost interfaces. `--allow-nonloca
 
 ## How It Works
 
-1. **Independent review** — Multiple reviewer models analyze the input in parallel, producing findings with severity, category, location, and recommendation.
-2. **Deduplication** — A dedup model groups overlapping findings into consolidated review groups, preserving source attribution.
-3. **Author response** — The author model responds to each group: **ACCEPTED**, **REJECTED**, or **PARTIAL** with a rationale.
-4. **Rebuttal** — Reviewers issue rebuttals on contested groups only. Each votes **CONCUR** or **CHALLENGE**.
-5. **Final position** — For challenged groups, the author provides a final position.
-6. **Governance** — A deterministic engine (no LLM calls, pure rule-based logic) maps every group to an outcome: **AUTO_ACCEPTED**, **AUTO_DISMISSED**, or **ESCALATED**. No finding passes through without the author demonstrating engagement — implicit and rote acceptance both escalate to human review.
+1. **Independent review** - Multiple reviewer models analyze the input in parallel, producing findings with severity, category, location, and recommendation.
+2. **Deduplication** - A dedup model groups overlapping findings into consolidated review groups, preserving source attribution.
+3. **Author response** - The author model responds to each group: **ACCEPTED**, **REJECTED**, or **PARTIAL** with a rationale.
+4. **Rebuttal** - Reviewers issue rebuttals on contested groups only. Each votes **CONCUR** or **CHALLENGE**.
+5. **Final position** - For challenged groups, the author provides a final position.
+6. **Governance** - A deterministic engine (no LLM calls, pure rule-based logic) maps every group to an outcome: **AUTO_ACCEPTED**, **AUTO_DISMISSED**, or **ESCALATED**. No finding passes through without the author demonstrating engagement - implicit and rote acceptance both escalate to human review.
 
 Escalated findings are resolved through the GUI's override controls or `dvad override`. After governance, `dvad revise` generates the final revised artifact.
 
@@ -85,7 +85,7 @@ Escalated findings are resolved through the GUI's override controls or `dvad ove
 | `spec`        | Collaborative | Spec file(s)                                        | `revised-spec-suggestions.md` |
 | `integration` | Adversarial   | Input files or `.dvad/manifest.json`, optional spec | `remediation-plan.md`         |
 
-**spec** is non-adversarial — no author, no rebuttals, no governance. Findings are grouped by theme and compiled into a suggestion report. All other modes use the full 2-round adversarial protocol.
+**spec** is non-adversarial - no author, no rebuttals, no governance. Findings are grouped by theme and compiled into a suggestion report. All other modes use the full 2-round adversarial protocol.
 
 ## CLI Quick Start
 
