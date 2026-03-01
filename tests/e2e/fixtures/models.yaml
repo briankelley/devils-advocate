@@ -1,20 +1,20 @@
 models:
-  e2e-local:
+  e2e-remote:
     provider: openai
-    model_id: dolphin-mistral-24b-Q4_K_M.gguf
+    model_id: gemma-3-12b-HighIQ-Polaris-Q3_K_L.gguf
     api_key_env: E2E_LOCAL_KEY
-    api_base: http://localhost:8080/v1
+    api_base: https://38.72.121.134/llm/v1
     context_window: 32768
     timeout: 300
     max_out_stated: 8192
     max_out_configured: 4096
     thinking: false
 
-  e2e-thinker:
+  e2e-remote-thinker:
     provider: openai
-    model_id: dolphin-mistral-24b-Q4_K_M.gguf
+    model_id: gemma-3-12b-HighIQ-Polaris-Q3_K_L.gguf
     api_key_env: E2E_LOCAL_KEY
-    api_base: http://localhost:8080/v1
+    api_base: https://38.72.121.134/llm/v1
     context_window: 32768
     timeout: 300
     max_out_stated: 8192
@@ -22,14 +22,14 @@ models:
     thinking: true
 
 roles:
-  author: e2e-local
+  author: e2e-remote
   reviewers:
-    - e2e-local
-    - e2e-thinker
-  deduplication: e2e-local
-  normalization: e2e-thinker
-  revision: e2e-thinker
-  integration_reviewer: e2e-local
+    - e2e-remote
+    - e2e-remote-thinker
+  deduplication: e2e-remote
+  normalization: e2e-remote-thinker
+  revision: e2e-remote-thinker
+  integration_reviewer: e2e-remote
 
 settings:
   live_testing: false

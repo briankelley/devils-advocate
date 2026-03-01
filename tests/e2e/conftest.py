@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import socket
@@ -9,12 +10,16 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 import pytest
 
 FIXTURES = Path(__file__).parent / "fixtures"
 BASELINES = Path(__file__).parent / "baselines"
+FAILURES_DIR = Path(__file__).parent / "failures"
+
+REMOTE_LLM_URL = "https://38.72.121.134/llm"
 
 
 # ─── Auto-skip unless explicitly opted in ────────────────────────────────────
@@ -31,7 +36,57 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip)
 
 
-# ─── Local LLM server management ────────────────────────────────────────────
+# ─── Failure capture ─────────────────────────────────────────────────────────
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Stash test result on the item for use in fixtures."""
+    outcome = yield
+    rep = outcome.get_result()
+    setattr(item, f"rep_{rep.when}", rep)
+
+
+# ─── Remote LLM health check ────────────────────────────────────────────────
+
+
+def _remote_llm_is_healthy() -> bool:
+    """Check if the remote LLM endpoint is reachable."""
+    try:
+        resp = httpx.get(f"{REMOTE_LLM_URL}/health", timeout=10, verify=False)
+        return resp.status_code == 200
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError):
+        return False
+
+
+@pytest.fixture(scope="session")
+def remote_llm():
+    """Ensure remote LLM is reachable. Skips the test session if not."""
+    if not _remote_llm_is_healthy():
+        pytest.skip(f"Remote LLM at {REMOTE_LLM_URL} is not reachable")
+    yield REMOTE_LLM_URL
+
+
+# ─── SSL bypass for httpx (self-signed cert on remote LLM) ──────────────────
+
+
+_original_async_client_init = httpx.AsyncClient.__init__
+
+
+def _patched_async_client_init(self, *args, **kwargs):
+    """Force verify=False for all httpx.AsyncClient instances during E2E tests."""
+    kwargs.setdefault("verify", False)
+    _original_async_client_init(self, *args, **kwargs)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _disable_ssl_verify():
+    """Globally disable SSL verification for httpx during E2E tests."""
+    with patch.object(httpx.AsyncClient, "__init__", _patched_async_client_init):
+        yield
+
+
+# ─── Local LLM server management (kept for backward compat) ─────────────────
 
 LLAMA_SERVER_BIN = Path("/media/kelleyb/DATA2/LLM/llama.cpp/build/bin/llama-server")
 LLAMA_LIB_DIR = LLAMA_SERVER_BIN.parent
@@ -209,6 +264,33 @@ def dvad_server(seeded_data_dir, e2e_config_path):
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
+
+
+# ─── Thinking config toggle ─────────────────────────────────────────────────
+
+
+@pytest.fixture
+def enable_thinking(dvad_server, live_page):
+    """Enable thinking on all e2e models, restore after test."""
+    page = live_page
+    page.goto(dvad_server)
+    page.wait_for_load_state("networkidle")
+    csrf = page.locator('meta[name="csrf-token"]').get_attribute("content")
+
+    models = ["e2e-remote", "e2e-remote-thinker"]
+    for model in models:
+        page.request.post(
+            f"{dvad_server}/api/config/model-thinking",
+            data=json.dumps({"model_name": model, "thinking": True}),
+            headers={"X-DVAD-Token": csrf, "Content-Type": "application/json"},
+        )
+    yield
+    for model in models:
+        page.request.post(
+            f"{dvad_server}/api/config/model-thinking",
+            data=json.dumps({"model_name": model, "thinking": False}),
+            headers={"X-DVAD-Token": csrf, "Content-Type": "application/json"},
+        )
 
 
 # ─── Playwright fixtures ────────────────────────────────────────────────────
