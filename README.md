@@ -1,3 +1,6 @@
+
+<div align="center"><img width="200" alt="dvad-color-white" src="https://github.com/user-attachments/assets/35b89380-cddd-4b70-88ac-e71cb1d867a6" /></div>
+
 # Devil's Advocate
 
 Cost-aware multi-LLM adversarial review engine with deterministic governance.
