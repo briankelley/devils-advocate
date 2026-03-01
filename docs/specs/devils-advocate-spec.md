@@ -1,266 +1,265 @@
-# Functional Specification: Devil's Advocate (dvad)
-
-> **Source:** 41 files, 12,643 lines (Python + JS + HTML + CSS)
-> **Spec:** 266 lines | **Compression ratio:** 47.5:1
-> **Generated:** 2026-02-28
-
----
+# Functional Specification: devils-advocate
 
 ## Table of Contents
 
-1. [Core Pipeline](#core-pipeline)
+1. [Core](#core)
 2. [Orchestrator](#orchestrator)
-3. [GUI Backend](#gui-backend)
-4. [GUI Frontend](#gui-frontend)
+3. [GUI](#gui)
 
 ---
 
-## Core Pipeline
+# Core
 
-### CLI Entry (`cli.py`)
+## Identity & Entry
 
-- **Commands:** `review`, `revise`, `history`, `config`, `override`, `gui`, `install`, `uninstall`
-- **Lifecycle:** config load → validate → acquire lock → `asyncio.new_event_loop()` → orchestrator coroutine → cleanup
-- **Signal handling:** `loop.add_signal_handler()` (POSIX) with `signal.signal()` fallback; `_cleanup()` guarantees lock release + storage close on any exit path
-- **Exit codes:** 0 success, 1 error (ConfigError/APIError/CostLimitError/file-not-found), 130 SIGINT
-- **Revise precondition:** Round 1 response required — sourced from ledger or `--input` override
+- **Binary:** `dvad` → `__main__.py` → `cli.cli()` (Click root)
+- **Version:** 0.1.0
 
-### Configuration (`config.py`)
+## CLI Commands
 
-- **Search priority:** explicit path → discovery chain → `~/.config/devils-advocate/models.yaml`
-- **Dotenv:** `.env` loaded from config dir into `os.environ` before key resolution
-- **Role defaults:** normalization → dedup model; revision → author model
-- **Validation rules:** exactly 1 author, ≥2 reviewers, 1 integration_reviewer, ≥1 dedup; dedup ≠ author; all role refs must exist in `models` block and be enabled; missing API key env var → validation error
+- **review:** Dispatches to `run_{plan,code,integration,spec}_review` orchestrator coroutines based on `mode` param
+- **history:** List reviews or show single review detail by `review_id`
+- **config:** Show/validate/init config (`init_config` creates `~/.config/devils-advocate/models.yaml`)
+- **override:** Manual governance resolution; maps resolution strings through `resolution_map` before storage write
+- **revise:** Post-review revision LLM call against stored review
+- **gui:** Launch uvicorn web GUI; non-localhost requires `--allow-nonlocal`; port validated via real socket bind
+- **install/uninstall:** systemd user service lifecycle for dvad-gui
 
-### Cost & Context (`cost.py`)
+## CLI Error Handling
 
-- **Token estimate:** `len(text) / 4`, minimum 1
-- **Context window:** 80% threshold (`CONTEXT_WINDOW_THRESHOLD = 0.8`)
-- **Cost:** returns 0.0 when model lacks cost config
+- Config/validate/input failures → `sys.exit(1)`; KeyboardInterrupt → `_cleanup()` → `sys.exit(130)`; APIError|CostLimitError → `_cleanup()` → `sys.exit(1)`; SIGTERM → `_cleanup()`
+- **`_cleanup()` invariant:** Always releases storage lock + closes file handle on every error path
 
-### Deduplication (`dedup.py`)
+## Configuration (`config.py`)
 
-- **Constraint:** each point belongs to at most one group
-- **Fallback:** LLM failure or context overflow → every point promoted to singleton group
-- **IDs:** group and point IDs assigned via `ReviewContext`
+- **Resolution order:** explicit path > `./models.yaml` > `$DVAD_HOME/models.yaml` > `~/.config/devils-advocate/models.yaml`
+- **Env loading:** `_load_dotenv` sets vars only if not already present (shell exports win)
+- **Validation rules:** exactly 1 author, ≥2 reviewers, exactly 1 integration_reviewer, ≥1 dedup; dedup ≠ author
+- **Defaults:** normalization → dedup model; revision → author model
+- **Security:** config dir chmod 700, config file chmod 600
+- **Failure:** missing `models` key or `roles` block → ConfigError
 
-### Governance (`governance.py`)
+## Cost Tracking (`cost.py`)
 
-- **Core invariant:** no finding passes without demonstrated author engagement
-- **Escalation triggers:** no response, rote acceptance (<15 words or stock phrase), invalid rejection against ≥2 reviewers, integration-mode single-reviewer rejection
-- **Rejection validity:** requires all three of: technical reason, mechanism, reference
-- **Round precedence:** final response supersedes Round 1 for challenged groups
-- **AUTO_DISMISSED:** only for single-reviewer rejection unchallenged, never in integration mode
+- **Token estimation:** `len(text)//4`, minimum 1
+- **Cost estimation:** returns 0.0 if model has no cost rates configured
+- **Context window check:** fits=True always when `context_window` is None; threshold 80% of limit
 
-### ID Generation (`ids.py`)
+## Deduplication (`dedup.py`)
 
-- **Formats:** review `YYYYMMDDThhmmss_{sha256-6}_review`; group `project.group_NNN.ddMMMyyyy.HHMM.suffix`; point `group_id.point_NNN`
-- **GUID resolution:** UUID4 assigned per group for prompt correlation; fuzzy match tolerates ≤2 character differences
+- **Behavior:** LLM-based grouping of review points; mode="spec" uses distinct formatter/prompt/parser
+- **Fallback:** Context overflow or empty input → each point promoted to singleton group (non-fatal)
 
-### Parsing (`parser.py`)
+## Governance Engine (`governance.py`)
 
-- **Strictly synchronous** — zero async, zero provider calls; all LLM fallback lives in `normalization.py`
-- **First-claim-wins:** no point appears in multiple groups; ungrouped → singleton
-- **ID resolution chain:** exact → UUID extraction → fuzzy (≤2 diff) → positional → failure
+- **Pure deterministic rule engine** — zero external dependencies beyond `types.py`
+- **Rejection validation:** 3 regex criteria (technical term + mechanism + specific reference); default False → ambiguous rejection auto-accepts finding (favors reviewer)
+- **Acceptance validation:** ≥15 words AND not rote phrase (16 hardcoded phrases); default False → escalate
+- **Resolution matrix:** No response → ESCALATED; PARTIAL → always ESCALATED; unknown → ESCALATED
+- **MAINTAINED:** ≥2 reviewers + valid rejection → ESCALATED; ≥2 + invalid → AUTO_ACCEPTED; single reviewer → ESCALATED
+- **ACCEPTED:** challenged + no final response → ESCALATED; substantive rationale → AUTO_ACCEPTED; rote/thin → ESCALATED
+- **REJECTED:** ≥2 + valid objection → ESCALATED; ≥2 + invalid → AUTO_ACCEPTED; single + unchallenged → AUTO_DISMISSED; single + challenged/integration → ESCALATED
+- **Round precedence:** Final response supersedes Round 1 for challenged groups only
 
-### Normalization (`normalization.py`)
+## ID Generation (`ids.py`)
 
-- **Trigger:** synchronous parser yields 0 points
-- **Failure mode:** returns empty list (non-fatal)
+- **Review ID:** `YYYYMMDDThhmmss_<sha256-6>_review`
+- **Hierarchy:** group_id → point_id (child inherits parent prefix)
+- **GUID resolution:** direct match → UUID regex extract → fuzzy Hamming ≤2 chars → None (handles LLM transcription errors)
+- **Randomness:** `random.choice` (not cryptographically secure)
 
-### Providers (`providers.py`)
+## Parsing (`parser.py`)
 
-- **Dispatchers:** `call_model()` routes to `call_anthropic`, `call_openai_compatible`, `call_openai_responses`, `call_minimax`
-- **Token limits:** default 16384; author response 32000; revision 64000
-- **Thinking budgets:** spec 4096, plan/code/integration 10000, revision 16000
-- **Retry policy:** 529 → immediate `APIError` (no retry); 429 → `Retry-After` or exponential backoff; 5xx/timeout → exponential backoff with jitter
+- **Strictly synchronous** — all parsers are pure functions
+- **Thinking strip:** Removes `<thinking>`/`<reasoning>`/`**Thinking:**` blocks before parsing
+- **Positional fallback:** author response only; rebuttal and final response require GUID match exclusively
+- **Unknown resolution defaults:** author → UNKNOWN (escalated); rebuttal → CONCUR; final → MAINTAINED
+- **Ungrouped points:** Always become singleton groups (no point ever discarded)
+- **Temp IDs:** Review points get `temp_NNN`; final IDs assigned during dedup
+- **Revised output extraction:** Requires exact canonical delimiters (`=== REVISED PLAN ===` etc.); missing → ""
 
-### Revision (`revision.py`)
+## LLM Providers (`providers.py`)
 
-- **Actionable resolutions filter:** `{auto_accepted, accepted, overridden}` only
-- **Skip conditions:** no actionable findings or context overflow
-- **Delimiter policy:** canonical delimiters only — no fallback to `PART 2` or markdown headings
+- **Dispatch:** `call_model` routes by `model.provider` + `model.use_responses_api` to Anthropic/OpenAI-compatible/OpenAI-responses/MiniMax handlers
+- **Output limits:** standard=16384, author=32000, revision=64000 tokens
+- **Retry policy:** HTTP 529 → immediate fail; 429 → respect Retry-After; 5xx/timeout → exponential backoff+jitter; other 4xx → immediate fail; max 3 retries
+- **Anthropic specifics:** Strips `<thinking>` blocks; opus-4-6/sonnet-4-6 use adaptive thinking; others use budget_tokens (added to max_tokens)
+- **OpenAI specifics:** o3/o4 use `max_completion_tokens`; reasoning_effort=medium for spec, high otherwise
+- **Zero visible content with non-zero output tokens → warning (not exception)**
 
-### Storage (`storage.py`)
+## Revision (`revision.py`)
 
-- **Data dir:** `$DVAD_HOME` fallback `~/.local/share/devils-advocate/`; lock dir `{project_dir}/.dvad/`
-- **Lock acquisition:** atomic via `O_CREAT|O_EXCL`; stale if age >3600s or dead PID on same host
-- **Write safety:** temp file → `fsync` → `os.replace`
-- **Artifact layout:** `{review_id}/round1/`, `round2/`, `revision/`
+- **Actionable resolutions:** {auto_accepted, accepted, overridden} — only these produce revision input
+- **Skip conditions:** No actionable findings → skip (plan/code/integration); spec revision unconditional (ignores governance)
+- **Extraction:** Strict canonical delimiters; missing → ""
+- **Context window exceeded → log + return ""**
 
-### Output (`output.py`)
+## Storage (`storage.py`, class StorageManager)
 
-- **Report:** always includes summary table + cost breakdown; escalated section conditional; Round 1 always shown, Round 2 only when present
-- **Ledger:** `review-ledger.json` preserves full governance state per point
+- **Data dir:** `$DVAD_HOME` or `~/.local/share/devils-advocate/`
+- **Locking:** `O_CREAT|O_EXCL`; stale detection: age >3600s or dead PID → remove + retry (3 attempts)
+- **Write durability:** All writes via mkstemp → fsync → os.replace (no partial writes visible)
+- **Lock file content:** `{pid, hostname, timestamp}` JSON
+- **Logging:** Lazy-open append with immediate flush; defaults to `session.log` before `set_review_id`
 
-### Types (`types.py`)
+## Type System (`types.py`)
 
-- **ModelConfig.api_key:** resolved from `os.environ[api_key_env]` at access time
-- **CostTracker:** `max_cost=None` disables guardrails; emits `§cost` structured log on `add()`
+- **Severity:** CRITICAL > HIGH > MEDIUM > LOW > INFO
+- **Resolution lifecycle:** PENDING → {ACCEPTED, REJECTED, PARTIAL} → governance → {AUTO_ACCEPTED, AUTO_DISMISSED, ESCALATED} → manual → OVERRIDDEN
+- **ModelConfig.api_key:** Live read from `os.environ` on every property access (never cached)
+- **CostTracker:** Mutates in-place; emits `§cost` log events; tracks per-role and per-model costs; warns at 80%, errors at limit
+- **ReviewContext:** Auto-generates 4-char `id_suffix` in `__post_init__`
 
-### Core Critical Constraints
+## Prompts (`prompts.py`)
 
-1. **Lock release guarantee:** `_cleanup()` runs on success, exception, SIGTERM, and SIGINT — no exit path skips lock release
-2. **Config-gates-execution:** validation errors block all command execution; no partial-config runs
-3. **Parser purity:** `parser.py` is synchronous and side-effect-free; LLM-based recovery isolated in `normalization.py`
-4. **Governance engagement mandate:** implicit acceptance (silence) and rote acceptance both escalate — author must demonstrate substantive reasoning
-5. **Atomic persistence:** all review artifact writes use temp+fsync+rename to prevent partial writes
-6. **Cost hard stop:** `CostLimitError` propagates through async orchestrator to CLI for clean exit
+- **Template loading:** `importlib.resources` from `templates/*.txt`; `str.format(**kwargs)`
+- **Failure:** Missing template or variable → AdvocateError (not FileNotFoundError/KeyError)
+- **System prompts:** Module-level cached after first load (lazy singleton)
 
----
+## Service Management (`service.py`)
 
-## Orchestrator
+- **Platform gate:** Linux only; non-Linux returns error string
+- **Binary discovery:** venv sibling first, then PATH
+- **Service:** `dvad-gui.service`; KillSignal=SIGINT; Restart=on-failure; RestartSec=5
+- **Defensive:** `is_active`/`is_enabled` swallow all exceptions → return False
 
-### Pipeline State Machine (`_common._run_adversarial_pipeline`)
+## Critical Constraints
 
-- **States:** pre_author_response → round1_author_response → round2_exchange → governance → revision → completed. Exit state: cost_aborted.
-- **Transitions:** Round 1 reviews + dedup complete → author response → (cost guardrail check; exceeded → cost_aborted with stub ledger, return None) → Round 2 → governance → revision if actionable findings, else completed. Revision failure downgrades ledger to "completed", does not abort.
-- **Report ordering:** Report + ledger persisted BEFORE revision attempt; re-saved after if revision succeeds.
-
-### Round 2 Exchange (`_common._run_round2_exchange`)
-
-- **Skip conditions:** All groups ACCEPTED → no rebuttals sent. No CHALLENGE verdicts → no author final response solicited.
-- **Reviewer scoping:** Rebuttal prompts sent only to reviewers who sourced contested groups (resolution != ACCEPTED). Context overflow excludes reviewer silently.
-- **Author final failure:** Logged, skipped; governance proceeds using Round 1 positions.
-
-### Governance Escalation (`_common._apply_governance_or_escalate`)
-
-- **Catastrophic parse escalation:** <25% author response parse coverage → all groups escalated unconditionally.
-
-### Cost Guardrail (`_common._check_cost_guardrail`)
-
-- **Behavior:** 80% warning emitted once (flag-guarded). Exceeded → stub ledger (`points: []`, `total_points: 0`, `total_groups: 0`) saved, pipeline returns None.
-- **Checkpoints:** After Round 1, after dedup, after author response.
-
-### Reviewer Calls (`_common._call_reviewer`)
-
-- **Return contract:** Always returns `list[ReviewPoint]`; empty on API failure (logged, skipped). Falls back to LLM normalization if parser yields zero points.
-
-### Mode: Code Review (`code.py`)
-
-- **Pre-flight:** Context window check filters reviewers; <1 active → None. Lock failure → None.
-- **Dedup skip:** Triggered if any reviewer failed AND `len(active_reviewers) > 1`.
-- **Revision artifact:** `revised-diff.patch`. Storage lock released in `finally`.
-
-### Mode: Plan Review (`plan.py`)
-
-- **Multi-file handling:** `input_files[0]` is primary; additional files wrapped as reference context with "do not review directly" instruction. Combined via `=== PRIMARY ARTIFACT ===` / `=== END PRIMARY ARTIFACT ===` delimiters.
-- **Revision artifact:** `revised-plan.md`. Otherwise identical pipeline to code review.
-
-### Mode: Integration Review (`integration.py`)
-
-- **Role gate:** Requires `integration_reviewer` role; missing → None.
-- **File discovery cascade:** Explicit `input_files` → `manifest.json` (status=="completed" tasks).
-- **Spec discovery cascade:** Explicit → `000-strategic-summary.md` → `strategic-summary.md` → manifest → fallback text.
-- **Single reviewer path:** No dedup; points promoted to groups 1:1. Context overflow → None (chunking deferred to v2).
-- **Revision artifact:** `remediation-plan.md`.
-
-### Mode: Spec Review (`spec.py`)
-
-- **Non-adversarial:** No author role, no author response, no rebuttals, no governance, no escalation. Spec-specific system prompt and parser.
-- **Summary shape:** `total_groups`, `total_points`, `multi_consensus` (>1 source), `single_source`.
-- **Revision artifact:** `revised-spec-suggestions.md`. Revision failure non-fatal; report persisted before and after attempt.
-
-### Intermediate Artifacts
-
-- **Round 1:** `{reviewer}_raw.txt`, `{reviewer}_parsed.json`, `deduplication.json`
-- **Round 2:** `author_raw.txt`, `author_responses.json`, `{reviewer}_rebuttal_raw.txt`, `{reviewer}_rebuttal_parsed.json`, `author_final_raw.txt`, `author_final_parsed.json`, `governance.json`
-- **Final:** `dvad-report.md`, `review-ledger.json`, `original_content.txt`, `revised-{artifact}`
-
-### Orchestrator Critical Constraints
-
-1. **Lock safety:** Storage lock always released in `finally` block; lock failure is immediate None return.
-2. **Formatting purity:** All `_formatting.py` functions are pure; author response concern text truncated to 120 chars for rebuttal display.
-3. **Contested group definition:** Reviewer must be point source AND author resolution != ACCEPTED.
-4. **Stub ledger invariant:** `_save_stub_ledger` always emits `points: []`, `total_points: 0`, `total_groups: 0` regardless of pipeline state at abort.
-5. **Cost estimate coverage:** Accounts for Round 1 reviewers, dedup, author response, Round 2 rebuttals, author final, and revision.
+1. **Governance safety defaults:** Ambiguous rejection → auto-accept finding (favors reviewer); ambiguous acceptance → escalate (favors human review)
+2. **Write atomicity:** Every persistent write uses mkstemp+fsync+os.replace — crash-safe
+3. **Env isolation:** Shell exports always override dotenv; ModelConfig re-reads env on every access
+4. **Security posture:** Config dir 700, config file 600, env file written with umask 0o077
+5. **Cleanup guarantee:** `_cleanup()` (lock release + file close) executes on all CLI error/signal paths
 
 ---
 
-## GUI Backend
+# Orchestrator
 
-### App Factory & Lifecycle (`gui/__init__.py`, `gui/app.py`)
+## Pipeline Architecture
 
-- **Bootstrap:** `build_app(config_path)` assembles FastAPI with routes, static (`./static`), templates (`./templates`), Jinja filter `human_date` (ISO → `%-d %b %Y, %H:%M`).
-- **CSRF:** `secrets.token_urlsafe(32)` generated once at startup, stored in `app.state.csrf_token`. All mutating endpoints validate `X-DVAD-Token` header match.
-- **Shutdown:** `lifespan()` cancels any running review on app teardown.
-- **Env factory:** `create_app_from_env()` reads config path from `DVAD_E2E_CONFIG` env var for `uvicorn --factory`.
+- **Four modes:** plan, code, integration, spec — each with dedicated orchestrator module
+- **plan.py and code.py are structurally identical** (differ only in mode string + revision filename)
+- **integration.py:** Single reviewer, no parallel phase, per-point group promotion (no dedup merging)
+- **spec.py:** Collaborative ideation — never calls `_run_adversarial_pipeline`; no Round 2, no author, no rebuttals, no governance
 
-### Review Lifecycle (`gui/api.py`, `gui/runner.py`)
+## Adversarial Pipeline (`_common._run_adversarial_pipeline`)
 
-- **State machine:** idle → running (`POST /review/start`) → complete | failed; `POST /review/{id}/cancel` → failed. 409 if review already running.
-- **Concurrency:** Single-review enforcer via `ReviewRunner.current_task`; set to `None` on completion/failure/cancel.
-- **Review ID:** Content hash of input files.
-- **SSE streaming:** `GET /review/{id}/progress` — `asyncio.Queue(maxsize=500)`, drop-oldest on overflow, 15s keepalive ping. Buffered events for late-joining clients.
-- **Logging intercept:** `storage.log` monkey-patched to emit `ProgressEvent`s during review execution.
-- **Failure handling:** Stub ledger saved best-effort on failure/cancellation.
+- **Sequence:** Author Round 1 → Round 2 exchange → governance → save → revision
+- **Author context overflow → return None**
+- **Cost exceeded post-author → stub ledger + None**
+- **All accepted by author → skip Round 2 entirely**
+- **No CHALLENGE verdicts → skip author final response**
+- **Parse coverage <25% → escalate ALL groups** (hard-coded threshold, not configurable)
+- **No actionable governance decisions → skip revision**
+- **Revision failure → downgrade to warning, review still completes**
+- **Rebuttal dispatch:** Only to reviewers whose groups are contested AND fit context window; `asyncio.gather(return_exceptions=True)` — individual failures captured, not propagated
+- **Author final response exception → warning; review proceeds on Round 1 positions**
 
-### Configuration API (`gui/api.py`)
+## Round 2 Exchange (`_common._run_round2_exchange`)
 
-- **Read/Write:** `GET /config` returns full config; `POST /config` saves. `_mutate_yaml_config` ensures atomic writes.
-- **Granular mutations:** `POST /config/model-timeout` (10–7200), `/model-thinking` (boolean), `/model-max-tokens` (1–1000000, ≤ provider max), `/settings-toggle` (keys ∈ `{live_testing}`).
-- **Env vars:** `GET/POST /config/env`, `PUT/DELETE /config/env/{name}`. Names: `^[A-Z_][A-Z0-9_]*$`; values reject `\r\n\0`, max 4096 chars. `.env` written `0o600`.
-- **File uploads:** MAX_FILES=25, MAX_FILE_SIZE=10MB.
+- **Skip conditions:** Author accepted all groups → no Round 2; no CHALLENGE verdicts after rebuttals → no author final
+- **Contested groups:** Filtered per-reviewer (reviewer must be source AND author did not fully accept)
 
-### Pages (`gui/pages.py`)
+## Code Review (`orchestrator/code.py`)
 
-- **Dashboard:** Paginated (25/page), newest-first, 5s TTL cache. `show_test=false` filters projects containing "test" (case-insensitive).
-- **Detail:** Redirects to `/` if ledger not found.
-- **Config:** Vendor inference: explicit provider → `api_base` domain matching.
+- **Flow:** Read file → review_id from content hash → parallel `_call_reviewer` via `asyncio.gather` → dedup → adversarial pipeline
+- **Dedup skip:** If any reviewer failed AND >1 reviewer configured → silent 1:1 promotion (no cross-model dedup)
+- **Lock always released in finally; `storage.close()` in finally**
+- **spec_content=None (not "") when no spec file**
+- **Revision output:** `revised-diff.patch`
 
-### Progress Classification (`gui/progress.py`)
+## Plan Review (`orchestrator/plan.py`)
 
-- **`classify_log_message`:** Regex → `ProgressEvent(event_type, phase, detail)`. No match → `phase="unknown"`.
-- **Cost events:** `message=""` (suppressed from console). Timestamps auto-generated UTC.
+- **Input convention:** `input_files[0]` = primary (reviewed); `input_files[1:]` = reference context with explicit "do not review" instruction
+- **review_id generated from full assembled content (not primary file alone)**
+- **Revision output:** `revised-plan.md`
 
-### Backend Critical Constraints
+## Integration Review (`orchestrator/integration.py`)
 
-1. **CSRF enforcement:** Every mutating endpoint validates `X-DVAD-Token` before any state change.
-2. **Single-review invariant:** `ReviewRunner` rejects concurrent starts with HTTP 409.
-3. **Queue overflow policy:** Drop-oldest, not backpressure — clients may miss mid-stream events.
-4. **Blocking I/O isolation:** All sync operations dispatched via `asyncio.to_thread`.
-5. **Env file security:** `.env` at `0o600`; values validated against control chars and length.
-6. **Atomic config writes:** No partial YAML on disk.
+- **Reviewer:** Single `integration_reviewer` role; no parallel phase
+- **Spec discovery cascade:** explicit > `project_dir/000-strategic-summary.md` > `project_dir/strategic-summary.md` > manifest-dir fallback
+- **File discovery:** explicit `input_files` > manifest `tasks[status==completed].files`
+- **Content assembly:** Files joined with `--- {path} ---`/`--- END {path} ---` delimiters
+- **Oversized content → None (chunking explicitly deferred)**
+- **Each point gets its own group (no dedup merging)**
+- **Revision output:** `remediation-plan.md`
+
+## Spec Review (`orchestrator/spec.py`)
+
+- **No adversarial fields:** `author_model=""`, `author_responses=[]`, `governance_decisions=[]`, `rebuttals=[]`, `author_final_responses=[]`
+- **Consensus counting:** multi_consensus = groups with >1 source reviewer; single_source = 1
+- **Revision:** `run_spec_revision` called unconditionally; failure non-fatal; report re-saved only if `revised_output` is truthy
+- **Revision output:** `revised-spec-suggestions.md`
+
+## Display (`_display.py`)
+
+- **Cost estimation:** Uses `min(input_tokens, MAX_OUTPUT_TOKENS)` as estimated output for both rounds
+- **Governance colors:** auto_accepted=green, escalated=yellow, auto_dismissed=cyan, others=red
+- **Summary table:** Only rows with count > 0
+
+## Critical Constraints
+
+1. **Lock lifecycle:** Acquired before Round 1; released in finally block in all four modes
+2. **Dedup bypass:** Any reviewer failure with >1 reviewer → silent skip of cross-model dedup (all three adversarial modes)
+3. **25% parse floor:** Hard-coded; below threshold all groups escalated unconditionally
+4. **Cost guardrail:** 80% warning emitted exactly once (flag reset after print); exceeded → stub + abort
+5. **Stub ledger:** `_save_stub_ledger` always produces structurally valid ledger with all required keys for terminal/non-success states
 
 ---
 
-## GUI Frontend
+# GUI
 
-### Review Submission Flow
+## Application Bootstrap (`app.py`, `__init__.py`)
 
-- **State machine:** idle → interstitial_open (form submit, command preview) → review_submitting (POST `/api/review/start`) → redirect to detail page.
-- **Mode gating:** Selected mode controls visible form fields; plan default-selected.
-- **File inputs:** JSON arrays in hidden inputs. File picker modal persists selections across open/close cycles; supports `multiSelect` and `dirMode`.
-- **Command preview:** `buildCommand()` assembles CLI string; interstitial overlay displays before execution.
+- **Factory:** `create_app(config_path)` → `build_app`; `create_app_from_env` reads `DVAD_E2E_CONFIG` env var for uvicorn `--factory`
+- **CSRF:** `secrets.token_urlsafe(32)` generated once at startup; fixed for process lifetime; all mutating endpoints require `X-DVAD-Token` header match → 403
+- **Singleton runner:** One `ReviewRunner` shared via `app.state` across all requests
+- **Shutdown:** `lifespan` asynccontextmanager cancels `current_task` on exit
+- **Template filter:** `human_date` converts ISO → `%-d %b %Y, %H:%M`
 
-### Live Review Progress (SSE)
+## Review Runner (`runner.py`)
 
-- **Event ordering:** metadata event arrives first (role→model map, mode detection); cost events follow, cumulative per role.
-- **Spec mode:** `_applySpecMode()` hides adversarial phases in both running and completed views.
-- **Phase indicators:** active (accent+pulse), done (green), pending (outline). Pipeline rail: round1 → author → round2 → governance → overrides → revision.
-- **Terminal:** SSE error/complete triggers delayed page reload (3s).
+- **Concurrency:** One review at a time globally; `start_review` raises HTTP 409 if `current_task` not done
+- **Background task flow:** load_config → StorageManager → persist manifest → copy uploads → monkey-patch `storage.log` → classify → emit_event → dispatch to orchestrator → terminal event
+- **Event queue:** `asyncio.Queue(maxsize=500)`; overflow drops oldest, retries once, silent drop on second fail
+- **State per review:** `{queue, buffered, state, created_at, last_event_at}` — grows unbounded (no TTL eviction)
+- **Cancellation:** `CancelledError` → attempt `_save_stub_ledger` → re-raise (preserves asyncio cancellation)
+- **Generic exception:** Attempt stub ledger → terminal error event → swallowed (not re-raised)
+- **Finally:** Always clears `current_review_id=None`, `current_task=None`
 
-### Finding Cards & Overrides
+## API Endpoints (`api.py`)
 
-- **Visual states:** escalated (yellow border), accepted (green), dismissed (grey), overridden (accent). Resolved cards at 50% opacity.
-- **Override actions:** Three buttons per escalated card — Accept Reviewer, Accept Author, Keep Open.
-- **Revision gate:** Button highlights only when all escalated groups resolved.
+- **Review lifecycle:** start (POST), cancel (POST), progress SSE (GET), detail JSON (GET), override (POST), revise (POST), log (GET), report download (GET), revised download (GET)
+- **Config mutation:** model timeout/thinking/max_tokens, settings toggle (only `live_testing` accepted), validate, save
+- **Env var management:** GET/PUT/DELETE/POST; name regex `^[A-Z_][A-Z0-9_]*$`; no `\r\n\0`; max 4096 chars; restricted to `api_key_env` values in config
+- **Filesystem browser:** GET `/api/fs/ls`; silently skips dotfiles
+- **Upload limits:** max 10MB per file; max 25 files
+- **Override validation:** Only `{overridden, auto_dismissed, escalated}` accepted; invalidates page cache (`_review_cache["data"]=None`)
+- **SSE protocol:** `asyncio.wait_for(queue.get(), timeout=15.0)`; timeout → `": ping\n\n"`; terminal event closes stream
+- **Env file security:** umask 0o077, chmod 0o600; mutates `os.environ` in-process
+- **Blocking config reads:** Wrapped in `asyncio.to_thread`
 
-### Config Page — Role Assignment & Thinking
+## Pages (`pages.py`)
 
-- **Role cardinality:** Radio for singular roles (author, dedup, normalization, revision, integration_reviewer); checkbox with max=2 for reviewer.
-- **Thinking toggle:** Active only on models with role assignment (`thinking-eligible` class).
-- **Inline editing:** Timeout/max-tokens fields. Blur/Enter commits; validation failure reverts.
-- **YAML tabs:** Structured vs Raw views with validate/save.
+- **Dashboard:** Reviews sorted newest-first; "test" projects hidden by default (case-insensitive filter); 25/page; page clamped to `[1, total_pages]`
+- **Review detail:** Checks runner status first; if not running → load from storage; missing ledger → 302 redirect to `/`
+- **Config page:** Models grouped by vendor sorted by `cost_per_1k_output` desc; vendor inferred from `api_base` substrings (OpenAI/xAI/Google/DeepSeek/Moonshot/MiniMax; fallback=`provider.title()`)
+- **Cache:** `_review_cache` with 5-second TTL; invalidated on override
+- **has_original:** Requires `original_content.txt` file existence (precondition for revise button)
+- **Unknown resolution → escalated bucket (defensive default)**
 
-### Config Page — API Keys & Settings
+## Progress Events (`progress.py`)
 
-- **API key rows:** "present" badge when found in env file; raw input otherwise.
-- **Settings toggle:** `.settings-on` (yellow+border) visual state.
+- **Event types:** log, phase, cost, complete, error, metadata
+- **Classification:** `_PHASE_PATTERNS` ordered list; first match wins; `§cost` pattern must be first
+- **Cost events:** `message=""` (suppressed from console); structured `detail={role, model, cost, total}`
+- **Unmatched log → event_type="log", phase="unknown"**
+- **Terminal:** phase="done" (success) or phase="error" (failure)
 
-### Frontend Critical Constraints
+## Critical Constraints
 
-1. **SSE ordering invariant:** Metadata event must precede cost events; `_handleCostUpdate` depends on role→model map.
-2. **Revision precondition:** All escalated groups must be resolved before revision can start — UI enforces by disabling button.
-3. **Role cardinality enforcement:** Singular roles use radio behavior; reviewer uses checkbox with ceiling=2.
-4. **Error recovery:** Network failures re-enable buttons + alert; HTTP errors parse JSON detail; SSE parse errors silently caught; inline edit failures revert.
+1. **Single-review concurrency:** Enforced at runner level; HTTP 409 on conflict; no queuing
+2. **CSRF on all mutations:** `X-DVAD-Token` header must match startup-generated token; read-only endpoints exempt
+3. **Unbounded growth:** Both `statuses` dict and per-review `buffered` events list grow without eviction
+4. **Env var restriction:** Only names matching `api_key_env` values from config may be written (prevents arbitrary env mutation)
+5. **SSE keepalive:** 15-second ping cycle prevents proxy/client timeout; terminal event is authoritative stream closer
