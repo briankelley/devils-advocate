@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 
 VENV_DIR="$HOME/.local/share/devils-advocate/venv"
 BIN_DIR="$HOME/.local/bin"
@@ -40,13 +39,22 @@ if [ -d "$VENV_DIR" ]; then
 else
     echo "Creating venv at $VENV_DIR..."
     mkdir -p "$(dirname "$VENV_DIR")"
-    "$PYTHON" -m venv "$VENV_DIR"
+    if ! "$PYTHON" -m venv "$VENV_DIR"; then
+        echo "Error: Failed to create virtual environment." >&2
+        echo "Try: sudo apt install python3.12-venv" >&2
+        exit 1
+    fi
 fi
 
 # Install/upgrade
 echo "Installing devils-advocate..."
-"$VENV_DIR/bin/pip" install --upgrade pip >/dev/null 2>&1
-"$VENV_DIR/bin/pip" install --upgrade devils-advocate
+"$VENV_DIR/bin/pip" install --upgrade pip >/dev/null 2>&1 || true
+
+if ! "$VENV_DIR/bin/pip" install --upgrade devils-advocate; then
+    echo "" >&2
+    echo "Error: pip install failed. Check the output above for details." >&2
+    exit 1
+fi
 
 # Symlink into ~/.local/bin
 mkdir -p "$BIN_DIR"
