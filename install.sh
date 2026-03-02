@@ -36,7 +36,7 @@ echo "Using $PYTHON ($("$PYTHON" --version))"
 
 # Create venv
 if [ -d "$VENV_DIR" ]; then
-    echo "Existing venv found at $VENV_DIR — upgrading..."
+    echo "Existing venv found at $VENV_DIR - upgrading..."
 else
     echo "Creating venv at $VENV_DIR..."
     mkdir -p "$(dirname "$VENV_DIR")"
@@ -58,29 +58,44 @@ else
     echo "You can run dvad directly at: $DVAD_BIN" >&2
 fi
 
-# Check if ~/.local/bin is in PATH
-if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
-    echo ""
-    echo "Note: $BIN_DIR is not in your PATH."
-    echo "Add it by appending this to your ~/.bashrc or ~/.zshrc:"
-    echo ""
-    echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
-    echo ""
-    echo "Then restart your terminal or run: source ~/.bashrc"
-    echo ""
-fi
-
 # Set up systemd user service
+SYSTEMD_OK=false
 if command -v systemctl >/dev/null 2>&1 && systemctl --user status >/dev/null 2>&1; then
     echo "Setting up systemd user service..."
     "$DVAD_BIN" install --force
-else
-    echo "Note: systemd user services not available. Start the GUI manually with: dvad gui"
+    SYSTEMD_OK=true
+fi
+
+# Check if ~/.local/bin is in PATH
+PATH_OK=true
+if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
+    PATH_OK=false
 fi
 
 echo ""
-echo "Installation complete!"
+echo "================================================"
+echo "  Devil's Advocate installed successfully!"
+echo "================================================"
 echo ""
-echo "  CLI:       dvad review --mode plan --input plan.md --project myproject"
-echo "  Dashboard: http://localhost:8411"
-echo ""
+
+if [ "$PATH_OK" = false ]; then
+    echo "  Next steps:"
+    echo ""
+    echo "    1. Log out and back in (adds dvad to your PATH)"
+    echo "    2. Run: dvad gui"
+    echo "    3. Open http://localhost:8411 to finish setup"
+    echo ""
+elif [ "$SYSTEMD_OK" = true ]; then
+    echo "  The dashboard is running at:"
+    echo ""
+    echo "    http://localhost:8411"
+    echo ""
+    echo "  Open that URL to finish setup."
+    echo ""
+else
+    echo "  Next step:"
+    echo ""
+    echo "    Run: dvad gui"
+    echo "    Then open http://localhost:8411 to finish setup."
+    echo ""
+fi
