@@ -62,8 +62,11 @@ fi
 SYSTEMD_OK=false
 if command -v systemctl >/dev/null 2>&1 && systemctl --user status >/dev/null 2>&1; then
     echo "Setting up systemd user service..."
-    "$DVAD_BIN" install --force
-    SYSTEMD_OK=true
+    if "$DVAD_BIN" install --force; then
+        SYSTEMD_OK=true
+    else
+        echo "  (systemd service setup skipped - configure later with: dvad install)"
+    fi
 fi
 
 # Check if ~/.local/bin is in PATH
