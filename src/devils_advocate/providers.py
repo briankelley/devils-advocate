@@ -265,6 +265,10 @@ async def call_model(
     mode: str = "",
 ) -> tuple:
     """Unified dispatcher. Returns (response_text, usage_dict)."""
+    # Honour per-model output cap from models.yaml
+    if model.max_out_configured and model.max_out_configured < max_tokens:
+        max_tokens = model.max_out_configured
+
     if model.provider == "anthropic":
         return await call_anthropic(client, model, system_prompt, user_prompt, max_tokens, mode)
     elif model.provider == "minimax":

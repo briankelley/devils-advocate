@@ -226,6 +226,14 @@ async def _run_revision_core(
         est_min = int(est_seconds // 60)
         storage.log(f"Revision: large context (~{est:,} tokens) — expect ~{est_min} min")
 
+    effective_max = REVISION_MAX_OUTPUT_TOKENS
+    if revision_model.max_out_configured and revision_model.max_out_configured < effective_max:
+        effective_max = revision_model.max_out_configured
+        storage.log(
+            f"Revision: max_out_configured={revision_model.max_out_configured} "
+            f"caps output (role default was {REVISION_MAX_OUTPUT_TOKENS})"
+        )
+
     if finding_count:
         storage.log(f"Revision: calling {revision_model.name} (incorporating {finding_count} accepted findings)")
     else:
@@ -235,7 +243,7 @@ async def _run_revision_core(
         revision_model,
         "",
         prompt,
-        REVISION_MAX_OUTPUT_TOKENS,
+        effective_max,
         log_fn=storage.log,
         mode="revision",
     )

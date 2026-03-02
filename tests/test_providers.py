@@ -883,6 +883,70 @@ class TestCallModel:
         budget = _ANTHROPIC_THINKING_BUDGETS["revision"]
         assert parsed["max_tokens"] == 5000 + budget
 
+    async def test_max_out_configured_caps_max_tokens(self):
+        """When model.max_out_configured < passed max_tokens, the API call uses the configured cap."""
+        model = _make_model(provider="anthropic")
+        model.max_out_configured = 5000
+        with respx.mock:
+            route = respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_model(client, model, "sys", "usr", max_tokens=64000)
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert parsed["max_tokens"] == 5000
+
+    async def test_max_out_configured_no_cap_when_higher(self):
+        """When model.max_out_configured > passed max_tokens, the original value is used."""
+        model = _make_model(provider="anthropic")
+        model.max_out_configured = 100000
+        with respx.mock:
+            route = respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_model(client, model, "sys", "usr", max_tokens=16384)
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert parsed["max_tokens"] == 16384
+
+    async def test_max_out_configured_none_no_cap(self):
+        """When model.max_out_configured is None, the original max_tokens is used."""
+        model = _make_model(provider="anthropic")
+        assert model.max_out_configured is None
+        with respx.mock:
+            route = respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_model(client, model, "sys", "usr", max_tokens=64000)
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert parsed["max_tokens"] == 64000
+
+    async def test_max_out_configured_caps_openai_provider(self):
+        """max_out_configured cap also works for OpenAI-compatible providers."""
+        model = _make_model(
+            provider="openai",
+            model_id="gpt-4o",
+            api_base="https://api.openai.com/v1",
+        )
+        model.max_out_configured = 8000
+        with respx.mock:
+            route = respx.post("https://api.openai.com/v1/chat/completions").mock(
+                return_value=httpx.Response(200, json=_openai_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_model(client, model, "sys", "usr", max_tokens=32000)
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert parsed["max_tokens"] == 8000
+
 
 # ===========================================================================
 # call_with_retry

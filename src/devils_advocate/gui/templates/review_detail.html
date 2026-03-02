@@ -345,7 +345,10 @@
 
 {# Footer Actions #}
 <div class="footer-actions">
-    {% if has_revised %}
+    {% if has_revised and revision_stale %}
+    <a href="/api/review/{{ review_id }}/revised" class="btn download-revised-link">Download Revised (stale)</a>
+    <button class="btn btn-accent" id="revise-btn" onclick="dvad.startRevision('{{ review_id }}')">Regenerate Revised</button>
+    {% elif has_revised %}
     <a href="/api/review/{{ review_id }}/revised" class="btn btn-green download-revised-link">Download Revised</a>
     {% elif has_original %}
     <button class="btn btn-accent" id="revise-btn" onclick="dvad.startRevision('{{ review_id }}')">Generate Revision</button>

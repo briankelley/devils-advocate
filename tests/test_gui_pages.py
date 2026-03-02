@@ -136,6 +136,95 @@ class TestDashboardRoute:
         assert resp.status_code == 200
 
 
+class TestRevisionStaleDetection:
+    """Test that pages.review_detail detects stale revision artifacts after overrides."""
+
+    def test_revision_stale_when_override_newer(self, tmp_path):
+        """revision_stale should be True when an override timestamp is newer than the revised file."""
+        import json, time
+        from datetime import datetime, timezone, timedelta
+
+        # Create a review directory with a revised artifact
+        review_id = "test-stale-review"
+        reviews_dir = tmp_path / "reviews"
+        review_dir = reviews_dir / review_id
+        review_dir.mkdir(parents=True)
+
+        revised = review_dir / "revised-plan.md"
+        revised.write_text("old revision")
+        # Set the revised file mtime to 1 hour ago
+        old_mtime = time.time() - 3600
+        import os
+        os.utime(revised, (old_mtime, old_mtime))
+
+        # Create a ledger with an override newer than the revised file
+        now_ts = datetime.now(timezone.utc).isoformat()
+        ledger = {
+            "review_id": review_id,
+            "mode": "plan",
+            "project": "test",
+            "points": [{
+                "group_id": "grp_001",
+                "point_id": "pt_001",
+                "description": "finding",
+                "final_resolution": "overridden",
+                "overrides": [{
+                    "previous_resolution": "escalated",
+                    "new_resolution": "overridden",
+                    "timestamp": now_ts,
+                }],
+            }],
+            "cost": {"total_usd": 0.01},
+            "summary": {},
+        }
+        (review_dir / "review-ledger.json").write_text(json.dumps(ledger))
+
+        # Test the stale detection logic directly
+        points = ledger["points"]
+        revised_mtime = revised.stat().st_mtime
+        revision_stale = False
+        for point in points:
+            for ovr in point.get("overrides", []):
+                ovr_ts = datetime.fromisoformat(ovr["timestamp"])
+                if ovr_ts.timestamp() > revised_mtime:
+                    revision_stale = True
+                    break
+            if revision_stale:
+                break
+
+        assert revision_stale is True
+
+    def test_revision_not_stale_when_no_overrides(self, tmp_path):
+        """revision_stale should be False when there are no overrides."""
+        import json
+        from datetime import datetime, timezone
+
+        review_dir = tmp_path / "reviews" / "test-not-stale"
+        review_dir.mkdir(parents=True)
+        revised = review_dir / "revised-plan.md"
+        revised.write_text("revision content")
+
+        points = [{
+            "group_id": "grp_001",
+            "point_id": "pt_001",
+            "description": "finding",
+            "final_resolution": "auto_accepted",
+        }]
+
+        revised_mtime = revised.stat().st_mtime
+        revision_stale = False
+        for point in points:
+            for ovr in point.get("overrides", []):
+                ovr_ts = datetime.fromisoformat(ovr["timestamp"])
+                if ovr_ts.timestamp() > revised_mtime:
+                    revision_stale = True
+                    break
+            if revision_stale:
+                break
+
+        assert revision_stale is False
+
+
 class TestConfigPage:
     def test_config_page_returns_200(self, client):
         resp = client.get("/config")

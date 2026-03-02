@@ -202,12 +202,36 @@ async def review_detail(request: Request, review_id: str):
             pass
 
     # Check for revised artifacts
-    has_revised = (review_dir / "revised-plan.md").exists() or \
-                  (review_dir / "revised-diff.patch").exists() or \
-                  (review_dir / "remediation-plan.md").exists() or \
-                  (review_dir / "revised-spec-suggestions.md").exists()
+    revised_artifact_names = [
+        "revised-plan.md", "revised-diff.patch",
+        "remediation-plan.md", "revised-spec-suggestions.md",
+    ]
+    revised_path = None
+    for name in revised_artifact_names:
+        candidate = review_dir / name
+        if candidate.exists():
+            revised_path = candidate
+            break
+    has_revised = revised_path is not None
     has_original = (review_dir / "original_content.txt").exists()
     has_report = (review_dir / "dvad-report.md").exists()
+
+    # Detect stale revision: overrides newer than the revised artifact
+    revision_stale = False
+    if has_revised and revised_path is not None:
+        revised_mtime = revised_path.stat().st_mtime
+        for point in points:
+            for ovr in point.get("overrides", []):
+                try:
+                    from datetime import datetime, timezone
+                    ovr_ts = datetime.fromisoformat(ovr["timestamp"])
+                    if ovr_ts.timestamp() > revised_mtime:
+                        revision_stale = True
+                        break
+                except (KeyError, ValueError):
+                    continue
+            if revision_stale:
+                break
 
     # Cost breakdown for tooltip
     cost_breakdown = ledger.get("cost", {}).get("breakdown", {})
@@ -281,6 +305,7 @@ async def review_detail(request: Request, review_id: str):
         "auto_dismissed": auto_dismissed,
         "overridden": overridden,
         "has_revised": has_revised,
+        "revision_stale": revision_stale,
         "has_original": has_original,
         "has_report": has_report,
         "cost_breakdown": cost_breakdown,

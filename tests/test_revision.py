@@ -497,3 +497,34 @@ class TestRunRevisionCore:
         # Raw should still be saved
         raw_path = storage.reviews_dir / "test_review" / "revision" / "revision_raw.txt"
         assert raw_path.exists()
+
+    @pytest.mark.asyncio
+    async def test_max_out_configured_caps_revision_tokens(self, storage, monkeypatch):
+        """When revision model has max_out_configured, call_with_retry receives the capped value."""
+        monkeypatch.setenv("TEST_KEY", "fake-key")
+        model = ModelConfig(
+            name="capped-model",
+            provider="anthropic",
+            model_id="test-model",
+            api_key_env="TEST_KEY",
+            cost_per_1k_input=0.003,
+            cost_per_1k_output=0.015,
+            context_window=200000,
+            max_out_configured=10000,
+        )
+        cost = CostTracker()
+        storage.set_review_id("test_review")
+
+        raw_text = "=== REVISED PLAN ===\nrevised content\n=== END REVISED PLAN ==="
+        with patch("devils_advocate.revision.call_with_retry", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = (raw_text, {"input_tokens": 100, "output_tokens": 50})
+
+            result = await _run_revision_core(
+                MagicMock(), model, "original content", "revision context",
+                "plan", cost, storage, "test_review",
+            )
+
+        # call_with_retry should have been called with 10000, not 64000
+        call_args = mock_call.call_args
+        assert call_args[0][4] == 10000  # 5th positional arg is max_tokens
+        assert result == "revised content"

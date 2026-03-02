@@ -606,10 +606,14 @@ const dvad = {
                     cost.textContent = `Cost: $${(data.cost || 0).toFixed(6)}`;
                 }
 
-                // Hide generate button, add download link
+                // Hide generate button, update or add download link
                 if (btn) btn.style.display = 'none';
                 const footer = document.querySelector('.footer-actions');
-                if (footer && !footer.querySelector('.download-revised-link')) {
+                const existing = footer && footer.querySelector('.download-revised-link');
+                if (existing) {
+                    existing.textContent = 'Download Revised';
+                    existing.className = 'btn btn-green download-revised-link';
+                } else if (footer) {
                     const link = document.createElement('a');
                     link.href = `/api/review/${reviewId}/revised`;
                     link.className = 'btn btn-green download-revised-link';
