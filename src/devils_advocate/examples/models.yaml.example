@@ -34,7 +34,7 @@ models:
     cost_per_1k_input: 0.005
     cost_per_1k_output: 0.025
     timeout: 900
-    thinking: true
+
 
   claude-opus-4-5:
     provider: anthropic
@@ -167,7 +167,7 @@ models:
     model_id: grok-4-0709
     api_key_env: XAI_API_KEY
     api_base: https://api.x.ai/v1
-    thinking: true
+
     context_window: 256000
     max_out_stated: 131072
     max_out_configured: 16384
@@ -180,7 +180,7 @@ models:
     model_id: grok-4-1-fast-reasoning
     api_key_env: XAI_API_KEY
     api_base: https://api.x.ai/v1
-    thinking: true
+
     context_window: 2000000
     max_out_stated: 131072
     max_out_configured: 16384
@@ -193,7 +193,7 @@ models:
     model_id: grok-code-fast-1
     api_key_env: XAI_API_KEY
     api_base: https://api.x.ai/v1
-    thinking: true
+
     context_window: 256000
     max_out_stated: 131072
     max_out_configured: 16384
@@ -214,7 +214,7 @@ models:
     cost_per_1k_input: 0.002
     cost_per_1k_output: 0.012
     timeout: 900
-    thinking: true
+
 
   gemini-3-pro-preview:
     provider: openai
@@ -271,7 +271,7 @@ models:
     model_id: deepseek-reasoner
     api_key_env: DEEPSEEK_API_KEY
     api_base: https://api.deepseek.com
-    thinking: true
+
     context_window: 128000
     max_out_stated: 8192
     max_out_configured: 8192
@@ -286,7 +286,7 @@ models:
     model_id: kimi-k2.5
     api_key_env: MOONSHOT_API_KEY
     api_base: https://api.moonshot.ai/v1
-    thinking: true
+
     context_window: 262144
     max_out_stated: 32768
     max_out_configured: 16384
@@ -299,7 +299,7 @@ models:
     model_id: kimi-k2-thinking
     api_key_env: MOONSHOT_API_KEY
     api_base: https://api.moonshot.ai/v1
-    thinking: true
+
     context_window: 262144
     max_out_stated: 32768
     max_out_configured: 16384
@@ -312,7 +312,7 @@ models:
     model_id: kimi-k2-thinking-turbo
     api_key_env: MOONSHOT_API_KEY
     api_base: https://api.moonshot.ai/v1
-    thinking: true
+
     context_window: 262144
     max_out_stated: 32768
     max_out_configured: 16384
@@ -327,7 +327,7 @@ models:
     model_id: MiniMax-M2.5
     api_key_env: MINIMAX_API_KEY
     api_base: https://api.minimax.io
-    thinking: true
+
     context_window: 200000
     max_out_stated: 16384
     max_out_configured: 16384
@@ -340,7 +340,7 @@ models:
     model_id: MiniMax-M2.5-highspeed
     api_key_env: MINIMAX_API_KEY
     api_base: https://api.minimax.io
-    thinking: true
+
     context_window: 200000
     max_out_stated: 16384
     max_out_configured: 16384
@@ -353,13 +353,15 @@ models:
 # You only need models you have API keys for.
 
 roles:
-  author: gpt-5.1
-  reviewers:
-    - claude-opus-4-6
-    - gemini-3.1-pro-preview
-  deduplication: claude-sonnet-4-5
-  normalization: claude-haiku-4-5
-  revision: deepseek-chat
-  integration_reviewer: claude-opus-4-5
-  # revision defaults to author if not set
-  # normalization defaults to deduplication if not set
+  # Assign models from the list above to each role.
+  # Configure these in the GUI at http://localhost:8411/config
+  #
+  # Required: author, reviewers (at least 2), deduplication
+  # Optional: normalization (defaults to dedup), revision (defaults to author),
+  #           integration_reviewer
+  author:
+  reviewers: []
+  deduplication:
+  normalization:
+  revision:
+  integration_reviewer:
