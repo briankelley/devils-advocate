@@ -167,10 +167,15 @@ class ReviewRunner:
 
             # Monkey-patch storage.log to also emit progress events
             original_log = storage.log
+            _last_emitted_msg = [None]
 
             def hooked_log(msg: str) -> None:
                 original_log(msg)
                 event = classify_log_message(msg)
+                # Deduplicate consecutive identical messages
+                if event.message and event.message == _last_emitted_msg[0]:
+                    return
+                _last_emitted_msg[0] = event.message
                 self.emit_event(review_id, event)
 
             storage.log = hooked_log

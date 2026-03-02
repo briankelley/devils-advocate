@@ -14,6 +14,11 @@
 #   4. ~/.config/devils-advocate/models.yaml
 #
 # Run `dvad config --show` to validate your configuration.
+#
+# max_out_stated:     Vendor's documented max output token limit.
+# max_out_configured: Your cap for dvad. Prevents runaway generation and cost.
+#                     Must be <= max_out_stated. 16384 is a good default for
+#                     review roles; revision may need more for large artifacts.
 
 models:
 
@@ -24,6 +29,8 @@ models:
     model_id: claude-opus-4-6
     api_key_env: ANTHROPIC_API_KEY
     context_window: 200000
+    max_out_stated: 128000
+    max_out_configured: 16384
     cost_per_1k_input: 0.005
     cost_per_1k_output: 0.025
     timeout: 900
@@ -34,6 +41,8 @@ models:
     model_id: claude-opus-4-5
     api_key_env: ANTHROPIC_API_KEY
     context_window: 200000
+    max_out_stated: 128000
+    max_out_configured: 16384
     cost_per_1k_input: 0.005
     cost_per_1k_output: 0.025
     timeout: 900
@@ -43,6 +52,8 @@ models:
     model_id: claude-sonnet-4-6
     api_key_env: ANTHROPIC_API_KEY
     context_window: 200000
+    max_out_stated: 64000
+    max_out_configured: 16384
     cost_per_1k_input: 0.003
     cost_per_1k_output: 0.015
     timeout: 900
@@ -52,6 +63,8 @@ models:
     model_id: claude-sonnet-4-5-20250929
     api_key_env: ANTHROPIC_API_KEY
     context_window: 200000
+    max_out_stated: 64000
+    max_out_configured: 16384
     cost_per_1k_input: 0.003
     cost_per_1k_output: 0.015
     timeout: 900
@@ -61,6 +74,8 @@ models:
     model_id: claude-haiku-4-5-20251001
     api_key_env: ANTHROPIC_API_KEY
     context_window: 200000
+    max_out_stated: 64000
+    max_out_configured: 16384
     cost_per_1k_input: 0.0008
     cost_per_1k_output: 0.004
     timeout: 900
@@ -74,6 +89,8 @@ models:
     api_base: https://api.openai.com/v1
     use_completion_tokens: true
     context_window: 400000
+    max_out_stated: 32768
+    max_out_configured: 16384
     cost_per_1k_input: 0.00175
     cost_per_1k_output: 0.014
     timeout: 900
@@ -85,6 +102,8 @@ models:
     api_base: https://api.openai.com/v1
     use_completion_tokens: true
     context_window: 128000
+    max_out_stated: 16384
+    max_out_configured: 16384
     cost_per_1k_input: 0.005
     cost_per_1k_output: 0.015
     timeout: 900
@@ -96,6 +115,8 @@ models:
     api_base: https://api.openai.com/v1
     use_completion_tokens: true
     context_window: 400000
+    max_out_stated: 32768
+    max_out_configured: 16384
     cost_per_1k_input: 0.00175
     cost_per_1k_output: 0.014
     timeout: 180
@@ -107,6 +128,8 @@ models:
     api_base: https://api.openai.com/v1
     use_completion_tokens: true
     context_window: 400000
+    max_out_stated: 32768
+    max_out_configured: 16384
     cost_per_1k_input: 0.00175
     cost_per_1k_output: 0.014
     timeout: 180
@@ -118,6 +141,8 @@ models:
     api_base: https://api.openai.com/v1
     use_completion_tokens: true
     context_window: 128000
+    max_out_stated: 16384
+    max_out_configured: 16384
     cost_per_1k_input: 0.00175
     cost_per_1k_output: 0.014
     timeout: 60
@@ -129,6 +154,8 @@ models:
     api_base: https://api.openai.com/v1
     use_completion_tokens: true
     context_window: 272000
+    max_out_stated: 32768
+    max_out_configured: 16384
     cost_per_1k_input: 0.00125
     cost_per_1k_output: 0.01
     timeout: 120
@@ -142,6 +169,8 @@ models:
     api_base: https://api.x.ai/v1
     thinking: true
     context_window: 256000
+    max_out_stated: 131072
+    max_out_configured: 16384
     cost_per_1k_input: 0.003
     cost_per_1k_output: 0.015
     timeout: 900
@@ -153,6 +182,8 @@ models:
     api_base: https://api.x.ai/v1
     thinking: true
     context_window: 2000000
+    max_out_stated: 131072
+    max_out_configured: 16384
     cost_per_1k_input: 0.003
     cost_per_1k_output: 0.015
     timeout: 900
@@ -164,6 +195,8 @@ models:
     api_base: https://api.x.ai/v1
     thinking: true
     context_window: 256000
+    max_out_stated: 131072
+    max_out_configured: 16384
     cost_per_1k_input: 0.0002
     cost_per_1k_output: 0.0015
     timeout: 900
@@ -176,6 +209,8 @@ models:
     api_key_env: GOOGLE_API_KEY
     api_base: https://generativelanguage.googleapis.com/v1beta/openai
     context_window: 1048576
+    max_out_stated: 65536
+    max_out_configured: 16384
     cost_per_1k_input: 0.002
     cost_per_1k_output: 0.012
     timeout: 900
@@ -187,6 +222,8 @@ models:
     api_key_env: GOOGLE_API_KEY
     api_base: https://generativelanguage.googleapis.com/v1beta/openai
     context_window: 1048576
+    max_out_stated: 65536
+    max_out_configured: 16384
     cost_per_1k_input: 0.002
     cost_per_1k_output: 0.012
     timeout: 900
@@ -197,6 +234,8 @@ models:
     api_key_env: GOOGLE_API_KEY
     api_base: https://generativelanguage.googleapis.com/v1beta/openai
     context_window: 1048576
+    max_out_stated: 65536
+    max_out_configured: 16384
     cost_per_1k_input: 0.0005
     cost_per_1k_output: 0.003
     timeout: 900
@@ -207,6 +246,8 @@ models:
     api_key_env: GOOGLE_API_KEY
     api_base: https://generativelanguage.googleapis.com/v1beta/openai
     context_window: 1048576
+    max_out_stated: 65536
+    max_out_configured: 16384
     cost_per_1k_input: 0.00125
     cost_per_1k_output: 0.01
     timeout: 900
@@ -219,6 +260,8 @@ models:
     api_key_env: DEEPSEEK_API_KEY
     api_base: https://api.deepseek.com
     context_window: 128000
+    max_out_stated: 8192
+    max_out_configured: 8192
     cost_per_1k_input: 0.00028
     cost_per_1k_output: 0.00042
     timeout: 900
@@ -230,6 +273,8 @@ models:
     api_base: https://api.deepseek.com
     thinking: true
     context_window: 128000
+    max_out_stated: 8192
+    max_out_configured: 8192
     cost_per_1k_input: 0.00028
     cost_per_1k_output: 0.00042
     timeout: 900
@@ -243,6 +288,8 @@ models:
     api_base: https://api.moonshot.ai/v1
     thinking: true
     context_window: 262144
+    max_out_stated: 32768
+    max_out_configured: 16384
     cost_per_1k_input: 0.0006
     cost_per_1k_output: 0.003
     timeout: 900
@@ -254,6 +301,8 @@ models:
     api_base: https://api.moonshot.ai/v1
     thinking: true
     context_window: 262144
+    max_out_stated: 32768
+    max_out_configured: 16384
     cost_per_1k_input: 0.0006
     cost_per_1k_output: 0.0025
     timeout: 900
@@ -265,6 +314,8 @@ models:
     api_base: https://api.moonshot.ai/v1
     thinking: true
     context_window: 262144
+    max_out_stated: 32768
+    max_out_configured: 16384
     cost_per_1k_input: 0.00115
     cost_per_1k_output: 0.008
     timeout: 900
@@ -278,6 +329,8 @@ models:
     api_base: https://api.minimax.io
     thinking: true
     context_window: 200000
+    max_out_stated: 16384
+    max_out_configured: 16384
     cost_per_1k_input: 0.0003
     cost_per_1k_output: 0.0012
     timeout: 900
@@ -289,6 +342,8 @@ models:
     api_base: https://api.minimax.io
     thinking: true
     context_window: 200000
+    max_out_stated: 16384
+    max_out_configured: 16384
     cost_per_1k_input: 0.0006
     cost_per_1k_output: 0.0024
     timeout: 300

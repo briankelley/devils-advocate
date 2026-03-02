@@ -52,6 +52,10 @@ def build_app(config_path: str | None = None) -> FastAPI:
 
     templates.env.filters["human_date"] = human_date
 
+    # Global template variables
+    from devils_advocate import __version__
+    templates.env.globals["version"] = __version__
+
     # CSRF token (startup-generated)
     csrf_token = secrets.token_urlsafe(32)
 

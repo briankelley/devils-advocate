@@ -7,6 +7,9 @@ import os
 
 def create_app(config_path: str | None = None):
     """Create and return the FastAPI application."""
+    if config_path is None:
+        from ..config import init_config
+        init_config()
     from .app import build_app
     return build_app(config_path=config_path)
 

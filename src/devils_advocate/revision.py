@@ -221,7 +221,7 @@ async def _run_revision_core(
         return ""
 
     # Estimate duration and warn if long
-    est_seconds = est / 10  # ~10 tok/s heuristic
+    est_seconds = est / 35  # ~35 tok/s average across providers
     if est_seconds > 120:
         est_min = int(est_seconds // 60)
         storage.log(f"Revision: large context (~{est:,} tokens) — expect ~{est_min} min")

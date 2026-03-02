@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Devil's Advocate{% endblock %}</title>
-    <link rel="stylesheet" href="/static/style.css?v=r6">
+    <link rel="stylesheet" href="/static/style.css?v=r7">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400&display=swap" rel="stylesheet">
@@ -18,13 +18,14 @@
             <span class="nav-title">Devil's Advocate</span>
         </a>
         <div class="nav-links">
+            <span class="nav-version">v{{ version }}</span>
             <a href="/config" title="Settings"><i data-lucide="settings"></i></a>
         </div>
     </nav>
     <main>
         {% block content %}{% endblock %}
     </main>
-    <script src="/static/app.js?v=r6"></script>
+    <script src="/static/app.js?v=r7"></script>
     <script>document.addEventListener('DOMContentLoaded', () => { if (typeof lucide !== 'undefined') lucide.createIcons(); });</script>
     {% block scripts %}{% endblock %}
 </body>

@@ -233,6 +233,28 @@ async def review_detail(request: Request, review_id: str):
             if revision_stale:
                 break
 
+    # Elapsed time from log file timestamps
+    elapsed_str = None
+    log_path = storage.data_dir / "logs" / f"{review_id}.log"
+    if log_path.exists():
+        try:
+            from datetime import datetime as _dt
+            log_text = log_path.read_text()
+            lines = [l for l in log_text.strip().splitlines() if l.startswith("[")]
+            if len(lines) >= 2:
+                first_ts = lines[0].split("]")[0].lstrip("[")
+                last_ts = lines[-1].split("]")[0].lstrip("[")
+                t0 = _dt.fromisoformat(first_ts.replace("Z", "+00:00"))
+                t1 = _dt.fromisoformat(last_ts.replace("Z", "+00:00"))
+                delta = t1 - t0
+                total_secs = int(delta.total_seconds())
+                if total_secs >= 60:
+                    elapsed_str = f"{total_secs // 60}m {total_secs % 60}s"
+                else:
+                    elapsed_str = f"{total_secs}s"
+        except Exception:
+            pass
+
     # Cost breakdown for tooltip
     cost_breakdown = ledger.get("cost", {}).get("breakdown", {})
 
@@ -317,6 +339,7 @@ async def review_detail(request: Request, review_id: str):
         "total_cost": total_cost,
         "input_files_manifest": input_files_manifest,
         "cost_estimate_rows": cost_estimate_rows,
+        "elapsed_str": elapsed_str,
         "csrf_token": request.app.state.csrf_token,
     })
 

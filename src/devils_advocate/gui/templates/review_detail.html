@@ -50,6 +50,8 @@
     </div>
 </div>
 
+<div class="latency-note dim" style="font-size:11px; padding:var(--pad-sm) 0;">Reviews typically take 2-10 minutes depending on model and input size.</div>
+
 <div class="log-container">
     <div class="log-header">Log</div>
     <div class="log-output" id="log-output"></div>
@@ -125,6 +127,7 @@
     <span class="summary-tag tag-accepted">Suggestion Groups: {{ ledger.get('summary', {}).get('total_groups', 0) }}</span>
     <span class="summary-tag tag-accepted">Multi-Consensus: {{ ledger.get('summary', {}).get('multi_consensus', 0) }}</span>
     <span class="summary-tag tag-dismissed">Single Source: {{ ledger.get('summary', {}).get('single_source', 0) }}</span>
+    {% if elapsed_str %}<span class="summary-tag" style="color:var(--text-dim)">Elapsed: {{ elapsed_str }}</span>{% endif %}
 </div>
 {% else %}
 {# Summary Strip #}
@@ -133,6 +136,7 @@
     <span class="summary-tag tag-dismissed">Auto-Dismissed: {{ auto_dismissed|length }}</span>
     <span class="summary-tag tag-escalated">Escalated: {{ escalated|length }}</span>
     <span class="summary-tag tag-overridden">Overridden: {{ overridden|length }}</span>
+    {% if elapsed_str %}<span class="summary-tag" style="color:var(--text-dim)">Elapsed: {{ elapsed_str }}</span>{% endif %}
 </div>
 <div class="overrides-banner" id="overrides-banner">All escalations resolved — ready for revision</div>
 {% endif %}
@@ -227,7 +231,7 @@
 
                 {% if g.author_resolution %}
                 <details class="expand-section">
-                    <summary>[{{ ledger.get('author_model', 'author') }}] Author Response (Round 1): {{ g.author_resolution }}</summary>
+                    <summary>Author Response (Round 1): {{ g.author_resolution }}</summary>
                     <div class="expand-content"><span class="reviewer-name">[{{ ledger.get('author_model', 'author') }}]</span> {{ g.author_rationale }}</div>
                 </details>
                 {% endif %}
@@ -249,7 +253,7 @@
 
                 {% if g.author_final_resolution %}
                 <details class="expand-section">
-                    <summary>[{{ ledger.get('author_model', 'author') }}] Author Final Response: {{ g.author_final_resolution }}</summary>
+                    <summary>Author Final Response: {{ g.author_final_resolution }}</summary>
                     <div class="expand-content"><span class="reviewer-name">[{{ ledger.get('author_model', 'author') }}]</span> {{ g.author_final_rationale }}</div>
                 </details>
                 {% endif %}
@@ -263,11 +267,13 @@
             </div>
         </details>
 
+        {% if review_mode != 'spec' %}
         <div class="card-actions">
             <button class="btn btn-sm btn-green override-btn" data-action="overridden" data-group="{{ g.group_id }}">Accept Reviewer</button>
             <button class="btn btn-sm btn-dim override-btn" data-action="auto_dismissed" data-group="{{ g.group_id }}">Accept Author</button>
             <button class="btn btn-sm override-btn" data-action="escalated" data-group="{{ g.group_id }}">Keep Open</button>
         </div>
+        {% endif %}
     </div>
     {% endfor %}
 </section>
@@ -366,7 +372,9 @@
     <h3>Revised Artifact</h3>
     <div class="revision-actions">
         <button class="btn btn-sm" onclick="dvad.copyRevision()">Copy</button>
+        <button class="btn btn-sm btn-accent" id="regen-full-btn" style="display:none" onclick="dvad.regenFullFile('{{ review_id }}')">Regenerate as Full File</button>
     </div>
+    <div id="patch-status" style="display:none; font-size:11px; padding:var(--pad-sm) 0;"></div>
     <pre class="revision-content" id="revision-content"></pre>
     <div class="revision-cost" id="revision-cost"></div>
 </div>
