@@ -34,9 +34,10 @@ fi
 echo "Using $PYTHON ($("$PYTHON" --version))"
 
 # Create venv
-if [ -d "$VENV_DIR" ]; then
+if [ -d "$VENV_DIR" ] && [ -x "$VENV_DIR/bin/pip" ]; then
     echo "Existing venv found at $VENV_DIR - upgrading..."
 else
+    [ -d "$VENV_DIR" ] && rm -rf "$VENV_DIR"
     echo "Creating venv at $VENV_DIR..."
     mkdir -p "$(dirname "$VENV_DIR")"
     if ! "$PYTHON" -m venv "$VENV_DIR"; then
