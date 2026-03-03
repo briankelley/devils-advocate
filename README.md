@@ -1,5 +1,4 @@
-
-<div align="center"><img width="200" alt="dvad-color-white" src="https://github.com/user-attachments/assets/35b89380-cddd-4b70-88ac-e71cb1d867a6" /></div>
+<div align="center"><img width="200" height="1462" alt="dvad-color-white" src="https://github.com/user-attachments/assets/6dd501d8-701c-4fd8-8209-9e72c2f86368" /></div>
 
 # Devil's Advocate
 
@@ -11,9 +10,13 @@ Devil's Advocate pits multiple LLM reviewers against an LLM author in a structur
 
 DVAD is borne from my frustrations with code generated inside an AI echo chamber (single source provider). Often I'll post a script to an LLM that didn't write it to see if the other providers could spot issues or problems. They usually do. I decided to turn it into an easy to use UI.
 
-<img width="1358" height="989" alt="dvad main" src="https://github.com/user-attachments/assets/686fa07d-df88-436e-81a9-b4782d722107" />
+<img width="1502" height="946" alt="Screenshot from 2026-03-03 06-57-08" src="https://github.com/user-attachments/assets/678e87ec-96c7-423f-acc3-6f54010930fa" />
 
-<img width="1319" height="1000" alt="dvad config" src="https://github.com/user-attachments/assets/e6c0fad0-4181-4885-b064-dadb35a81a81" />
+<img width="1509" height="916" alt="Screenshot from 2026-03-03 06-57-36" src="https://github.com/user-attachments/assets/29962796-f661-4c6e-86fd-5e25e189f0f9" />
+
+<img width="1506" height="930" alt="Screenshot from 2026-03-03 06-59-36" src="https://github.com/user-attachments/assets/8a6bf275-14c8-4c39-8dee-61109f8b23b1" />
+
+<img width="1504" height="944" alt="Screenshot from 2026-03-03 07-44-41" src="https://github.com/user-attachments/assets/bc8f5225-1a36-417b-b48c-2b0062ae53bb" />
 
 ## Requirements
 
