@@ -183,6 +183,7 @@ async def run_integration_review(
         storage.log(f"Estimated cost: ${est_cost:.4f} (limit: ${max_cost:.2f})")
 
     if not storage.acquire_lock():
+        storage.log("Lock acquisition failed — another review is running or a stale lock exists")
         console.print("[red]Error:[/red] Lock held.")
         return None
 

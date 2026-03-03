@@ -417,6 +417,8 @@ const dvad = {
                     setTimeout(() => window.location.reload(), 500);
                 } else if (ev.type === 'error') {
                     source.close();
+                    const cancelBtn = document.getElementById('cancel-review-btn');
+                    if (cancelBtn) cancelBtn.style.display = 'none';
                     if (logOutput) {
                         const errLine = document.createElement('div');
                         errLine.style.color = '#ff4757';

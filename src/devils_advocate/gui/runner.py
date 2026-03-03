@@ -254,6 +254,8 @@ class ReviewRunner:
                 logger.error("Review %s timed out after %ds", review_id, _REVIEW_TIMEOUT)
                 inner_task.cancel()
                 # Don't await the cancelled task — its cleanup may block
+                if storage is not None:
+                    storage.release_lock()
                 result = None
 
             if result is None:
@@ -290,6 +292,9 @@ class ReviewRunner:
             self.statuses[review_id] = "failed"
             if review_id in self.active:
                 self.active[review_id]["state"] = "failed"
+            # Release lock — the orchestrator's finally block may not run
+            if storage is not None:
+                storage.release_lock()
             # Best-effort: save a stub ledger so the review appears in history
             try:
                 if storage is not None:
@@ -309,6 +314,9 @@ class ReviewRunner:
             self.statuses[review_id] = "failed"
             if review_id in self.active:
                 self.active[review_id]["state"] = "failed"
+            # Release lock — the orchestrator's finally block may not run
+            if storage is not None:
+                storage.release_lock()
             # Best-effort: save a stub ledger so the review appears in history
             try:
                 if storage is not None:

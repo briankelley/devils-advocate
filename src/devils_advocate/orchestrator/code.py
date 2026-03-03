@@ -123,6 +123,7 @@ async def run_code_review(
             return None
 
     if not storage.acquire_lock():
+        storage.log("Lock acquisition failed — another review is running or a stale lock exists")
         console.print("[red]Error:[/red] Lock held by another process.")
         return None
 

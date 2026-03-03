@@ -173,7 +173,7 @@ async def _call_reviewer(
         Override the default ``parse_review_response`` parser. When provided,
         called as ``point_parser(text, reviewer.name)`` instead of the default.
     """
-    storage.log(f"Round 1: calling {reviewer.name}")
+    storage.log(f"Round 1: calling {reviewer.name} (timeout: {reviewer.timeout}s)")
     sys_prompt = system_prompt if system_prompt is not None else get_reviewer_system_prompt()
     text, usage = await call_with_retry(
         client,
@@ -258,6 +258,7 @@ async def _run_round2_exchange(
         return [], [], None
 
     # -- Reviewer rebuttal phase --
+    storage.log("Round 2: sending author responses to reviewers for rebuttal")
     console.print(
         Panel(
             "[bold]Round 2:[/bold] Sending author responses to reviewers...",
@@ -308,6 +309,8 @@ async def _run_round2_exchange(
             )
         )
 
+    reviewer_info = ", ".join(f"{r.name} ({r.timeout}s)" for r in rebuttal_reviewers)
+    storage.log(f"Round 2: calling {len(rebuttal_reviewers)} reviewer(s) for rebuttal: {reviewer_info}")
     console.print(f"  Sending rebuttals to {len(rebuttal_reviewers)} reviewer(s)")
 
     rebuttal_results = await asyncio.gather(
@@ -354,6 +357,7 @@ async def _run_round2_exchange(
         all_rebuttals.extend(rebuttals)
 
     total_challenges = sum(1 for rb in all_rebuttals if rb.verdict == "CHALLENGE")
+    storage.log(f"Round 2: rebuttals complete -- {total_challenges} challenge(s)")
     console.print(f"  Challenges: {total_challenges} total")
 
     # -- Author final response (only if challenges exist) --
@@ -363,6 +367,7 @@ async def _run_round2_exchange(
     )
 
     if challenged_group_ids:
+        storage.log(f"Round 2: author responding to {len(challenged_group_ids)} challenge(s)")
         console.print(
             Panel(
                 f"[bold]Round 2:[/bold] Author responding to "
@@ -646,6 +651,7 @@ async def _run_adversarial_pipeline(
     )
 
     # -- Governance --
+    storage.log("Governance: applying deterministic rules")
     console.print(
         Panel(
             "[bold]Governance:[/bold] Applying deterministic rules...",
@@ -724,6 +730,7 @@ async def _run_adversarial_pipeline(
         for d in decisions
     )
     if has_actionable:
+        storage.log("Revision: generating revised artifact")
         console.print(
             Panel(
                 "[bold]Revision:[/bold] Generating revised artifact...",

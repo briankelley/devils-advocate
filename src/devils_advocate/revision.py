@@ -235,9 +235,9 @@ async def _run_revision_core(
         )
 
     if finding_count:
-        storage.log(f"Revision: calling {revision_model.name} (incorporating {finding_count} accepted findings)")
+        storage.log(f"Revision: calling {revision_model.name} (timeout: {revision_model.timeout}s, incorporating {finding_count} accepted findings)")
     else:
-        storage.log(f"Revision: calling {revision_model.name}")
+        storage.log(f"Revision: calling {revision_model.name} (timeout: {revision_model.timeout}s)")
     raw, usage = await call_with_retry(
         client,
         revision_model,

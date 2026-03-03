@@ -165,6 +165,7 @@ async def run_plan_review(
 
     # Acquire lock
     if not storage.acquire_lock():
+        storage.log("Lock acquisition failed — another review is running or a stale lock exists")
         console.print(
             "[red]Error:[/red] Another dvad review is running for this project. "
             "Wait or remove .dvad/.lock if stale."
