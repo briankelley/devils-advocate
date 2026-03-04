@@ -1,4 +1,4 @@
-"""E2E test fixtures — Playwright browser, dvad server management, seeded data."""
+"""E2E test fixtures -- Playwright browser, dvad server management, seeded data."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import socket
 import subprocess
 import sys
 import time
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,8 +19,20 @@ import pytest
 FIXTURES = Path(__file__).parent / "fixtures"
 BASELINES = Path(__file__).parent / "baselines"
 FAILURES_DIR = Path(__file__).parent / "failures"
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 REMOTE_LLM_URL = "https://38.72.121.134/llm"
+
+# Accumulator for findings report (populated by pytest_runtest_makereport)
+_collected_results: list[dict] = []
+_e2e_ran = False
+_session_start: float = 0.0
+
+
+def pytest_configure(config):
+    """Record session start time for duration reporting."""
+    global _session_start
+    _session_start = time.monotonic()
 
 
 # ─── Auto-skip unless explicitly opted in ────────────────────────────────────
@@ -36,15 +49,40 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip)
 
 
-# ─── Failure capture ─────────────────────────────────────────────────────────
+# ─── Failure capture + findings accumulator ──────────────────────────────────
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """Stash test result on the item for use in fixtures."""
+    """Stash test result on the item and accumulate findings for the report."""
+    global _e2e_ran
     outcome = yield
     rep = outcome.get_result()
     setattr(item, f"rep_{rep.when}", rep)
+
+    # Only collect call-phase results from e2e-marked tests
+    if rep.when != "call":
+        return
+    if "e2e" not in item.keywords and "paranoid" not in item.keywords:
+        return
+
+    _e2e_ran = True
+
+    if rep.outcome in ("failed", "skipped") and hasattr(rep, "wasxfail"):
+        # xfail: test was expected to fail
+        _collected_results.append({
+            "nodeid": rep.nodeid,
+            "outcome": "xfailed",
+            "reason": rep.wasxfail,
+            "when": rep.when,
+        })
+    elif rep.outcome == "failed":
+        _collected_results.append({
+            "nodeid": rep.nodeid,
+            "outcome": "failed",
+            "reason": str(rep.longrepr) if rep.longrepr else "",
+            "when": rep.when,
+        })
 
 
 # ─── Remote LLM health check ────────────────────────────────────────────────
@@ -390,3 +428,167 @@ def live_page(live_context):
     page = live_context.new_page()
     yield page
     page.close()
+
+
+# ─── Auto-generated findings report ─────────────────────────────────────────
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Write a dated findings report when E2E tests produced xfails or failures."""
+    if not _e2e_ran or not _collected_results:
+        return
+
+    today = date.today().isoformat()
+    report_path = REPO_ROOT / f"e2e-findings-{today}.md"
+
+    # Gather session stats
+    passed = failed = xfailed = 0
+    for item in session.items:
+        rep = getattr(item, "rep_call", None)
+        if rep is None:
+            continue
+        if rep.outcome == "passed":
+            passed += 1
+        elif rep.outcome == "failed":
+            if hasattr(rep, "wasxfail"):
+                xfailed += 1
+            else:
+                failed += 1
+        elif rep.outcome == "skipped" and hasattr(rep, "wasxfail"):
+            xfailed += 1
+
+    duration = time.monotonic() - _session_start if _session_start > 0 else 0
+    duration_str = f"{duration:.0f}s" if duration > 0 else "unknown"
+
+    # Categorize collected results
+    failures = [r for r in _collected_results if r["outcome"] == "failed"]
+    xfails = [r for r in _collected_results if r["outcome"] == "xfailed"]
+
+    # Sub-categorize xfails by type
+    unguarded_xfails = [r for r in xfails if "UNGUARDED DESTRUCTIVE" in r["reason"]]
+    policy_xfails = [r for r in xfails if "POLICY VIOLATION" in r["reason"]]
+    other_xfails = [r for r in xfails if r not in unguarded_xfails and r not in policy_xfails]
+
+    # Try to import structured metadata for enrichment
+    try:
+        from tests.e2e.paranoid_helpers import LOSS_ANNOTATIONS, UNGUARDED_DESTRUCTIVE_ENDPOINTS
+    except ImportError:
+        try:
+            from paranoid_helpers import LOSS_ANNOTATIONS, UNGUARDED_DESTRUCTIVE_ENDPOINTS
+        except ImportError:
+            LOSS_ANNOTATIONS = {}
+            UNGUARDED_DESTRUCTIVE_ENDPOINTS = []
+
+    lines = [
+        f"# E2E Test Findings - {today}",
+        "",
+        f"Run: {passed} passed, {xfailed} xfailed, {failed} failed",
+        f"Duration: {duration_str}",
+        "",
+    ]
+
+    # Section: Critical failures
+    if failures:
+        lines.append("## Critical: Failures (tests that should pass but don't)")
+        lines.append("")
+        for r in failures:
+            test_name = r["nodeid"].split("::")[-1]
+            lines.append(f"### {test_name}")
+            lines.append(f"- **Test**: `{r['nodeid']}`")
+            # Truncate long tracebacks for readability
+            reason = r["reason"]
+            if len(reason) > 500:
+                reason = reason[:500] + "\n  ..."
+            lines.append(f"- **Error**:\n  ```\n  {reason}\n  ```")
+            lines.append("")
+
+    # Section: Unguarded destructive endpoints
+    if unguarded_xfails:
+        lines.append("## Findings: Unguarded Destructive Endpoints")
+        lines.append("")
+        lines.append("These endpoints are irreversible, have no backup, and require no confirmation.")
+        lines.append("")
+        for r in unguarded_xfails:
+            # Extract endpoint key from reason string
+            endpoint_key = _extract_endpoint_key(r["reason"])
+            lines.append(f"### {endpoint_key or r['nodeid'].split('::')[-1]}")
+            if endpoint_key and endpoint_key in LOSS_ANNOTATIONS:
+                ann = LOSS_ANNOTATIONS[endpoint_key]
+                lines.append(f"- **Endpoint**: `{endpoint_key}`")
+                lines.append(f"- **Reversible**: {ann.get('reversible', 'unknown')}")
+                lines.append(f"- **Backup**: {ann.get('backup_exists', 'unknown')}")
+                lines.append(f"- **Confirmation**: {ann.get('confirmation_required', 'unknown')}")
+                lines.append(f"- **On empty input**: {ann.get('on_all_empty', 'unknown')}")
+            else:
+                lines.append(f"- **Test**: `{r['nodeid']}`")
+                lines.append(f"- **Reason**: {r['reason']}")
+            lines.append("")
+
+    # Section: Policy violations
+    if policy_xfails:
+        lines.append("## Findings: Policy Violations")
+        lines.append("")
+        lines.append("Endpoints where all-empty input causes destructive behavior.")
+        lines.append("")
+        for r in policy_xfails:
+            endpoint_key = _extract_endpoint_key(r["reason"])
+            lines.append(f"### {endpoint_key or r['nodeid'].split('::')[-1]}")
+            lines.append(f"- **Test**: `{r['nodeid']}`")
+            lines.append(f"- **Reason**: {r['reason']}")
+            lines.append("")
+
+    # Section: Other xfails
+    if other_xfails:
+        lines.append("## Findings: Other Expected Failures")
+        lines.append("")
+        for r in other_xfails:
+            test_name = r["nodeid"].split("::")[-1]
+            lines.append(f"- **{test_name}**: {r['reason']}")
+        lines.append("")
+
+    # Section: Summary table
+    if xfails:
+        lines.append("## All xfail Summary")
+        lines.append("")
+        lines.append("| Test | Reason |")
+        lines.append("|------|--------|")
+        for r in xfails:
+            test_name = r["nodeid"].split("::")[-1]
+            # Single-line reason for table
+            reason_oneline = r["reason"].split("\n")[0].strip()
+            lines.append(f"| `{test_name}` | {reason_oneline} |")
+        lines.append("")
+
+    # Section: How to use
+    lines.append("---")
+    lines.append("")
+    lines.append("## How to use this file")
+    lines.append("")
+    lines.append("Feed this document into a new session with the instruction:")
+    lines.append("")
+    lines.append("> Fix the paranoid E2E findings documented in")
+    lines.append(f"> `e2e-findings-{today}.md`. Start with the critical findings.")
+    lines.append("> After each fix, convert the corresponding xfail test in")
+    lines.append("> `tests/e2e/test_paranoid_loss_annotations.py` to a real assertion,")
+    lines.append("> then run the paranoid suite to verify:")
+    lines.append("> `.venv/bin/python -m pytest tests/e2e/test_paranoid_*.py -m e2e -v`")
+    lines.append("")
+
+    report_path.write_text("\n".join(lines))
+
+
+def _extract_endpoint_key(reason: str) -> str | None:
+    """Extract an endpoint key like 'POST /api/config' from an xfail reason string."""
+    for method in ("GET", "POST", "PUT", "DELETE", "PATCH"):
+        prefix = f"{method} /api/"
+        idx = reason.find(prefix)
+        if idx != -1:
+            # Grab from the method to the next newline or end
+            rest = reason[idx:]
+            end = len(rest)
+            for stop in ("\n", "  ", "\t"):
+                pos = rest.find(stop)
+                if pos != -1 and pos < end:
+                    end = pos
+            return rest[:end].strip()
+    return None

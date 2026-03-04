@@ -1,0 +1,275 @@
+#!/usr/bin/env bash
+# Consolidated test runner for dvad.
+# Usage: ./run-tests <unit|e2elocal|e2eremote> [--no-bail]
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+PYTHON=".venv/bin/python"
+if [[ ! -x "$PYTHON" ]]; then
+    echo "Error: $PYTHON not found. Create a virtualenv first." >&2
+    exit 1
+fi
+
+# ── arg parsing ──────────────────────────────────────────────────────────────
+
+TIER=""
+BAIL=true
+
+for arg in "$@"; do
+    case "$arg" in
+        unit|e2elocal|e2eremote) TIER="$arg" ;;
+        --no-bail) BAIL=false ;;
+        *)
+            echo "Unknown argument: $arg" >&2
+            TIER=""
+            break
+            ;;
+    esac
+done
+
+if [[ -z "$TIER" ]]; then
+    echo "Usage: ./run-tests <unit|e2elocal|e2eremote> [--no-bail]"
+    echo ""
+    echo "  unit       Pure unit tests (no LLM, no browser)"
+    echo "  e2elocal   unit + Playwright GUI + local LLM + paranoid audit"
+    echo "  e2eremote  unit + Playwright GUI + remote LLM + paranoid audit"
+    echo ""
+    echo "  --no-bail  Continue through stage failures instead of stopping"
+    exit 1
+fi
+
+DATE="$(date +%Y-%m-%d)"
+REPORT="test-report-${DATE}.md"
+OVERALL_EXIT=0
+
+# Temp dir for stage outputs
+STAGE_TMP="$(mktemp -d)"
+trap 'cleanup' EXIT
+
+# ── llama-server config ──────────────────────────────────────────────────────
+
+LLAMA_BIN="/media/kelleyb/DATA2/LLM/llama.cpp/build/bin/llama-server"
+LLAMA_LIB="$(dirname "$LLAMA_BIN")"
+LLAMA_MODEL="/media/kelleyb/DATA2/LLM/models/gguf/gemma-3-12b-Thinking.i1-Q3_K_L.gguf"
+LLAMA_HOST="127.0.0.1"
+LLAMA_PORT=8080
+LLAMA_PID=""
+WE_STARTED_LLAMA=false
+GPU_FANS_MAXED=false
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+cleanup() {
+    if $WE_STARTED_LLAMA && [[ -n "$LLAMA_PID" ]]; then
+        echo "Stopping llama-server (pid $LLAMA_PID)..."
+        kill "$LLAMA_PID" 2>/dev/null || true
+        wait "$LLAMA_PID" 2>/dev/null || true
+    fi
+    if $GPU_FANS_MAXED; then
+        echo "Restoring GPU fan control to auto..."
+        nvidia-settings -a "[gpu:0]/GPUFanControlState=0" > /dev/null 2>&1 || true
+    fi
+    rm -rf "$STAGE_TMP"
+}
+
+llama_is_running() {
+    curl -sf "http://${LLAMA_HOST}:${LLAMA_PORT}/v1/models" > /dev/null 2>&1
+}
+
+start_llama() {
+    if llama_is_running; then
+        echo "llama-server already running on :${LLAMA_PORT}"
+        return 0
+    fi
+
+    if [[ ! -x "$LLAMA_BIN" ]]; then
+        echo "Error: llama-server not found at $LLAMA_BIN" >&2
+        exit 1
+    fi
+    if [[ ! -f "$LLAMA_MODEL" ]]; then
+        echo "Error: model not found at $LLAMA_MODEL" >&2
+        exit 1
+    fi
+
+    echo "GPU fans to 100%..."
+    nvidia-settings -a "[gpu:0]/GPUFanControlState=1" -a "[fan:0]/GPUTargetFanSpeed=100" > /dev/null 2>&1
+    GPU_FANS_MAXED=true
+
+    echo "Starting llama-server..."
+    LD_LIBRARY_PATH="$LLAMA_LIB" "$LLAMA_BIN" \
+        -m "$LLAMA_MODEL" \
+        --host "$LLAMA_HOST" \
+        --port "$LLAMA_PORT" \
+        -ngl 99 \
+        -c 32768 \
+        -t 12 \
+        --mlock \
+        --parallel 1 \
+        --cache-type-k q4_0 \
+        --cache-type-v q4_0 \
+        --seed 42 \
+        > "$STAGE_TMP/llama-server.log" 2>&1 &
+    LLAMA_PID=$!
+    WE_STARTED_LLAMA=true
+
+    echo -n "Waiting for llama-server to be ready"
+    local deadline=$((SECONDS + 90))
+    while (( SECONDS < deadline )); do
+        if llama_is_running; then
+            echo " ready (pid $LLAMA_PID)"
+            return 0
+        fi
+        # Check the process hasn't died
+        if ! kill -0 "$LLAMA_PID" 2>/dev/null; then
+            echo ""
+            echo "Error: llama-server exited unexpectedly. Log:" >&2
+            tail -20 "$STAGE_TMP/llama-server.log" >&2
+            exit 1
+        fi
+        echo -n "."
+        sleep 2
+    done
+    echo ""
+    echo "Error: llama-server did not become ready within 90s. Log:" >&2
+    tail -20 "$STAGE_TMP/llama-server.log" >&2
+    exit 1
+}
+
+run_stage() {
+    local label="$1"
+    shift
+    local outfile="$STAGE_TMP/${label}.txt"
+
+    echo "Running: $label ..."
+    set +e
+    "$PYTHON" -m pytest "$@" --tb=short -v --color=yes 2>&1 | tee "$outfile"
+    local rc=${PIPESTATUS[0]}
+    set -e
+    echo ""
+
+    echo "$rc" > "$STAGE_TMP/${label}.rc"
+    return "$rc"
+}
+
+parse_summary() {
+    local outfile="$1"
+    grep -E '^[0-9]+ passed' "$outfile" | tail -1 || \
+    grep -E '(passed|failed|error|xfailed)' "$outfile" | tail -1 || \
+    echo "see output above"
+}
+
+append_section() {
+    local heading="$1"
+    local outfile="$2"
+    local rc
+    rc=$(cat "$STAGE_TMP/$(basename "$outfile" .txt).rc" 2>/dev/null || echo "1")
+
+    echo "" >> "$REPORT"
+    echo "## $heading" >> "$REPORT"
+    local summary
+    summary=$(parse_summary "$outfile")
+    echo "$summary" >> "$REPORT"
+
+    if [[ "$rc" -ne 0 ]]; then
+        local failures
+        failures=$(sed -n '/^FAILURES/,/^===/p' "$outfile" 2>/dev/null || true)
+        if [[ -n "$failures" ]]; then
+            echo "" >> "$REPORT"
+            echo '```' >> "$REPORT"
+            echo "$failures" >> "$REPORT"
+            echo '```' >> "$REPORT"
+        fi
+    fi
+}
+
+# Records failure; bails unless --no-bail
+handle_failure() {
+    local label="$1"
+    OVERALL_EXIT=1
+    if $BAIL; then
+        echo "$label failed. Stopping. (use --no-bail to continue)"
+        echo ""
+        echo "Report: $REPORT"
+        exit "$OVERALL_EXIT"
+    else
+        echo "$label failed. Continuing (--no-bail)."
+    fi
+}
+
+# ── report header ────────────────────────────────────────────────────────────
+
+echo "# dvad Test Report - ${DATE}" > "$REPORT"
+
+# ── unit (always runs) ───────────────────────────────────────────────────────
+
+if run_stage "unit" tests/ -m "not e2e and not live and not paranoid" --ignore=tests/e2e; then
+    append_section "Unit Tests" "$STAGE_TMP/unit.txt"
+else
+    append_section "Unit Tests" "$STAGE_TMP/unit.txt"
+    handle_failure "Unit tests"
+fi
+
+[[ "$TIER" == "unit" ]] && { echo ""; echo "Report: $REPORT"; exit "$OVERALL_EXIT"; }
+
+# ── playwright GUI (runs for all e2e tiers) ──────────────────────────────────
+
+if run_stage "gui" tests/e2e/ -m "e2e and not e2e_live and not paranoid"; then
+    append_section "E2E Tests (GUI)" "$STAGE_TMP/gui.txt"
+else
+    append_section "E2E Tests (GUI)" "$STAGE_TMP/gui.txt"
+    handle_failure "E2E GUI tests"
+fi
+
+# ── e2elocal: local LLM tests ───────────────────────────────────────────────
+
+if [[ "$TIER" == "e2elocal" ]]; then
+    start_llama
+
+    if run_stage "local" tests/e2e/ -m "e2e_live"; then
+        append_section "Local LLM Tests" "$STAGE_TMP/local.txt"
+    else
+        append_section "Local LLM Tests" "$STAGE_TMP/local.txt"
+        handle_failure "Local LLM tests"
+    fi
+fi
+
+# ── e2eremote: remote/cloud LLM tests ───────────────────────────────────────
+
+if [[ "$TIER" == "e2eremote" ]]; then
+    if run_stage "remote" tests/ -m "live"; then
+        append_section "Remote LLM Tests" "$STAGE_TMP/remote.txt"
+    else
+        append_section "Remote LLM Tests" "$STAGE_TMP/remote.txt"
+        handle_failure "Remote LLM tests"
+    fi
+fi
+
+# ── paranoid audit (all e2e tiers) ──────────────────────────────────────────
+
+run_stage "paranoid" tests/e2e/ -m "e2e and paranoid" || true
+paranoid_rc=$(cat "$STAGE_TMP/paranoid.rc")
+
+echo "" >> "$REPORT"
+echo "## Paranoid Audit" >> "$REPORT"
+summary=$(parse_summary "$STAGE_TMP/paranoid.txt")
+echo "$summary" >> "$REPORT"
+
+if [[ -f "e2e-findings-${DATE}.md" ]]; then
+    echo "See: e2e-findings-${DATE}.md" >> "$REPORT"
+fi
+
+if [[ "$paranoid_rc" -ne 0 ]]; then
+    failures=$(sed -n '/^FAILURES/,/^===/p' "$STAGE_TMP/paranoid.txt" 2>/dev/null || true)
+    if [[ -n "$failures" ]]; then
+        echo "" >> "$REPORT"
+        echo '```' >> "$REPORT"
+        echo "$failures" >> "$REPORT"
+        echo '```' >> "$REPORT"
+    fi
+fi
+
+echo ""
+echo "Report: $REPORT"
+exit "$OVERALL_EXIT"

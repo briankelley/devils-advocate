@@ -9,3 +9,5 @@ dist/
 .mypy_cache/
 tests/e2e/failures/
 tests/e2e/videos/
+e2e-findings-*.md
+test-report-*.md

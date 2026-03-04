@@ -46,6 +46,7 @@ markers = [
     "live: e2e tests that make real API calls (select with '-m live')",
     "e2e: end-to-end Playwright GUI tests (select with '-m e2e')",
     "e2e_live: E2E tests requiring local LLM (select with '-m e2e')",
+    "paranoid: adversarial E2E tests for unguarded destructive paths",
 ]
 
 [tool.hatch.build.targets.wheel]
