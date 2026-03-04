@@ -154,9 +154,7 @@ def load_config(path: Path | None = None) -> dict:
         )
 
     # Assign roles from the top-level 'roles' block
-    roles_block = raw.get("roles")
-    if not roles_block:
-        raise ConfigError(f"Config missing 'roles' block in {config_path}")
+    roles_block = raw.get("roles") or {}
 
     active_names: set[str] = set()
 
@@ -199,15 +197,53 @@ def load_config(path: Path | None = None) -> dict:
         all_models[revision_name].roles.add("revision")
 
     # Only active models (referenced in roles) go into the working set
-    models = {name: all_models[name] for name in active_names}
+    models = {name: all_models[name] for name in all_models if name in active_names}
 
-    return {"models": models, "all_models": all_models, "config_path": str(config_path)}
+    return {
+        "models": models,
+        "all_models": all_models,
+        "config_path": str(config_path),
+        "reviewer_order": roles_block.get("reviewers", []),
+    }
 
 
-def validate_config(config: dict) -> list[tuple[str, str]]:
-    """Validate a loaded config. Returns list of (level, message) tuples.
+def validate_config_structure(config: dict) -> list[tuple[str, str]]:
+    """Structural validation - checks that don't depend on review mode.
 
+    Returns list of (level, message) tuples.
     level is 'error' (fatal) or 'warn' (continue).
+    """
+    issues: list[tuple[str, str]] = []
+    models = config["models"]
+
+    # Author-dedup collision (warn at save time, error at review-start time)
+    authors = [m for m in models.values() if "author" in m.roles]
+    dedup = [m for m in models.values() if m.deduplication]
+    if authors and dedup:
+        if any(d.name == authors[0].name for d in dedup):
+            issues.append(("warn", "Deduplication model should NOT be the author"))
+
+    # Per-model checks
+    for name, m in models.items():
+        if not m.api_key:
+            issues.append(("error", f"{name}: env var {m.api_key_env} is empty or unset"))
+        if m.context_window is None:
+            issues.append(("warn", f"{name}: context_window not set - pre-flight checks skipped"))
+        if m.cost_per_1k_input is None or m.cost_per_1k_output is None:
+            issues.append(("warn", f"{name}: cost not set - cost guardrails skipped for this model"))
+
+    return issues
+
+
+# Deprecated: use validate_config_structure + validate_review_readiness
+validate_config = validate_config_structure
+
+
+def validate_review_readiness(config: dict, mode: str) -> list[tuple[str, str]]:
+    """Check whether config has the roles needed for the given review mode.
+
+    Returns list of (level, message) tuples.
+    level is 'error' (fatal) or 'warn' (advisory).
     """
     issues: list[tuple[str, str]] = []
     models = config["models"]
@@ -216,26 +252,42 @@ def validate_config(config: dict) -> list[tuple[str, str]]:
     reviewers = [m for m in models.values() if "reviewer" in m.roles]
     dedup = [m for m in models.values() if m.deduplication]
     integ = [m for m in models.values() if m.integration_reviewer]
+    revision = [m for m in models.values() if "revision" in m.roles]
+    # Revision falls back to author in get_models_by_role, so check that too
+    has_revision = bool(revision) or bool(authors)
 
-    if len(authors) != 1:
-        issues.append(("error", f"Need exactly 1 author, found {len(authors)}"))
-    if len(reviewers) < 2:
-        issues.append(("error", f"Need at least 2 reviewers, found {len(reviewers)}"))
-    if len(integ) != 1:
-        issues.append(("error", f"Need exactly 1 integration_reviewer, found {len(integ)}"))
-    if len(dedup) == 0:
-        issues.append(("error", "Need at least 1 model with deduplication: true"))
+    # Author-dedup collision (applies to any mode that uses both)
     if authors and dedup:
         if any(d.name == authors[0].name for d in dedup):
-            issues.append(("error", "Deduplication model must NOT be the author"))
+            issues.append(("error", "Deduplication model must NOT be the author. Assign different models to these roles on the Config page."))
 
-    for name, m in models.items():
-        if not m.api_key:
-            issues.append(("error", f"{name}: env var {m.api_key_env} is empty or unset"))
-        if m.context_window is None:
-            issues.append(("warn", f"{name}: context_window not set — pre-flight checks skipped"))
-        if m.cost_per_1k_input is None or m.cost_per_1k_output is None:
-            issues.append(("warn", f"{name}: cost not set — cost guardrails skipped for this model"))
+    if mode in ("plan", "code"):
+        if len(authors) < 1:
+            issues.append(("error", f"{mode.title()} mode requires an Author role. Assign a model to the Author role on the Config page."))
+        if len(reviewers) < 1:
+            issues.append(("error", f"{mode.title()} mode requires at least 1 Reviewer. Assign a model to a Reviewer role on the Config page."))
+        elif len(reviewers) == 1:
+            issues.append(("warn", f"{mode.title()} review with 1 reviewer - adversarial coverage is significantly reduced."))
+        if len(reviewers) >= 2 and len(dedup) == 0:
+            issues.append(("error", "Dedup role is required when 2 reviewers are assigned. Assign a model to the Dedup role on the Config page."))
+        if not has_revision:
+            issues.append(("error", f"{mode.title()} mode requires a Revision role (or Author as fallback)."))
+
+    elif mode == "spec":
+        if len(reviewers) < 1:
+            issues.append(("error", "Spec mode requires at least 1 Reviewer. Assign a model to a Reviewer role on the Config page."))
+        elif len(reviewers) == 1:
+            issues.append(("warn", "Spec review with 1 reviewer - adversarial coverage is significantly reduced."))
+        if len(reviewers) >= 2 and len(dedup) == 0:
+            issues.append(("error", "Dedup role is required when 2 reviewers are assigned. Assign a model to the Dedup role on the Config page."))
+        if not has_revision:
+            issues.append(("error", "Spec mode requires a Revision role (or Author as fallback)."))
+
+    elif mode == "integration":
+        if len(integ) < 1:
+            issues.append(("error", "Integration mode requires an Integration Reviewer. Assign a model to the Integration Reviewer role on the Config page."))
+        if not has_revision:
+            issues.append(("error", "Integration mode requires a Revision role (or Author as fallback)."))
 
     return issues
 
@@ -246,7 +298,7 @@ def get_config_health(config: dict) -> tuple[bool, str]:
     Returns (has_errors, summary_string).  When has_errors is False the
     summary is empty.
     """
-    issues = validate_config(config)
+    issues = validate_config_structure(config)
     errors = [msg for level, msg in issues if level == "error"]
     if not errors:
         return False, ""
@@ -282,9 +334,88 @@ def get_models_by_role(config: dict) -> dict:
 
     return {
         "author": next((m for m in models.values() if "author" in m.roles), None),
-        "reviewers": [m for m in models.values() if "reviewer" in m.roles],
+        "reviewers": (
+            [models[name] for name in config.get("reviewer_order", []) if name in models]
+            or [m for m in models.values() if "reviewer" in m.roles]
+        ),
         "dedup": dedup_model,
         "integration": next((m for m in models.values() if m.integration_reviewer), None),
         "normalization": norm_model,
         "revision": revision_model,
     }
+
+
+MODE_ROLES: dict[str, list[dict[str, object]]] = {
+    "spec": [
+        {"key": "reviewers", "label": "Reviewer 1", "required": True},
+        {"key": "reviewers", "label": "Reviewer 2", "required": False},
+        {"key": "dedup", "label": "Dedup", "required": "conditional"},
+        {"key": "normalization", "label": "Normalization", "required": False},
+        {"key": "revision", "label": "Revision", "required": True},
+    ],
+    "plan": [
+        {"key": "author", "label": "Author", "required": True},
+        {"key": "reviewers", "label": "Reviewer 1", "required": True},
+        {"key": "reviewers", "label": "Reviewer 2", "required": False},
+        {"key": "dedup", "label": "Dedup", "required": "conditional"},
+        {"key": "normalization", "label": "Normalization", "required": False},
+        {"key": "revision", "label": "Revision", "required": True},
+    ],
+    "code": [
+        {"key": "author", "label": "Author", "required": True},
+        {"key": "reviewers", "label": "Reviewer 1", "required": True},
+        {"key": "reviewers", "label": "Reviewer 2", "required": False},
+        {"key": "dedup", "label": "Dedup", "required": "conditional"},
+        {"key": "normalization", "label": "Normalization", "required": False},
+        {"key": "revision", "label": "Revision", "required": True},
+    ],
+    "integration": [
+        {"key": "integration", "label": "Integration Reviewer", "required": True},
+        {"key": "revision", "label": "Revision", "required": True},
+    ],
+}
+
+
+def get_mode_readiness(config: dict) -> dict[str, dict]:
+    """Return per-mode readiness state for dashboard display.
+
+    Returns dict keyed by mode name, each containing:
+      - ready: bool (no errors)
+      - errors: list[str]
+      - warnings: list[str]
+      - roles: list[dict] with keys: label, required, assigned (bool), model (str|None)
+    """
+    roles = get_models_by_role(config)
+    result = {}
+
+    for mode, role_defs in MODE_ROLES.items():
+        issues = validate_review_readiness(config, mode)
+        errors = [msg for level, msg in issues if level == "error"]
+        warnings = [msg for level, msg in issues if level == "warn"]
+
+        role_entries = []
+        reviewer_idx = 0
+        for rd in role_defs:
+            key = rd["key"]
+            if key == "reviewers":
+                reviewer_list = roles.get("reviewers", [])
+                model = reviewer_list[reviewer_idx] if reviewer_idx < len(reviewer_list) else None
+                reviewer_idx += 1
+            else:
+                model = roles.get(key)
+
+            role_entries.append({
+                "label": rd["label"],
+                "required": rd["required"],
+                "assigned": model is not None,
+                "model": model.name if model else None,
+            })
+
+        result[mode] = {
+            "ready": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+            "roles": role_entries,
+        }
+
+    return result

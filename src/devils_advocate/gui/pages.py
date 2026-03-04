@@ -68,16 +68,18 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
 
     # Load role assignments for display (mirrors config page's Role Assignments table)
     role_assignments = []
+    mode_readiness = {}
     has_config_errors = False
     config_error_summary = ""
     try:
-        from ..config import load_config, get_models_by_role, get_config_health
+        from ..config import load_config, get_models_by_role, get_config_health, get_mode_readiness
         config_path = request.app.state.config_path
         config = load_config(Path(config_path) if config_path else None)
         roles = get_models_by_role(config)
 
         # Check for validation issues
         has_config_errors, config_error_summary = get_config_health(config)
+        mode_readiness = get_mode_readiness(config)
 
         def _role_entry(label, icon, model):
             return {
@@ -112,6 +114,7 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
         "role_assignments": role_assignments,
         "has_config_errors": has_config_errors,
         "config_error_summary": config_error_summary,
+        "mode_readiness": mode_readiness,
         "csrf_token": request.app.state.csrf_token,
     })
 

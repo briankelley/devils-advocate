@@ -199,6 +199,24 @@ async def start_review(request: Request):
 
     project_dir = Path(project_dir_str) if project_dir_str else None
 
+    # Check role readiness for the selected mode
+    from ..config import validate_review_readiness, validate_config_structure
+
+    config = await _load_app_config(request)
+    struct_issues = validate_config_structure(config)
+    struct_errors = [msg for level, msg in struct_issues if level == "error"]
+    if struct_errors:
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail=f"Configuration errors: {'; '.join(struct_errors)}")
+
+    readiness_issues = validate_review_readiness(config, mode)
+    readiness_errors = [msg for level, msg in readiness_issues if level == "error"]
+    if readiness_errors:
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail=f"Missing roles for {mode} mode: {'; '.join(readiness_errors)}")
+
     # Build input files manifest
     manifest = {"files": []}
     for f in input_files:
@@ -780,7 +798,7 @@ async def validate_config_endpoint(request: Request):
         return JSONResponse({"valid": False, "issues": [["error", "Missing 'models' key"]]})
 
     # Try loading through the config pipeline
-    from ..config import load_config, validate_config
+    from ..config import load_config, validate_config_structure
     import tempfile, os
 
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".yaml")
@@ -788,7 +806,7 @@ async def validate_config_endpoint(request: Request):
         with os.fdopen(tmp_fd, "w") as f:
             f.write(yaml_content)
         config = await asyncio.to_thread(load_config, Path(tmp_path))
-        issues = validate_config(config)
+        issues = validate_config_structure(config)
     except Exception as exc:
         return JSONResponse({"valid": False, "issues": [["error", str(exc)]]})
     finally:
@@ -801,6 +819,26 @@ async def validate_config_endpoint(request: Request):
         "valid": not any(level == "error" for level, _ in issues),
         "issues": [[level, msg] for level, msg in issues],
     })
+
+
+@router.get("/config/readiness")
+async def get_readiness(request: Request):
+    """Return per-mode readiness state for dashboard display."""
+    from ..config import get_mode_readiness
+
+    config = await _load_app_config(request)
+    readiness = get_mode_readiness(config)
+
+    result = {}
+    for mode, data in readiness.items():
+        result[mode] = {
+            "ready": data["ready"],
+            "errors": data["errors"],
+            "warnings": data["warnings"],
+            "roles": data["roles"],
+        }
+
+    return JSONResponse(result)
 
 
 @router.post("/config")
@@ -820,7 +858,7 @@ async def save_config(request: Request):
         raise HTTPException(status_code=400, detail="Missing 'models' key")
 
     # Validate before saving
-    from ..config import load_config, validate_config, find_config
+    from ..config import load_config, validate_config_structure, find_config
     import tempfile, os
 
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".yaml")
@@ -828,7 +866,7 @@ async def save_config(request: Request):
         with os.fdopen(tmp_fd, "w") as f:
             f.write(yaml_content)
         config = await asyncio.to_thread(load_config, Path(tmp_path))
-        issues = validate_config(config)
+        issues = validate_config_structure(config)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     finally:

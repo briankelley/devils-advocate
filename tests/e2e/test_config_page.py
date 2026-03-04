@@ -373,9 +373,9 @@ def test_role_toggle_reviewer_ceiling(page, dvad_server, restore_config):
 
     # Verify 2 reviewers restored on dashboard
     expected2 = [d.copy() for d in _FIXTURE_DASHBOARD]
-    # Order may be thinker first now since it was reviewer1 after the first save
-    expected2[1] = {"label": "Reviewer 1", "model": "e2e-remote-thinker", "thinking": True}
-    expected2[2] = {"label": "Reviewer 2", "model": "e2e-remote", "thinking": False}
+    # After re-add, JS sends reviewers in DOM order (remote first, thinker second)
+    expected2[1] = {"label": "Reviewer 1", "model": "e2e-remote", "thinking": False}
+    expected2[2] = {"label": "Reviewer 2", "model": "e2e-remote-thinker", "thinking": True}
     _verify_dashboard_roles(page, dvad_server, expected2)
 
 

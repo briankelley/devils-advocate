@@ -19,51 +19,92 @@
         <div class="mode-card-title">
             <input type="radio" name="mode" value="spec">
             <span class="mode-card-name">specification</span>
+            {% if mode_readiness.get('spec') %}
+            <span class="mode-ready-badge {{ 'ready' if mode_readiness.spec.ready else 'not-ready' }}">
+                <i data-lucide="{{ 'check-circle' if mode_readiness.spec.ready else 'x-circle' }}"></i>
+            </span>
+            {% endif %}
         </div>
         <p class="mode-card-desc">Enrich specification documents with multi-reviewer suggestions</p>
         <div class="mode-card-meta">
             <div><strong>requires:</strong> spec file(s) in txt or md format</div>
             <div><strong>returns:</strong> revised spec with all suggestions from all reviewers</div>
-            <!-- TODO: resolve minimum reviewer count from config -->
-            <div><strong>uses:</strong> reviewer (2), dedup, revision</div>
+            <div class="mode-card-roles"><strong>uses:</strong>
+                {% if mode_readiness.get('spec') %}
+                {% for role in mode_readiness.spec.roles %}
+                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else '' }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
+                {% endfor %}
+                {% else %}reviewer (2), dedup, revision{% endif %}
+            </div>
         </div>
     </label>
     <label class="mode-card mode-card--code">
         <div class="mode-card-title">
             <input type="radio" name="mode" value="code">
             <span class="mode-card-name">code</span>
+            {% if mode_readiness.get('code') %}
+            <span class="mode-ready-badge {{ 'ready' if mode_readiness.code.ready else 'not-ready' }}">
+                <i data-lucide="{{ 'check-circle' if mode_readiness.code.ready else 'x-circle' }}"></i>
+            </span>
+            {% endif %}
         </div>
         <p class="mode-card-desc">Review code diffs and patches with adversarial analysis</p>
         <div class="mode-card-meta">
             <div><strong>requires:</strong> exactly one code file</div>
             <div><strong>returns:</strong> revised diff patch</div>
-            <!-- TODO: resolve minimum reviewer count from config -->
-            <div><strong>uses:</strong> author, reviewer (2), dedup, revision</div>
+            <div class="mode-card-roles"><strong>uses:</strong>
+                {% if mode_readiness.get('code') %}
+                {% for role in mode_readiness.code.roles %}
+                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else '' }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
+                {% endfor %}
+                {% else %}author, reviewer (2), dedup, revision{% endif %}
+            </div>
         </div>
     </label>
     <label class="mode-card mode-card--integration">
         <div class="mode-card-title">
             <input type="radio" name="mode" value="integration">
             <span class="mode-card-name">integration</span>
+            {% if mode_readiness.get('integration') %}
+            <span class="mode-ready-badge {{ 'ready' if mode_readiness.integration.ready else 'not-ready' }}">
+                <i data-lucide="{{ 'check-circle' if mode_readiness.integration.ready else 'x-circle' }}"></i>
+            </span>
+            {% endif %}
         </div>
         <p class="mode-card-desc">Review integration concerns across system components</p>
         <div class="mode-card-meta">
             <div><strong>requires:</strong> optional files + project directory</div>
             <div><strong>returns:</strong> remediation plan</div>
-            <div><strong>uses:</strong> author, integration, revision</div>
+            <div class="mode-card-roles"><strong>uses:</strong>
+                {% if mode_readiness.get('integration') %}
+                {% for role in mode_readiness.integration.roles %}
+                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else '' }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
+                {% endfor %}
+                {% else %}integration, revision{% endif %}
+            </div>
         </div>
     </label>
     <label class="mode-card mode-card--plan">
         <div class="mode-card-title">
             <input type="radio" name="mode" value="plan" checked>
             <span class="mode-card-name">plan</span>
+            {% if mode_readiness.get('plan') %}
+            <span class="mode-ready-badge {{ 'ready' if mode_readiness.plan.ready else 'not-ready' }}">
+                <i data-lucide="{{ 'check-circle' if mode_readiness.plan.ready else 'x-circle' }}"></i>
+            </span>
+            {% endif %}
         </div>
         <p class="mode-card-desc">Adversarial review of implementation plans with author rebuttals</p>
         <div class="mode-card-meta">
             <div><strong>requires:</strong> plan file</div>
             <div><strong>returns:</strong> revised plan with incorporated feedback</div>
-            <!-- TODO: resolve minimum reviewer count from config -->
-            <div><strong>uses:</strong> author, reviewer (2), dedup, revision</div>
+            <div class="mode-card-roles"><strong>uses:</strong>
+                {% if mode_readiness.get('plan') %}
+                {% for role in mode_readiness.plan.roles %}
+                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else '' }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
+                {% endfor %}
+                {% else %}author, reviewer (2), dedup, revision{% endif %}
+            </div>
         </div>
     </label>
 </div>
@@ -272,6 +313,22 @@
         {% endif %}
     </div>
     {% endif %}
+</div>
+
+{# ── Validation Modal ─────────────────────────────────────────────── #}
+<div id="validation-modal" class="modal-overlay">
+    <div class="modal-panel modal-panel-sm">
+        <div class="modal-header">
+            <h3>Review Readiness</h3>
+            <button class="modal-close-btn" onclick="dvad.closeValidationPopover()">&times;</button>
+        </div>
+        <div id="validation-messages" class="validation-messages"></div>
+        <div class="modal-actions">
+            <button class="btn" onclick="dvad.closeValidationPopover()">Cancel</button>
+            <a href="/config" class="btn btn-accent" id="validation-config-btn" style="display:none">Go to Config</a>
+            <button class="btn btn-accent" id="validation-confirm-btn" style="display:none">Proceed Anyway</button>
+        </div>
+    </div>
 </div>
 
 {# ── File Picker Modal ────────────────────────────────────────────── #}

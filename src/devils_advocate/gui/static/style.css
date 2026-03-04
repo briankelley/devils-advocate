@@ -1341,3 +1341,46 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     align-items: center;
 }
 .dir-input-wrapper .input { flex: 1; }
+
+/* ── Mode Readiness & Validation ───────────────────────────────────── */
+
+.modal-panel-sm {
+    width: 420px;
+    max-width: 95vw;
+}
+
+.mode-role {
+    display: inline;
+    margin-right: 2px;
+}
+.mode-role-missing {
+    color: var(--red, #ff4757);
+}
+
+.mode-ready-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+}
+.mode-ready-badge svg { width: 14px; height: 14px; }
+.mode-ready-badge.ready { color: var(--green, #2ed573); }
+.mode-ready-badge.not-ready { color: var(--red, #ff4757); }
+
+.validation-messages {
+    padding: var(--pad-md) var(--pad-lg);
+}
+.validation-msg {
+    padding: var(--pad-sm);
+    margin-bottom: var(--pad-sm);
+    font-size: 12px;
+    line-height: 1.5;
+    border-radius: 2px;
+}
+.validation-error {
+    color: var(--red, #ff4757);
+    background: rgba(255, 71, 87, 0.1);
+}
+.validation-warn {
+    color: var(--yellow, #ffa502);
+    background: rgba(255, 165, 2, 0.1);
+}

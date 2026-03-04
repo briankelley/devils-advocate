@@ -88,12 +88,13 @@ const dvad = {
         });
         this.updateModeUI();
 
-        // Form submit → show interstitial
-        form.addEventListener('submit', (e) => {
+        // Form submit → pre-flight readiness check → show interstitial
+        form.addEventListener('submit', async (e) => {
             e.preventDefault();
             // Build FormData manually with path-based fields
             const fd = new FormData();
-            fd.set('mode', document.getElementById('review-mode')?.value || 'plan');
+            const mode = document.getElementById('review-mode')?.value || 'plan';
+            fd.set('mode', mode);
             fd.set('project', document.getElementById('project')?.value || '');
             fd.set('max_cost', document.getElementById('max_cost')?.value || '');
             if (document.getElementById('dry_run')?.checked) fd.set('dry_run', 'on');
@@ -108,6 +109,28 @@ const dvad = {
             if (specHidden) fd.set('spec_path', specHidden);
 
             this._formData = fd;
+
+            // Pre-flight readiness check
+            try {
+                const resp = await fetch('/api/config/readiness');
+                const readiness = await resp.json();
+                const modeState = readiness[mode];
+
+                if (modeState && modeState.errors.length > 0) {
+                    this.showValidationPopover(modeState.errors, 'error');
+                    return;
+                }
+
+                if (modeState && modeState.warnings.length > 0) {
+                    this.showValidationPopover(modeState.warnings, 'warn', () => {
+                        this.showInterstitial();
+                    });
+                    return;
+                }
+            } catch (err) {
+                // If readiness check fails, proceed anyway (server will catch at start_review)
+            }
+
             this.showInterstitial();
         });
     },
@@ -1167,9 +1190,30 @@ const dvad = {
                     }
                     // Update brain icons in role summary
                     this._updateRoleSummary();
+                    // Refresh editor YAML so role saves don't overwrite thinking change
+                    this._refreshEditorYaml();
                 }
             });
         });
+    },
+
+    _refreshEditorYaml() {
+        const editor = document.getElementById('yaml-editor');
+        if (!editor || typeof jsyaml === 'undefined') return;
+        try {
+            const config = jsyaml.load(editor.value);
+            // Sync thinking flags from live modelThinking map
+            if (config && config.models && typeof modelThinking !== 'undefined') {
+                for (const [name, val] of Object.entries(modelThinking)) {
+                    if (config.models[name]) {
+                        config.models[name].thinking = val;
+                    }
+                }
+            }
+            editor.value = jsyaml.dump(config, { lineWidth: -1, noRefs: true });
+        } catch (e) {
+            // If YAML is invalid, skip refresh
+        }
     },
 
     // ── Settings Toggle ──────────────────────────────────────────────
@@ -1547,6 +1591,38 @@ const dvad = {
 
     closeFilePicker() {
         document.getElementById('file-picker-modal').classList.remove('visible');
+    },
+
+    // ── Validation Popover ────────────────────────────────────────────
+    showValidationPopover(messages, level, onConfirm) {
+        const overlay = document.getElementById('validation-modal');
+        if (!overlay) return;
+        const list = document.getElementById('validation-messages');
+        const confirmBtn = document.getElementById('validation-confirm-btn');
+        const configBtn = document.getElementById('validation-config-btn');
+
+        list.innerHTML = messages.map(msg =>
+            `<div class="validation-msg validation-${level}">${msg}</div>`
+        ).join('');
+
+        if (level === 'error') {
+            confirmBtn.style.display = 'none';
+            configBtn.style.display = '';
+        } else {
+            confirmBtn.style.display = '';
+            configBtn.style.display = 'none';
+            confirmBtn.onclick = () => {
+                overlay.classList.remove('visible');
+                if (onConfirm) onConfirm();
+            };
+        }
+
+        overlay.classList.add('visible');
+    },
+
+    closeValidationPopover() {
+        const overlay = document.getElementById('validation-modal');
+        if (overlay) overlay.classList.remove('visible');
     },
 
     _removeSelectedFile(targetField, path) {
