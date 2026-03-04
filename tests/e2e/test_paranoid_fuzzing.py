@@ -348,10 +348,23 @@ class TestModelMaxTokensFuzzing:
         after = StateSnapshot.capture([config_path])
         before.assert_no_mutation(after, "max_tokens over stated")
 
-    def test_null_removes_key(self, page, dvad_server):
-        """ALL_EMPTY: null max_out_configured REMOVES the key from config.
-        This is documented behavior but warrants verification that it
-        does not corrupt other model fields."""
+    def test_null_without_clear_rejected(self, page, dvad_server):
+        """ALL_EMPTY: null max_out_configured without clear=true is rejected."""
+        csrf, config_path = self._setup(page, dvad_server)
+        before = StateSnapshot.capture([config_path])
+
+        resp = api_post(page, dvad_server, "/api/config/model-max-tokens", csrf, {
+            "model_name": "e2e-remote",
+            "max_out_configured": None,
+        })
+        assert resp.status == 400
+
+        after = StateSnapshot.capture([config_path])
+        before.assert_no_mutation(after, "null max_tokens without clear flag")
+
+    def test_null_with_clear_removes_key(self, page, dvad_server):
+        """null max_out_configured with clear=true REMOVES the key from config.
+        Verifies it does not corrupt other model fields."""
         csrf, config_path = self._setup(page, dvad_server)
         before_data = yaml.safe_load(config_path.read_text())
         before_model_keys = set(before_data["models"]["e2e-remote"].keys())
@@ -359,6 +372,7 @@ class TestModelMaxTokensFuzzing:
         resp = api_post(page, dvad_server, "/api/config/model-max-tokens", csrf, {
             "model_name": "e2e-remote",
             "max_out_configured": None,
+            "clear": True,
         })
         assert resp.status == 200
 

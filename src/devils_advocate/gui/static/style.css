@@ -1384,3 +1384,27 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     color: var(--yellow, #ffa502);
     background: rgba(255, 165, 2, 0.1);
 }
+
+/* ── Confirmation Dialog ───────────────────────────────────────────── */
+
+.confirm-card {
+    background: var(--bg-card);
+    max-width: 400px;
+    padding: var(--pad-lg);
+    text-align: center;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.confirm-card h3 {
+    margin-bottom: var(--pad-sm);
+}
+.confirm-card p {
+    color: var(--text-dim);
+    margin-bottom: var(--pad-md);
+}
+.confirm-card .modal-actions {
+    display: flex;
+    gap: var(--pad-sm);
+    justify-content: center;
+}

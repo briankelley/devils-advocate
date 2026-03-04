@@ -741,6 +741,12 @@ async def set_model_max_tokens(request: Request):
                 raise ValueError
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="max_out_configured must be an integer between 1 and 1000000")
+    else:
+        if not body.get("clear"):
+            raise HTTPException(
+                status_code=400,
+                detail="max_out_configured is required. Send clear=true to remove it.",
+            )
 
     def _apply(data: dict) -> None:
         if "models" not in data or model_name not in data["models"]:
@@ -1077,6 +1083,12 @@ async def clear_single_env_var(request: Request, env_name: str):
     """Clear a single API key environment variable from the .env file."""
     _check_csrf(request)
 
+    if request.headers.get("X-Confirm-Destructive") != "true":
+        raise HTTPException(
+            status_code=400,
+            detail="Destructive operation requires X-Confirm-Destructive header",
+        )
+
     config = await _load_app_config(request)
     allowed_env_names = _get_allowed_env_names(config)
     if env_name not in allowed_env_names:
@@ -1096,7 +1108,11 @@ async def clear_single_env_var(request: Request, env_name: str):
 
 @router.post("/config/env")
 async def save_env_vars(request: Request):
-    """Save API key environment variables to the .env file."""
+    """Save API key environment variables to the .env file.
+
+    NOTE: Empty string values DELETE keys from .env. Callers must confirm
+    this operation before invoking - see confirmation_required in LOSS_ANNOTATIONS.
+    """
     _check_csrf(request)
     body = await request.json()
     env_updates: dict[str, str] = body.get("env_vars", {})

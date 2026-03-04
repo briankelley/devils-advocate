@@ -244,7 +244,16 @@ const dvad = {
 
     executeReview() {
         if (!this._formData) return;
+        this._showConfirmDialog(
+            'Start Review?',
+            'This will consume API credits and cannot be undone mid-review.',
+            'Start Review',
+            () => this._doExecuteReview(),
+            false,
+        );
+    },
 
+    _doExecuteReview() {
         const runBtn = document.getElementById('run-review-btn');
         const errorDiv = document.getElementById('form-error');
         if (runBtn) { runBtn.disabled = true; runBtn.textContent = 'Starting...'; }
@@ -371,7 +380,17 @@ const dvad = {
     },
 
     // ── Cancel Review ──────────────────────────────────────────────────
-    async cancelReview(reviewId) {
+    cancelReview(reviewId) {
+        this._showConfirmDialog(
+            'Cancel Review?',
+            'Any partial results will be lost. This cannot be undone.',
+            'Cancel Review',
+            () => this._doCancelReview(reviewId),
+            true,
+        );
+    },
+
+    async _doCancelReview(reviewId) {
         const btn = document.getElementById('cancel-review-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Cancelling...'; }
         try {
@@ -799,7 +818,17 @@ const dvad = {
         }
     },
 
-    async saveYaml() {
+    saveYaml() {
+        this._showConfirmDialog(
+            'Save Configuration?',
+            'This will overwrite the current models.yaml file.',
+            'Save Config',
+            () => this._doSaveYaml(),
+            false,
+        );
+    },
+
+    async _doSaveYaml() {
         const yaml = document.getElementById('yaml-editor')?.value || '';
         const result = document.getElementById('yaml-result');
 
@@ -1035,6 +1064,16 @@ const dvad = {
         const newYaml = jsyaml.dump(config, { lineWidth: -1, noRefs: true });
         editor.value = newYaml;
 
+        this._showConfirmDialog(
+            'Save Configuration?',
+            'This will overwrite the current models.yaml file with updated roles.',
+            'Save Config',
+            () => this._doSaveRoleAssignments(newYaml),
+            false,
+        );
+    },
+
+    async _doSaveRoleAssignments(newYaml) {
         try {
             const resp = await fetch('/api/config', {
                 method: 'POST',
@@ -1094,7 +1133,7 @@ const dvad = {
                                     'Content-Type': 'application/json',
                                     'X-DVAD-Token': this.getToken(),
                                 },
-                                body: JSON.stringify({ model_name: modelName, [bodyKey]: null }),
+                                body: JSON.stringify({ model_name: modelName, [bodyKey]: null, clear: true }),
                             });
                         } catch (err) { /* ignore */ }
                         return;
@@ -1356,11 +1395,24 @@ const dvad = {
         }
     },
 
-    async _clearEnvVar(name) {
+    _clearEnvVar(name) {
+        this._showConfirmDialog(
+            'Delete API Key?',
+            `Delete ${name}? This removes it from .env and cannot be undone.`,
+            'Delete Key',
+            () => this._doClearEnvVar(name),
+            true,
+        );
+    },
+
+    async _doClearEnvVar(name) {
         try {
             const resp = await fetch(`/api/config/env/${encodeURIComponent(name)}`, {
                 method: 'DELETE',
-                headers: { 'X-DVAD-Token': this.getToken() },
+                headers: {
+                    'X-DVAD-Token': this.getToken(),
+                    'X-Confirm-Destructive': 'true',
+                },
             });
             if (resp.ok) {
                 this._refreshEnvKeys();
@@ -1623,6 +1675,24 @@ const dvad = {
     closeValidationPopover() {
         const overlay = document.getElementById('validation-modal');
         if (overlay) overlay.classList.remove('visible');
+    },
+
+    // ── Confirmation Dialog ─────────────────────────────────────────
+    _showConfirmDialog(title, message, confirmLabel, onConfirm, destructive = false) {
+        document.getElementById('confirm-title').textContent = title;
+        document.getElementById('confirm-message').textContent = message;
+        const btn = document.getElementById('confirm-action-btn');
+        btn.textContent = confirmLabel;
+        btn.className = destructive ? 'btn btn-cancel' : 'btn btn-accent';
+        btn.onclick = () => {
+            dvad.closeConfirmDialog();
+            onConfirm();
+        };
+        document.getElementById('confirm-modal').classList.add('visible');
+    },
+
+    closeConfirmDialog() {
+        document.getElementById('confirm-modal').classList.remove('visible');
     },
 
     _removeSelectedFile(targetField, path) {

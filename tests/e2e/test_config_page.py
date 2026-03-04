@@ -36,9 +36,13 @@ def _restore_fixture_config(page, dvad_server):
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _save_and_wait(page):
-    """Click the save toast button and wait for API response."""
+    """Click the save toast button, confirm the dialog, and wait for API response."""
+    page.locator("#save-roles-toast .btn-accent").click()
+    # Confirmation modal appears - click the confirm button
+    confirm_btn = page.locator("#confirm-action-btn")
+    confirm_btn.wait_for(state="visible")
     with page.expect_response("**/api/config") as resp_info:
-        page.locator("#save-roles-toast .btn-accent").click()
+        confirm_btn.click()
     resp = resp_info.value
     assert resp.status == 200
 

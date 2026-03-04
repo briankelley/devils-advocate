@@ -172,7 +172,7 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "on_all_empty": "400 error - validation catches empty project",
         "reversible": False,
         "backup_exists": False,
-        "confirmation_required": False,
+        "confirmation_required": True,
         "precondition": "No review currently running (409 if busy)",
     },
     "POST /api/review/{id}/cancel": {
@@ -180,7 +180,7 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "on_all_empty": "Cancels the running review",
         "reversible": False,
         "backup_exists": False,
-        "confirmation_required": False,
+        "confirmation_required": True,
         "precondition": "A review must be running with the given ID",
     },
     "POST /api/review/{id}/override": {
@@ -209,7 +209,7 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
     },
     "POST /api/config/model-max-tokens": {
         "on_empty_input": "400 error - model_name required",
-        "on_all_empty": "Sending max_out_configured=None REMOVES the key from config",
+        "on_all_empty": "400 error - requires clear=true flag to remove key",
         "reversible": True,
         "backup_exists": False,
         "confirmation_required": False,
@@ -236,7 +236,7 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "on_all_empty": "400 error - missing models key",
         "reversible": False,
         "backup_exists": False,
-        "confirmation_required": False,  # FINDING: no confirmation dialog, no backup
+        "confirmation_required": True,
         "precondition": "YAML must parse, must have models key, must pass validation",
     },
     "PUT /api/config/env/{env_name}": {
@@ -252,7 +252,7 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "on_all_empty": "Deletes the key (no payload body)",
         "reversible": False,  # value is gone unless user remembers it
         "backup_exists": False,
-        "confirmation_required": False,  # FINDING: no confirmation, irreversible
+        "confirmation_required": True,
         "precondition": "env_name must be in allowed_env_names",
     },
     "POST /api/config/env": {

@@ -27,6 +27,17 @@
     <main>
         {% block content %}{% endblock %}
     </main>
+    <!-- Confirmation Dialog -->
+    <div id="confirm-modal" class="modal-overlay">
+      <div class="modal-card confirm-card">
+        <h3 id="confirm-title"></h3>
+        <p id="confirm-message"></p>
+        <div class="modal-actions">
+          <button class="btn" onclick="dvad.closeConfirmDialog()">Cancel</button>
+          <button id="confirm-action-btn" class="btn"></button>
+        </div>
+      </div>
+    </div>
     <script src="/static/app.js?v=r7"></script>
     <script>document.addEventListener('DOMContentLoaded', () => { if (typeof lucide !== 'undefined') lucide.createIcons(); });</script>
     {% block scripts %}{% endblock %}

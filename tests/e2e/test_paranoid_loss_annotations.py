@@ -174,7 +174,14 @@ class TestPreconditionEnforcement:
     def test_env_delete_enforces_allowed_name(self, page, dvad_server):
         """Precondition: env_name must be in allowed_env_names."""
         csrf = self._get_csrf(page, dvad_server)
-        resp = api_delete(page, dvad_server, "/api/config/env/NOT_A_REAL_KEY", csrf)
+        # Include X-Confirm-Destructive to bypass that guard and test name enforcement
+        resp = page.request.delete(
+            f"{dvad_server}/api/config/env/NOT_A_REAL_KEY",
+            headers={
+                "X-DVAD-Token": csrf,
+                "X-Confirm-Destructive": "true",
+            },
+        )
         assert resp.status == 400
 
     def test_revise_enforces_review_exists(self, page, dvad_server):
@@ -263,16 +270,16 @@ class TestValidateNoSideEffects:
 class TestAnnotationFindings:
     """Surface findings from the loss annotations as documented test outcomes."""
 
-    def test_config_full_save_is_unguarded(self):
-        """FINDING: POST /api/config overwrites the entire config file with
-        no backup, no confirmation dialog, and no undo mechanism."""
+    def test_config_full_save_no_backup(self):
+        """FINDING: POST /api/config now has a confirmation dialog but
+        still overwrites the entire config file with no backup or undo."""
         ann = LOSS_ANNOTATIONS["POST /api/config"]
         assert ann["reversible"] is False
         assert ann["backup_exists"] is False
-        assert ann["confirmation_required"] is False
-        # This combination is a finding. Mark as xfail to document it.
+        assert ann["confirmation_required"] is True
         pytest.xfail(
-            "POST /api/config: full config overwrite with no backup or confirmation"
+            "POST /api/config: has confirmation dialog but no backup "
+            "or undo mechanism for full config overwrite"
         )
 
     def test_env_batch_delete_via_empty_string(self):
@@ -286,26 +293,21 @@ class TestAnnotationFindings:
             "and os.environ, with no confirmation"
         )
 
-    def test_env_delete_is_unguarded(self):
-        """FINDING: DELETE /api/config/env/{name} permanently removes an API
-        key with no confirmation and no recovery mechanism."""
+    def test_env_delete_no_recovery(self):
+        """FINDING: DELETE /api/config/env/{name} now has a confirmation dialog
+        but still has no recovery mechanism if the user confirms deletion."""
         ann = LOSS_ANNOTATIONS["DELETE /api/config/env/{env_name}"]
         assert ann["reversible"] is False
         assert ann["backup_exists"] is False
-        assert ann["confirmation_required"] is False
+        assert ann["confirmation_required"] is True
         pytest.xfail(
-            "DELETE /api/config/env/{env_name}: irreversible key deletion "
-            "with no confirmation"
+            "DELETE /api/config/env/{env_name}: has confirmation dialog but "
+            "no recovery mechanism after confirmed deletion"
         )
 
-    def test_review_cancel_is_unguarded(self):
-        """FINDING: POST /api/review/{id}/cancel cancels a running review
-        with no confirmation dialog. Partial artifacts may remain on disk."""
+    def test_review_cancel_has_confirmation(self):
+        """POST /api/review/{id}/cancel now requires confirmation dialog."""
         ann = LOSS_ANNOTATIONS["POST /api/review/{id}/cancel"]
         assert ann["reversible"] is False
         assert ann["backup_exists"] is False
-        assert ann["confirmation_required"] is False
-        pytest.xfail(
-            "POST /api/review/{id}/cancel: irreversible cancellation "
-            "with no confirmation"
-        )
+        assert ann["confirmation_required"] is True
