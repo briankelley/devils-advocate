@@ -214,7 +214,18 @@ def validate_config_structure(config: dict) -> list[tuple[str, str]]:
     level is 'error' (fatal) or 'warn' (continue).
     """
     issues: list[tuple[str, str]] = []
+    all_models = config.get("all_models", config.get("models", {}))
     models = config["models"]
+
+    # Empty models dict - nothing to work with
+    if not all_models:
+        issues.append(("error", "No models defined"))
+        return issues
+
+    # No roles assigned - models exist but none are active
+    if not models:
+        issues.append(("error", "No roles assigned - add a roles block with at least an author and reviewers"))
+        return issues
 
     # Author-dedup collision (warn at save time, error at review-start time)
     authors = [m for m in models.values() if "author" in m.roles]

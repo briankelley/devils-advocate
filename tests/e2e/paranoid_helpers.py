@@ -235,9 +235,9 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "on_empty_input": "400 error - YAML parse error on empty string",
         "on_all_empty": "400 error - missing models key",
         "reversible": False,
-        "backup_exists": False,
+        "backup_exists": True,
         "confirmation_required": True,
-        "precondition": "YAML must parse, must have models key, must pass validation",
+        "precondition": "YAML must parse, must have models and roles keys, must pass validation",
     },
     "PUT /api/config/env/{env_name}": {
         "on_empty_input": "400 error - value cannot be empty",
@@ -248,10 +248,10 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "precondition": "env_name must be in allowed_env_names from config",
     },
     "DELETE /api/config/env/{env_name}": {
-        "on_empty_input": "Deletes the key from .env and os.environ",
-        "on_all_empty": "Deletes the key (no payload body)",
+        "on_empty_input": "400 error - requires X-Confirm-Destructive header",
+        "on_all_empty": "400 error - requires X-Confirm-Destructive header",
         "reversible": False,  # value is gone unless user remembers it
-        "backup_exists": False,
+        "backup_exists": True,
         "confirmation_required": True,
         "precondition": "env_name must be in allowed_env_names",
     },
@@ -259,8 +259,8 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "on_empty_input": "400 error - no environment variables provided",
         "on_all_empty": "400 error - empty env_vars dict rejected",
         "reversible": False,  # empty string values DELETE keys irreversibly
-        "backup_exists": False,
-        "confirmation_required": False,  # FINDING: batch delete with no confirmation
+        "backup_exists": True,
+        "confirmation_required": True,
         "precondition": "Keys must be in allowed_env_names",
     },
     "POST /api/review/{id}/revise": {

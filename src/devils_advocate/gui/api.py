@@ -803,6 +803,9 @@ async def validate_config_endpoint(request: Request):
     if not raw or "models" not in raw:
         return JSONResponse({"valid": False, "issues": [["error", "Missing 'models' key"]]})
 
+    if not isinstance(raw.get("models"), dict) or not raw["models"]:
+        return JSONResponse({"valid": False, "issues": [["error", "No models defined"]]})
+
     # Try loading through the config pipeline
     from ..config import load_config, validate_config_structure
     import tempfile, os
@@ -862,6 +865,8 @@ async def save_config(request: Request):
 
     if not raw or "models" not in raw:
         raise HTTPException(status_code=400, detail="Missing 'models' key")
+    if "roles" not in raw or not raw["roles"]:
+        raise HTTPException(status_code=400, detail="Missing 'roles' key")
 
     # Validate before saving
     from ..config import load_config, validate_config_structure, find_config
@@ -894,6 +899,11 @@ async def save_config(request: Request):
             target = find_config()
         except Exception:
             raise HTTPException(status_code=400, detail="Cannot determine config file path")
+
+    # Backup existing config before overwriting
+    if target.exists():
+        backup = target.with_suffix(target.suffix + ".bak")
+        await asyncio.to_thread(shutil.copy2, str(target), str(backup))
 
     # Round-trip save with ruamel.yaml to preserve comments
     try:
@@ -1100,6 +1110,11 @@ async def clear_single_env_var(request: Request, env_name: str):
     if env_name not in file_kv:
         return JSONResponse({"status": "ok", "env_name": env_name, "message": "Not present"})
 
+    # Backup .env before irreversible deletion
+    if env_file_path.is_file():
+        backup = env_file_path.with_suffix(".bak")
+        shutil.copy2(str(env_file_path), str(backup))
+
     _write_env_file(env_file_path, existing_lines, remove_keys={env_name})
     os.environ.pop(env_name, None)
 
@@ -1119,6 +1134,15 @@ async def save_env_vars(request: Request):
 
     if not env_updates:
         raise HTTPException(status_code=400, detail="No environment variables provided")
+
+    # Check if any values are empty (which means DELETE) - require confirmation
+    has_deletions = any(not v.strip() for v in env_updates.values())
+    if has_deletions:
+        if request.headers.get("X-Confirm-Destructive") != "true":
+            raise HTTPException(
+                status_code=400,
+                detail="Empty values delete keys from .env. Send X-Confirm-Destructive: true to confirm.",
+            )
 
     config = await _load_app_config(request)
 
@@ -1143,6 +1167,11 @@ async def save_env_vars(request: Request):
 
     # Read existing content
     existing_lines, _ = _read_env_file(env_file_path)
+
+    # Backup .env before any destructive changes
+    if has_deletions and env_file_path.is_file():
+        backup = env_file_path.with_suffix(".bak")
+        shutil.copy2(str(env_file_path), str(backup))
 
     # Split into set vs unset
     to_write: dict[str, str] = {}

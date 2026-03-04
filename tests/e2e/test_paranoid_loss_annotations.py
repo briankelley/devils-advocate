@@ -270,40 +270,28 @@ class TestValidateNoSideEffects:
 class TestAnnotationFindings:
     """Surface findings from the loss annotations as documented test outcomes."""
 
-    def test_config_full_save_no_backup(self):
-        """FINDING: POST /api/config now has a confirmation dialog but
-        still overwrites the entire config file with no backup or undo."""
+    def test_config_full_save_has_backup(self):
+        """POST /api/config creates a .bak backup before overwriting and
+        requires a confirmation dialog."""
         ann = LOSS_ANNOTATIONS["POST /api/config"]
         assert ann["reversible"] is False
-        assert ann["backup_exists"] is False
+        assert ann["backup_exists"] is True
         assert ann["confirmation_required"] is True
-        pytest.xfail(
-            "POST /api/config: has confirmation dialog but no backup "
-            "or undo mechanism for full config overwrite"
-        )
 
-    def test_env_batch_delete_via_empty_string(self):
-        """FINDING: POST /api/config/env treats empty string values as DELETE
-        instructions. A form that sends untouched fields as '' will silently
-        remove those API keys from .env and os.environ."""
+    def test_env_batch_delete_has_guards(self):
+        """POST /api/config/env now requires X-Confirm-Destructive header
+        when empty values would delete keys, and creates a .bak backup."""
         ann = LOSS_ANNOTATIONS["POST /api/config/env"]
-        # This is the core footgun documented in Known Concerns
-        pytest.xfail(
-            "POST /api/config/env: empty string values DELETE keys from .env "
-            "and os.environ, with no confirmation"
-        )
+        assert ann["confirmation_required"] is True
+        assert ann["backup_exists"] is True
 
-    def test_env_delete_no_recovery(self):
-        """FINDING: DELETE /api/config/env/{name} now has a confirmation dialog
-        but still has no recovery mechanism if the user confirms deletion."""
+    def test_env_delete_has_backup(self):
+        """DELETE /api/config/env/{env_name} requires confirmation and creates
+        a .bak backup before deletion."""
         ann = LOSS_ANNOTATIONS["DELETE /api/config/env/{env_name}"]
         assert ann["reversible"] is False
-        assert ann["backup_exists"] is False
+        assert ann["backup_exists"] is True
         assert ann["confirmation_required"] is True
-        pytest.xfail(
-            "DELETE /api/config/env/{env_name}: has confirmation dialog but "
-            "no recovery mechanism after confirmed deletion"
-        )
 
     def test_review_cancel_has_confirmation(self):
         """POST /api/review/{id}/cancel now requires confirmation dialog."""

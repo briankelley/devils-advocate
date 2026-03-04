@@ -506,13 +506,25 @@ class TestBatchEnvSaveFuzzing:
         page.wait_for_load_state("networkidle")
         return get_csrf_token(page)
 
-    def test_empty_string_value_deletes_key(self, page, dvad_server):
-        """PREEXISTING_WITH_EMPTY_SUBMIT: sending empty string for a key
-        that has a value will DELETE it from .env and os.environ.
+    def test_empty_string_without_confirm_rejected(self, page, dvad_server):
+        """Empty string values require X-Confirm-Destructive header."""
+        csrf = self._setup(page, dvad_server)
+        resp = api_post(page, dvad_server, "/api/config/env", csrf, {
+            "env_vars": {"E2E_LOCAL_KEY": ""},
+        })
+        if resp.status == 400 and "Empty values" in resp.json().get("detail", ""):
+            pass  # Expected - requires destructive confirmation
+        elif resp.status == 400:
+            pytest.skip("E2E_LOCAL_KEY not an allowed env name")
+        else:
+            pytest.fail(f"Expected 400 for empty value without confirm header, got {resp.status}")
+
+    def test_empty_string_value_deletes_key_with_confirm(self, page, dvad_server):
+        """PREEXISTING_WITH_EMPTY_SUBMIT: sending empty string with
+        X-Confirm-Destructive header DELETEs the key from .env.
 
         This is the exact shape of the bug class this layer was built to catch.
-        Documenting current behavior - the endpoint splits empty values into
-        a remove set."""
+        Now requires explicit confirmation before proceeding."""
         csrf = self._setup(page, dvad_server)
 
         # First, set a value
@@ -522,10 +534,16 @@ class TestBatchEnvSaveFuzzing:
         if resp1.status == 400:
             pytest.skip("E2E_LOCAL_KEY not an allowed env name")
 
-        # Now batch save with empty string - this will DELETE the key
-        resp2 = api_post(page, dvad_server, "/api/config/env", csrf, {
-            "env_vars": {"E2E_LOCAL_KEY": ""},
-        })
+        # Now batch save with empty string + destructive confirmation
+        resp2 = page.request.post(
+            f"{dvad_server}/api/config/env",
+            data=json.dumps({"env_vars": {"E2E_LOCAL_KEY": ""}}),
+            headers={
+                "X-DVAD-Token": csrf,
+                "Content-Type": "application/json",
+                "X-Confirm-Destructive": "true",
+            },
+        )
         assert resp2.status == 200
 
         # Verify the key was indeed removed
@@ -533,11 +551,8 @@ class TestBatchEnvSaveFuzzing:
         env_data = resp3.json()
         for var in env_data.get("env_vars", []):
             if var["env_name"] == "E2E_LOCAL_KEY":
-                # The key should no longer be in the .env file
                 assert not var["in_env_file"], (
-                    "Key should have been removed from .env by empty batch save. "
-                    "If this assertion fires, the behavior changed - which may be "
-                    "a good thing (preventing accidental deletion)."
+                    "Key should have been removed from .env by confirmed batch save."
                 )
                 break
 
