@@ -51,7 +51,7 @@ fi
 echo "Installing devils-advocate..."
 "$VENV_DIR/bin/pip" install --upgrade pip >/dev/null 2>&1 || true
 
-if ! "$VENV_DIR/bin/pip" install --no-cache-dir --upgrade devils-advocate; then
+if ! "$VENV_DIR/bin/pip" install --no-cache-dir --force-reinstall devils-advocate; then
     echo "" >&2
     echo "Error: pip install failed. Check the output above for details." >&2
     exit 1
