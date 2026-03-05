@@ -1,4 +1,4 @@
-"""Devil's Advocate — Cost-aware multi-LLM adversarial review engine."""
+"""Devil's Advocate - Cost-aware multi-LLM adversarial review engine."""
 
 from importlib.metadata import version as _pkg_version
 
