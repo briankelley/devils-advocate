@@ -146,6 +146,11 @@ def systemctl_start() -> None:
     _run_systemctl("start", SERVICE_NAME)
 
 
+def systemctl_restart() -> None:
+    """Run ``systemctl --user restart dvad-gui.service``."""
+    _run_systemctl("restart", SERVICE_NAME)
+
+
 def systemctl_stop() -> None:
     """Run ``systemctl --user stop dvad-gui.service``."""
     _run_systemctl("stop", SERVICE_NAME)

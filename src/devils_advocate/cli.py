@@ -626,6 +626,8 @@ def install_cmd(port, no_start, force):
         service_exists,
         systemctl_daemon_reload,
         systemctl_enable,
+        systemctl_is_active,
+        systemctl_restart,
         systemctl_start,
         write_service_file,
     )
@@ -672,7 +674,10 @@ def install_cmd(port, no_start, force):
         systemctl_daemon_reload()
         systemctl_enable()
         if not no_start:
-            systemctl_start()
+            if systemctl_is_active():
+                systemctl_restart()
+            else:
+                systemctl_start()
     except RuntimeError as e:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
