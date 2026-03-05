@@ -278,12 +278,14 @@ async def review_progress(request: Request, review_id: str):
 
     async def event_stream():
         # Send buffered events first (for late-connecting clients)
-        for ev in runner.get_buffered_events(review_id):
+        buffered = runner.get_buffered_events(review_id)
+        buffered_count = len(buffered)
+        for ev in buffered:
             yield f"data: {json.dumps(ev)}\n\n"
 
         queue = runner.get_queue(review_id)
         if queue is None:
-            # Review not active — send status
+            # Review not active - send status
             status = runner.get_status(review_id)
             terminal = {
                 "type": "complete" if status == "complete" else "error",
@@ -294,6 +296,17 @@ async def review_progress(request: Request, review_id: str):
             }
             yield f"data: {json.dumps(terminal)}\n\n"
             return
+
+        # Drain stale events from the queue that were already sent via
+        # buffered replay above.  Events emitted before this client
+        # connected exist in both the buffer and the queue.
+        drained = 0
+        while drained < buffered_count:
+            try:
+                queue.get_nowait()
+                drained += 1
+            except asyncio.QueueEmpty:
+                break
 
         idle_count = 0
         while True:

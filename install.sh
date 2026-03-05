@@ -57,6 +57,9 @@ if ! "$VENV_DIR/bin/pip" install --no-cache-dir --upgrade devils-advocate; then
     exit 1
 fi
 
+# Purge stale bytecode so a service restart loads fresh code
+find "$VENV_DIR/lib" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+
 # Symlink into ~/.local/bin
 mkdir -p "$BIN_DIR"
 if [ -L "$BIN_DIR/dvad" ] || [ ! -e "$BIN_DIR/dvad" ]; then

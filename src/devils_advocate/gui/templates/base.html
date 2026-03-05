@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Devil's Advocate{% endblock %}</title>
-    <link rel="stylesheet" href="/static/style.css?v=r7">
+    <link rel="stylesheet" href="/static/style.css?v={{ version }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400&display=swap" rel="stylesheet">
@@ -38,7 +38,7 @@
         </div>
       </div>
     </div>
-    <script src="/static/app.js?v=r7"></script>
+    <script src="/static/app.js?v={{ version }}"></script>
     <script>document.addEventListener('DOMContentLoaded', () => { if (typeof lucide !== 'undefined') lucide.createIcons(); });</script>
     {% block scripts %}{% endblock %}
 </body>
