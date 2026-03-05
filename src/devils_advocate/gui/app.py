@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
         _find_dist_info(),
     )
     yield
-    logger.warning("dvad shutting down: pid=%d", os.getpid())
+    logger.info("dvad shutting down: pid=%d", os.getpid())
     # Shutdown: cancel any running review
     runner: ReviewRunner = app.state.runner
     if runner.current_task and not runner.current_task.done():
