@@ -9,6 +9,8 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from .runner import ReviewRunner
 
@@ -34,6 +36,17 @@ async def lifespan(app: FastAPI):
 def build_app(config_path: str | None = None) -> FastAPI:
     """Assemble the FastAPI application with all routes and middleware."""
     app = FastAPI(title="Devil's Advocate", lifespan=lifespan)
+
+    # Force browser to revalidate static assets on every request
+    class NoCacheStaticMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):
+            response: Response = await call_next(request)
+            if request.url.path.startswith("/static/"):
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response.headers["Pragma"] = "no-cache"
+            return response
+
+    app.add_middleware(NoCacheStaticMiddleware)
 
     # Static files
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
