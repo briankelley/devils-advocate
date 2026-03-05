@@ -958,8 +958,8 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 /* -- Readiness Popover (Mode Cards) ----------------------------------------- */
 
 .readiness-popover {
-    bottom: auto;
-    top: calc(100% + 8px);
+    top: auto;
+    bottom: calc(100% + 8px);
     left: auto;
     right: 0;
     width: 240px;
