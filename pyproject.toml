@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "devils-advocate"
-version = "0.9.19"
+version = "0.9.20"
 description = "Cost-aware multi-LLM adversarial review engine with deterministic governance"
 readme = "README.md"
 license = {file = "LICENSE"}
