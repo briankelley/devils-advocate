@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import secrets
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -18,11 +21,23 @@ _HERE = Path(__file__).parent
 STATIC_DIR = _HERE / "static"
 TEMPLATE_DIR = _HERE / "templates"
 
+logger = logging.getLogger("dvad.app")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage app startup/shutdown lifecycle."""
+    # Log version and process details at startup for diagnostics
+    from devils_advocate import __version__
+    logger.warning(
+        "dvad starting: version=%s pid=%d python=%s dist=%s",
+        __version__,
+        os.getpid(),
+        sys.executable,
+        _find_dist_info(),
+    )
     yield
+    logger.warning("dvad shutting down: pid=%d", os.getpid())
     # Shutdown: cancel any running review
     runner: ReviewRunner = app.state.runner
     if runner.current_task and not runner.current_task.done():
@@ -33,20 +48,28 @@ async def lifespan(app: FastAPI):
             pass
 
 
+def _find_dist_info() -> str:
+    """Find the dist-info path for diagnostics."""
+    for p in Path(sys.prefix, "lib").rglob("devils_advocate-*.dist-info"):
+        return str(p)
+    return "(not found)"
+
+
 def build_app(config_path: str | None = None) -> FastAPI:
     """Assemble the FastAPI application with all routes and middleware."""
     app = FastAPI(title="Devil's Advocate", lifespan=lifespan)
 
-    # Force browser to revalidate static assets on every request
-    class NoCacheStaticMiddleware(BaseHTTPMiddleware):
+    # Force browser to revalidate all responses
+    class NoCacheMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next):
             response: Response = await call_next(request)
-            if request.url.path.startswith("/static/"):
+            if request.url.path.startswith("/static/") or request.url.path == "/" or "text/html" in response.headers.get("content-type", ""):
                 response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
                 response.headers["Pragma"] = "no-cache"
+                response.headers["Expires"] = "0"
             return response
 
-    app.add_middleware(NoCacheStaticMiddleware)
+    app.add_middleware(NoCacheMiddleware)
 
     # Static files
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

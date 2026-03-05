@@ -21,15 +21,16 @@ SERVICE_TEMPLATE = """\
 Description=Devil's Advocate Web GUI
 Documentation=https://github.com/briankelley/devils-advocate
 After=default.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=simple
 ExecStart={dvad_bin} gui --port {port}
 Restart=on-failure
-RestartSec=5
-KillSignal=SIGINT
-TimeoutStopSec=10
-SuccessExitStatus=SIGTERM
+RestartSec=10
+KillSignal=SIGTERM
+TimeoutStopSec=15
 
 [Install]
 WantedBy=default.target

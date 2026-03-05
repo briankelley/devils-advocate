@@ -24,6 +24,29 @@ from .progress import ProgressEvent
 router = APIRouter()
 
 
+@router.get("/version")
+async def version_info():
+    """Return the running version and how it was resolved. Diagnostic endpoint."""
+    import sys
+    from importlib.metadata import version as _meta_version
+
+    installed_version = _meta_version("devils-advocate")
+    from devils_advocate import __version__ as module_version
+
+    dist_info_path = None
+    for p in Path(sys.prefix, "lib").rglob("devils_advocate-*.dist-info"):
+        dist_info_path = str(p)
+        break
+
+    return {
+        "installed": installed_version,
+        "module": module_version,
+        "dist_info": dist_info_path,
+        "python": sys.executable,
+        "pid": os.getpid(),
+    }
+
+
 async def _load_app_config(request: Request) -> dict:
     """Load config using the app's config_path. Raises HTTPException on failure."""
     from ..config import load_config

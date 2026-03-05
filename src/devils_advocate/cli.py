@@ -585,6 +585,13 @@ def gui_cmd(port, host, config_path, allow_nonlocal):
         console.print("  This tool is intended for local-only use. Ensure you understand the risks.")
 
     import uvicorn
+    import logging
+    logging.basicConfig(level=logging.WARNING)
+    logger = logging.getLogger("dvad.cli")
+    logger.warning(
+        "gui_cmd: version=%s pid=%d python=%s",
+        __version__, os.getpid(), sys.executable,
+    )
     app = create_app(config_path=config_path)
 
     # Check for first-run / config issues
