@@ -29,7 +29,11 @@ async def normalize_review_response(
     """LLM normalization fallback: send raw response to a model for structured extraction."""
     prompt = build_normalization_prompt(raw)
     if log_fn:
-        log_fn(f"  Normalization: calling {model.name} (fallback for {reviewer_name})")
+        thinking_str = ", thinking: on" if model.thinking else ""
+        log_fn(
+            f"  Normalization: calling {model.name} "
+            f"(fallback for {reviewer_name}, max_out: {MAX_OUTPUT_TOKENS}{thinking_str})"
+        )
 
     try:
         text, usage = await call_with_retry(

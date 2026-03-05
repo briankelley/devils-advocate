@@ -942,6 +942,28 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .mode-card-desc { font-size: 11px; color: var(--text-dim); margin: 0 0 4px; line-height: 1.4; }
 .mode-card-meta { font-size: 10px; color: var(--text-dim); margin-top: 6px; }
 .mode-card-meta strong { color: var(--text); }
+
+/* -- Mode Card Model Tips --------------------------------------------------- */
+
+.mode-card-tip {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-style: italic;
+    margin-top: 6px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(62, 66, 76, 0.4);
+    line-height: 1.4;
+}
+
+/* -- Readiness Popover (Mode Cards) ----------------------------------------- */
+
+.readiness-popover {
+    bottom: auto;
+    top: calc(100% + 8px);
+    left: auto;
+    right: 0;
+    width: 240px;
+}
 .mode-card:has(input:checked) { border-color: inherit; }
 .mode-card--spec:has(input:checked) { border-color: var(--green); }
 .mode-card--code:has(input:checked) { border-color: #d4a825; }

@@ -2,6 +2,27 @@
 {% block title %}Dashboard — dvad{% endblock %}
 {% block content %}
 
+{% macro readiness_popover(mode_key) %}
+{% set ms = mode_readiness.get(mode_key) %}
+{% if ms %}
+<span class="mode-ready-badge {{ 'ready' if ms.ready else 'not-ready' }} info-trigger">
+    <i data-lucide="{{ 'check-circle' if ms.ready else 'x-circle' }}"></i>
+    <span class="info-popover readiness-popover">
+        {% if ms.ready %}
+        <strong>Ready</strong> - required roles assigned
+        {% else %}
+        <strong>Not ready</strong> - missing roles:<br>
+        {% for role in ms.roles %}
+        {% if role.required and not role.assigned %}
+        - {{ role.label }}<br>
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+    </span>
+</span>
+{% endif %}
+{% endmacro %}
+
 {% if has_config_errors %}
 <div class="onboarding-banner">
     <span class="onboarding-banner-icon"><i data-lucide="alert-triangle"></i></span>
@@ -19,11 +40,7 @@
         <div class="mode-card-title">
             <input type="radio" name="mode" value="spec">
             <span class="mode-card-name">specification</span>
-            {% if mode_readiness.get('spec') %}
-            <span class="mode-ready-badge {{ 'ready' if mode_readiness.spec.ready else 'not-ready' }}">
-                <i data-lucide="{{ 'check-circle' if mode_readiness.spec.ready else 'x-circle' }}"></i>
-            </span>
-            {% endif %}
+            {{ readiness_popover('spec') }}
         </div>
         <p class="mode-card-desc">Enrich specification documents with multi-reviewer suggestions</p>
         <div class="mode-card-meta">
@@ -37,16 +54,13 @@
                 {% else %}reviewer, revision{% endif %}
             </div>
         </div>
+        <div class="mode-card-tip">Mid-tier models produce comparable results here. Cost-effective choice.</div>
     </label>
     <label class="mode-card mode-card--code">
         <div class="mode-card-title">
             <input type="radio" name="mode" value="code">
             <span class="mode-card-name">code</span>
-            {% if mode_readiness.get('code') %}
-            <span class="mode-ready-badge {{ 'ready' if mode_readiness.code.ready else 'not-ready' }}">
-                <i data-lucide="{{ 'check-circle' if mode_readiness.code.ready else 'x-circle' }}"></i>
-            </span>
-            {% endif %}
+            {{ readiness_popover('code') }}
         </div>
         <p class="mode-card-desc">Review code diffs and patches with adversarial analysis</p>
         <div class="mode-card-meta">
@@ -60,16 +74,13 @@
                 {% else %}author, reviewer, revision{% endif %}
             </div>
         </div>
+        <div class="mode-card-tip">Strong reasoning catches subtle bugs; mid-tier handles style/pattern issues.</div>
     </label>
     <label class="mode-card mode-card--integration">
         <div class="mode-card-title">
             <input type="radio" name="mode" value="integration">
             <span class="mode-card-name">integration</span>
-            {% if mode_readiness.get('integration') %}
-            <span class="mode-ready-badge {{ 'ready' if mode_readiness.integration.ready else 'not-ready' }}">
-                <i data-lucide="{{ 'check-circle' if mode_readiness.integration.ready else 'x-circle' }}"></i>
-            </span>
-            {% endif %}
+            {{ readiness_popover('integration') }}
         </div>
         <p class="mode-card-desc">Review integration concerns across system components</p>
         <div class="mode-card-meta">
@@ -83,16 +94,13 @@
                 {% else %}integration, revision{% endif %}
             </div>
         </div>
+        <div class="mode-card-tip">Cross-concern context benefits from stronger models.</div>
     </label>
     <label class="mode-card mode-card--plan">
         <div class="mode-card-title">
             <input type="radio" name="mode" value="plan" checked>
             <span class="mode-card-name">plan</span>
-            {% if mode_readiness.get('plan') %}
-            <span class="mode-ready-badge {{ 'ready' if mode_readiness.plan.ready else 'not-ready' }}">
-                <i data-lucide="{{ 'check-circle' if mode_readiness.plan.ready else 'x-circle' }}"></i>
-            </span>
-            {% endif %}
+            {{ readiness_popover('plan') }}
         </div>
         <p class="mode-card-desc">Adversarial review of implementation plans with author rebuttals</p>
         <div class="mode-card-meta">
@@ -106,6 +114,7 @@
                 {% else %}author, reviewer, revision{% endif %}
             </div>
         </div>
+        <div class="mode-card-tip">Benefits from strongest adversarial reasoning. Prefer top-tier models.</div>
     </label>
 </div>
 

@@ -37,18 +37,18 @@ class ProgressEvent:
 # Phase detection patterns (best-effort, matched against storage.log() corpus)
 _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     # Cost events (must be first — suppressed from console log)
-    (r"§cost role=(\S+) model=(.+?) cost=([\d.]+) total=([\d.]+)", "cost_update", {}),
+    (r"§cost role=(\S+) model=(.+?) cost=([\d.]+) total=([\d.]+)(?: in_tokens=(\d+) out_tokens=(\d+) total_tokens=(\d+))?", "cost_update", {}),
 
     # Round 1 reviewer calls
     (r"Round 1: calling (.+)", "round1_calling", {}),
-    (r"Round 1: (.+) responded \((\d+) output tokens\)", "round1_responded", {}),
+    (r"Round 1: (.+) responded \(", "round1_responded", {}),
     (r"No structured points from (.+) -- trying LLM normalization", "normalization", {}),
-    (r"Normalization: calling (.+?) \(fallback for (.+?)\)", "normalization", {}),
-    (r"Round 1: author responding to grouped feedback from reviewers", "round1_author", {}),
+    (r"Normalization: calling (.+?) \(fallback for (.+?),", "normalization", {}),
+    (r"Round 1: author responding to grouped feedback", "round1_author", {}),
 
     # Dedup
-    (r"Deduplication: calling (.+?) \((\d+) points\)", "dedup_calling", {}),
-    (r"Deduplication: (.+) responded \((\d+) output tokens\)", "dedup_responded", {}),
+    (r"Deduplication: calling (.+?) \((\d+) points", "dedup_calling", {}),
+    (r"Deduplication: (.+) responded \(", "dedup_responded", {}),
 
     # Round 2
     (r"Round 2: all groups accepted by author -- skipping", "round2_skip", {}),
@@ -68,7 +68,7 @@ _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     # Revision
     (r"Revision: large context .+ expect ~(\d+) min", "revision_duration_estimate", {}),
     (r"Revision: calling (.+?)(?:\s*\(|$)", "revision_calling", {}),
-    (r"Revision: (.+) responded \((\d+) output tokens\)", "revision_responded", {}),
+    (r"Revision: (.+) responded \(", "revision_responded", {}),
     (r"Revision: no actionable findings", "revision_skip", {}),
     (r"Revision: prompt \((\d+) tokens\) exceeds context", "revision_skip_context", {}),
     (r"Revision: extraction failed", "revision_extraction_failed", {}),
@@ -86,16 +86,21 @@ def classify_log_message(msg: str) -> ProgressEvent:
         if m:
             # Cost events carry structured data and suppress console log output
             if phase == "cost_update":
+                detail = {
+                    "role": m.group(1),
+                    "model": m.group(2),
+                    "cost": m.group(3),
+                    "total": m.group(4),
+                }
+                if m.group(5):
+                    detail["in_tokens"] = m.group(5)
+                    detail["out_tokens"] = m.group(6)
+                    detail["total_tokens"] = m.group(7)
                 return ProgressEvent(
                     event_type="cost",
                     message="",
                     phase=phase,
-                    detail={
-                        "role": m.group(1),
-                        "model": m.group(2),
-                        "cost": m.group(3),
-                        "total": m.group(4),
-                    },
+                    detail=detail,
                 )
             return ProgressEvent(
                 event_type="phase",

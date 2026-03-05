@@ -17,10 +17,11 @@ class TestClassifyLogMessage:
         assert "gpt-4o" in ev.detail["groups"]
 
     def test_round1_responded(self):
-        ev = classify_log_message("Round 1: gpt-4o responded (4821 output tokens)")
+        ev = classify_log_message(
+            "Round 1: gpt-4o responded (in: 1200, out: 4821 tokens, running total: 6021)"
+        )
         assert ev.phase == "round1_responded"
         assert "gpt-4o" in ev.detail["groups"]
-        assert "4821" in ev.detail["groups"]
 
     def test_normalization_fallback(self):
         ev = classify_log_message(
@@ -29,7 +30,10 @@ class TestClassifyLogMessage:
         assert ev.phase == "normalization"
 
     def test_round1_author(self):
-        ev = classify_log_message("Round 1: author responding to grouped feedback from reviewers")
+        ev = classify_log_message(
+            "Round 1: author responding to grouped feedback "
+            "(timeout: 120s, max_out: 32000)"
+        )
         assert ev.phase == "round1_author"
 
     def test_round2_skip_all(self):
@@ -83,6 +87,16 @@ class TestClassifyLogMessage:
             "Revision: claude-sonnet responded (8000 output tokens)"
         )
         assert ev.phase == "revision_responded"
+
+    def test_cost_update_with_tokens(self):
+        ev = classify_log_message(
+            "§cost role=reviewer model=gpt-4o cost=0.032000 total=0.145000 "
+            "in_tokens=1200 out_tokens=4821 total_tokens=6021"
+        )
+        assert ev.event_type == "cost"
+        assert ev.detail["in_tokens"] == "1200"
+        assert ev.detail["out_tokens"] == "4821"
+        assert ev.detail["total_tokens"] == "6021"
 
     def test_revision_skip(self):
         ev = classify_log_message("Revision: no actionable findings — skipping")

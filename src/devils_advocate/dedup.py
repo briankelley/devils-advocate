@@ -97,7 +97,11 @@ async def deduplicate_points(
         return promote_points_to_groups(all_points, ctx)
 
     if log_fn:
-        log_fn(f"  Deduplication: calling {model.name} ({len(all_points)} points)")
+        thinking_str = ", thinking: on" if model.thinking else ""
+        log_fn(
+            f"  Deduplication: calling {model.name} "
+            f"({len(all_points)} points, max_out: {MAX_OUTPUT_TOKENS}{thinking_str})"
+        )
 
     text, usage = await call_with_retry(
         client, model, "", prompt, MAX_OUTPUT_TOKENS, log_fn=log_fn,

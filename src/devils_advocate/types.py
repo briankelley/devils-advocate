@@ -162,6 +162,8 @@ class CostTracker:
     max_cost: float | None = None
     warned_80: bool = False
     exceeded: bool = False
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
     role_costs: dict = field(default_factory=dict)
     _log_fn: Any = field(default=None, repr=False)
 
@@ -187,6 +189,8 @@ class CostTracker:
             "cost_usd": round(cost, 6),
         })
         self.total_usd += cost
+        self.total_input_tokens += input_tokens
+        self.total_output_tokens += output_tokens
 
         if role:
             self.role_costs[role] = self.role_costs.get(role, 0.0) + cost
@@ -195,7 +199,9 @@ class CostTracker:
         if self._log_fn and role:
             self._log_fn(
                 f"§cost role={role} model={model_name} "
-                f"cost={cost:.6f} total={self.total_usd:.6f}"
+                f"cost={cost:.6f} total={self.total_usd:.6f} "
+                f"in_tokens={input_tokens} out_tokens={output_tokens} "
+                f"total_tokens={self.total_input_tokens + self.total_output_tokens}"
             )
 
         # Update cost guardrail flags when a budget is set

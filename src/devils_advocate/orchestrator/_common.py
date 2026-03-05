@@ -74,6 +74,18 @@ from ._formatting import (  # noqa: F401
 )
 
 
+def _model_settings_str(model: ModelConfig, effective_max: int) -> str:
+    """Build a compact settings string for log lines."""
+    parts = [f"timeout: {model.timeout}s"]
+    if model.max_out_configured:
+        parts.append(f"max_out: {model.max_out_configured}/{effective_max}")
+    else:
+        parts.append(f"max_out: {effective_max}")
+    if model.thinking:
+        parts.append("thinking: on")
+    return ", ".join(parts)
+
+
 def _save_stub_ledger(
     storage: StorageManager,
     review_id: str,
@@ -173,14 +185,18 @@ async def _call_reviewer(
         Override the default ``parse_review_response`` parser. When provided,
         called as ``point_parser(text, reviewer.name)`` instead of the default.
     """
-    storage.log(f"Round 1: calling {reviewer.name} (timeout: {reviewer.timeout}s)")
+    effective_max = reviewer.max_out_configured or MAX_OUTPUT_TOKENS
+    storage.log(
+        f"Round 1: calling {reviewer.name} "
+        f"({_model_settings_str(reviewer, effective_max)})"
+    )
     sys_prompt = system_prompt if system_prompt is not None else get_reviewer_system_prompt()
     text, usage = await call_with_retry(
         client,
         reviewer,
         sys_prompt,
         prompt,
-        reviewer.max_out_configured or MAX_OUTPUT_TOKENS,
+        effective_max,
         log_fn=storage.log,
         mode=mode,
     )
@@ -193,7 +209,9 @@ async def _call_reviewer(
         role=role_label,
     )
     storage.log(
-        f"Round 1: {reviewer.name} responded ({usage['output_tokens']} output tokens)"
+        f"Round 1: {reviewer.name} responded "
+        f"(in: {usage['input_tokens']}, out: {usage['output_tokens']} tokens, "
+        f"running total: {cost_tracker.total_input_tokens + cost_tracker.total_output_tokens})"
     )
 
     # Save raw response
@@ -309,7 +327,13 @@ async def _run_round2_exchange(
             )
         )
 
-    reviewer_info = ", ".join(f"{r.name} ({r.timeout}s)" for r in rebuttal_reviewers)
+    def _brief(r):
+        parts = [f"{r.timeout}s"]
+        if r.thinking:
+            parts.append("thinking")
+        return f"{r.name} ({', '.join(parts)})"
+
+    reviewer_info = ", ".join(_brief(r) for r in rebuttal_reviewers)
     storage.log(f"Round 2: calling {len(rebuttal_reviewers)} reviewer(s) for rebuttal: {reviewer_info}")
     console.print(f"  Sending rebuttals to {len(rebuttal_reviewers)} reviewer(s)")
 
@@ -578,7 +602,10 @@ async def _run_adversarial_pipeline(
     console.print(
         f"  Prompt size: ~{estimate_tokens(round1_author_prompt)} tokens"
     )
-    storage.log("Round 1: author responding to grouped feedback from reviewers")
+    storage.log(
+        f"Round 1: author responding to grouped feedback "
+        f"({_model_settings_str(author, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS)})"
+    )
     author_raw, author_usage = await call_with_retry(
         client,
         author,
@@ -600,7 +627,9 @@ async def _run_adversarial_pipeline(
         f"  Author responded ({author_usage['output_tokens']} tokens)"
     )
     storage.log(
-        f"Round 1: author responded ({author_usage['output_tokens']} output tokens)"
+        f"Round 1: author responded "
+        f"(in: {author_usage['input_tokens']}, out: {author_usage['output_tokens']} tokens, "
+        f"running total: {cost_tracker.total_input_tokens + cost_tracker.total_output_tokens})"
     )
     storage.save_intermediate(review_id, "round2", "author_raw.txt", author_raw)
 

@@ -234,10 +234,13 @@ async def _run_revision_core(
             f"caps output (role default was {REVISION_MAX_OUTPUT_TOKENS})"
         )
 
+    thinking_str = ", thinking: on" if revision_model.thinking else ""
+    max_str = f"{revision_model.max_out_configured}/{effective_max}" if revision_model.max_out_configured else str(effective_max)
+    base_info = f"timeout: {revision_model.timeout}s, max_out: {max_str}{thinking_str}"
     if finding_count:
-        storage.log(f"Revision: calling {revision_model.name} (timeout: {revision_model.timeout}s, incorporating {finding_count} accepted findings)")
+        storage.log(f"Revision: calling {revision_model.name} ({base_info}, incorporating {finding_count} accepted findings)")
     else:
-        storage.log(f"Revision: calling {revision_model.name} (timeout: {revision_model.timeout}s)")
+        storage.log(f"Revision: calling {revision_model.name} ({base_info})")
     raw, usage = await call_with_retry(
         client,
         revision_model,
