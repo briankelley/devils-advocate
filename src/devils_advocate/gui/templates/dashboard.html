@@ -32,9 +32,9 @@
             <div class="mode-card-roles"><strong>uses:</strong>
                 {% if mode_readiness.get('spec') %}
                 {% for role in mode_readiness.spec.roles %}
-                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else '' }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
+                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else ('mode-role-assigned' if role.assigned else '') }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
                 {% endfor %}
-                {% else %}reviewer (2), dedup, revision{% endif %}
+                {% else %}reviewer, revision{% endif %}
             </div>
         </div>
     </label>
@@ -55,9 +55,9 @@
             <div class="mode-card-roles"><strong>uses:</strong>
                 {% if mode_readiness.get('code') %}
                 {% for role in mode_readiness.code.roles %}
-                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else '' }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
+                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else ('mode-role-assigned' if role.assigned else '') }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
                 {% endfor %}
-                {% else %}author, reviewer (2), dedup, revision{% endif %}
+                {% else %}author, reviewer, revision{% endif %}
             </div>
         </div>
     </label>
@@ -78,7 +78,7 @@
             <div class="mode-card-roles"><strong>uses:</strong>
                 {% if mode_readiness.get('integration') %}
                 {% for role in mode_readiness.integration.roles %}
-                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else '' }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
+                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else ('mode-role-assigned' if role.assigned else '') }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
                 {% endfor %}
                 {% else %}integration, revision{% endif %}
             </div>
@@ -101,9 +101,9 @@
             <div class="mode-card-roles"><strong>uses:</strong>
                 {% if mode_readiness.get('plan') %}
                 {% for role in mode_readiness.plan.roles %}
-                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else '' }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
+                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else ('mode-role-assigned' if role.assigned else '') }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
                 {% endfor %}
-                {% else %}author, reviewer (2), dedup, revision{% endif %}
+                {% else %}author, reviewer, revision{% endif %}
             </div>
         </div>
     </label>

@@ -39,9 +39,9 @@ def _content_hash(content: str) -> str:
 def generate_review_id(content: str) -> str:
     """Generate a review ID from timestamp and content hash.
 
-    Format: YYYYMMDDThhmmss_<sha256-6>_review
+    Format: YYYYMMDDThhmmss_<sha256-6>
     """
-    return f"{_timestamp_str()}_{_content_hash(content)}_review"
+    return f"{_timestamp_str()}_{_content_hash(content)}"
 
 
 def generate_new_group_id(

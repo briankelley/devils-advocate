@@ -194,6 +194,10 @@ async def review_detail(request: Request, review_id: str):
         else:
             escalated.append(group_info)
 
+    # Sort groups by consensus count (multi-reviewer agreement first)
+    escalated.sort(key=lambda g: len(g.get("source_reviewers", [])), reverse=True)
+    auto_accepted.sort(key=lambda g: len(g.get("source_reviewers", [])), reverse=True)
+
     # Load file manifest
     review_dir = storage.reviews_dir / review_id
     manifest_path = review_dir / "input_files_manifest.json"

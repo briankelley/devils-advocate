@@ -1356,15 +1356,20 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .mode-role-missing {
     color: var(--red, #ff4757);
 }
+.mode-role-assigned {
+    color: var(--green, #2ed573);
+}
 
 .mode-ready-badge {
     display: inline-flex;
     align-items: center;
     margin-left: auto;
 }
-.mode-ready-badge svg { width: 14px; height: 14px; }
+.mode-ready-badge svg { width: 12px; height: 12px; }
 .mode-ready-badge.ready { color: var(--green, #2ed573); }
+.mode-ready-badge.ready svg { color: var(--green, #2ed573); stroke: var(--green, #2ed573); }
 .mode-ready-badge.not-ready { color: var(--red, #ff4757); }
+.mode-ready-badge.not-ready svg { color: var(--red, #ff4757); stroke: var(--red, #ff4757); }
 
 .validation-messages {
     padding: var(--pad-md) var(--pad-lg);

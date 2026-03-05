@@ -630,7 +630,7 @@ async def download_report(request: Request, review_id: str):
     path = storage.reviews_dir / review_id / "dvad-report.md"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Report not found")
-    return FileResponse(path, filename="dvad-report.md", media_type="text/markdown")
+    return FileResponse(path, filename=f"dvad-report-{review_id}.md", media_type="text/markdown")
 
 
 @router.get("/review/{review_id}/revised")
@@ -641,7 +641,9 @@ async def download_revised(request: Request, review_id: str):
     for name in ["revised-plan.md", "revised-diff.patch", "remediation-plan.md", "revised-spec-suggestions.md"]:
         path = review_dir / name
         if path.exists():
-            return FileResponse(path, filename=name)
+            stem, ext = name.rsplit(".", 1)
+            download_name = f"{stem}-{review_id}.{ext}"
+            return FileResponse(path, filename=download_name)
     raise HTTPException(status_code=404, detail="Revised artifact not found")
 
 

@@ -197,7 +197,7 @@
 {# Escalated Items #}
 {% if escalated %}
 <section class="review-section">
-    <h2>Escalated Items</h2>
+    <h2>{% if review_mode == 'spec' %}Suggested Items{% else %}Escalated Items{% endif %}</h2>
     {% for g in escalated %}
     <div class="group-card card-escalated" id="group-{{ g.group_id }}" data-group-id="{{ g.group_id }}">
         <div class="card-header">
@@ -229,7 +229,7 @@
                     </div>
                 </details>
 
-                {% if g.author_resolution %}
+                {% if g.author_resolution and g.author_resolution != 'no_response' and review_mode != 'spec' %}
                 <details class="expand-section">
                     <summary>Author Response (Round 1): {{ g.author_resolution }}</summary>
                     <div class="expand-content"><span class="reviewer-name">[{{ ledger.get('author_model', 'author') }}]</span> {{ g.author_rationale }}</div>

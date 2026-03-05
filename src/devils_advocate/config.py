@@ -11,6 +11,7 @@ from .types import ConfigError, ModelConfig
 
 # Default timeout matches ModelConfig dataclass default
 DEFAULT_TIMEOUT = 120
+REVISION_MIN_TIMEOUT = 900
 
 
 def _load_dotenv(config_path: Path) -> None:
@@ -195,6 +196,13 @@ def load_config(path: Path | None = None) -> dict:
     if revision_name:
         _resolve("revision", revision_name)
         all_models[revision_name].roles.add("revision")
+
+    # Ensure revision model has adequate timeout for large payloads
+    effective_revision = revision_name or author_name
+    if effective_revision and effective_revision in all_models:
+        revision_cfg = all_models[effective_revision]
+        if revision_cfg.timeout <= DEFAULT_TIMEOUT:
+            revision_cfg.timeout = REVISION_MIN_TIMEOUT
 
     # Only active models (referenced in roles) go into the working set
     models = {name: all_models[name] for name in all_models if name in active_names}
@@ -381,7 +389,7 @@ MODE_ROLES: dict[str, list[dict[str, object]]] = {
         {"key": "revision", "label": "Revision", "required": True},
     ],
     "integration": [
-        {"key": "integration", "label": "Integration Reviewer", "required": True},
+        {"key": "integration", "label": "Integration", "required": True},
         {"key": "revision", "label": "Revision", "required": True},
     ],
 }

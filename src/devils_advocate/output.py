@@ -252,6 +252,12 @@ def generate_ledger(result: ReviewResult) -> dict:
     }
     summary.update(gov_counts)
 
+    # Preserve mode-specific summary fields (e.g. multi_consensus, single_source for spec)
+    if result.summary:
+        for key in ("multi_consensus", "single_source"):
+            if key in result.summary:
+                summary[key] = result.summary[key]
+
     return {
         "review_id": result.review_id,
         "result": "success",
@@ -299,6 +305,25 @@ def _generate_spec_report(result: ReviewResult) -> str:
     lines.append(f"- **Single Source:** {s.get('single_source', 0)}")
     lines.append("")
 
+    # High-consensus section (before per-theme breakdown)
+    high_consensus = [g for g in result.groups if len(g.source_reviewers) > 1]
+    if high_consensus:
+        lines.append("## High-Consensus Ideas")
+        lines.append("")
+        lines.append(
+            "The following suggestions were independently raised by multiple reviewers, "
+            "indicating strong signal:"
+        )
+        lines.append("")
+        for g in high_consensus:
+            consensus = len(g.source_reviewers)
+            lines.append(
+                f"- **{g.concern[:120]}** "
+                f"({consensus}/{total_reviewers} reviewers: "
+                f"{', '.join(g.source_reviewers)})"
+            )
+        lines.append("")
+
     # Group suggestions by theme
     by_theme: dict[str, list] = {}
     for g in result.groups:
@@ -329,25 +354,6 @@ def _generate_spec_report(result: ReviewResult) -> str:
                 if p.location:
                     lines.append(f"  - *Context:* {p.location}")
             lines.append("")
-
-    # High-consensus section
-    high_consensus = [g for g in result.groups if len(g.source_reviewers) > 1]
-    if high_consensus:
-        lines.append("## High-Consensus Ideas")
-        lines.append("")
-        lines.append(
-            "The following suggestions were independently raised by multiple reviewers, "
-            "indicating strong signal:"
-        )
-        lines.append("")
-        for g in high_consensus:
-            consensus = len(g.source_reviewers)
-            lines.append(
-                f"- **{g.concern[:120]}** "
-                f"({consensus}/{total_reviewers} reviewers: "
-                f"{', '.join(g.source_reviewers)})"
-            )
-        lines.append("")
 
     # Revised output (suggestion report from revision LLM)
     if result.revised_output:
