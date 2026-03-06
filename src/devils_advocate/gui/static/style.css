@@ -883,21 +883,23 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     color: var(--text-dim);
     opacity: 0.4;
     cursor: pointer;
-    transition: all 0.15s;
     padding: 2px;
+    transition: opacity 0.15s, color 0.15s;
+}
+.role-icon:hover {
+    opacity: 0.7;
 }
 .role-icon svg {
     width: 14px;
     height: 14px;
     pointer-events: none;
 }
-.role-icon:hover {
-    color: var(--text);
-    opacity: 0.8;
-}
 .role-icon.role-active {
     color: var(--green);
     opacity: 1;
+}
+.role-icon.role-active:hover {
+    opacity: 0.8;
 }
 .thinking-toggle,
 .settings-toggle {
@@ -1062,13 +1064,15 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .thinking-icon {
     display: inline-flex; align-items: center; justify-content: center;
     color: var(--text-dim); opacity: 0.3;
-    padding: 2px; cursor: not-allowed;
-    transition: all 0.15s;
+    padding: 2px; cursor: pointer;
+    transition: opacity 0.15s, color 0.15s;
 }
+.thinking-icon:hover { opacity: 0.6; }
 .thinking-icon svg { width: 14px; height: 14px; pointer-events: none; }
-.thinking-icon.thinking-eligible { cursor: pointer; opacity: 0.5; }
-.thinking-icon.thinking-eligible:hover { opacity: 0.8; }
-.thinking-icon.thinking-active { color: var(--red); opacity: 1; cursor: pointer; }
+.thinking-icon.thinking-active { color: var(--red); opacity: 1; }
+.thinking-icon.thinking-active:hover { opacity: 0.8; }
+.thinking-icon.thinking-inert { opacity: 0.15; cursor: not-allowed; }
+.thinking-icon.thinking-inert:hover { opacity: 0.15; }
 
 /* ── Role Descriptions ───────────────────────────────────────────── */
 
