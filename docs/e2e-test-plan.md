@@ -297,6 +297,24 @@ async def test_sse_populates_log(page, dvad_server):
 - Pre-seeded data tests: **10s timeout** (just rendering)
 - Config page tests: **10s timeout**
 
+### Adversarial / Destructive-Path Testing
+
+The Playwright suite above covers happy-path interactions and visual regressions.
+A complementary adversarial layer is provided by the
+[`paranoid-e2e-architect`](https://github.com/briankelley/claude-marketplace)
+sub-agent. It operates independently and does not duplicate happy-path coverage.
+
+Scope:
+- Builds a registry of every state-mutating operation (POST/DELETE/PATCH
+  endpoints and all form submissions)
+- Tests every permutation of empty, default, and boundary inputs against
+  pre-existing data to surface unguarded destructive paths
+- Enforces that no write path exists without a corresponding guard (auth,
+  CSRF, input validation)
+
+Run after the Playwright harness is scaffolded (Phase A–C complete). The agent
+emits both a mutation registry and a focused test file for the paths it flags.
+
 ---
 
 ## 6. Local LLM Simulation Endpoint
@@ -460,8 +478,9 @@ def pytest_collection_modifyitems(config, items):
 | **D** | Visual regression: screenshot capture, diff config, baseline generation | ~150 lines |
 | **E** | Local LLM config + live flow tests: initiate review, SSE, resolution | ~400 lines |
 | **F** | Polish: CI integration notes, README, marker docs | ~50 lines |
+| **G** | Run `paranoid-e2e-architect` sub-agent against the scaffolded harness; integrate flagged destructive-path tests | agent-generated |
 
-Total new code: **~1,100 lines** across ~6 files.
+Total new code: **~1,100 lines** across ~6 files (Phase A–F); Phase G is agent-generated.
 Single code change to dvad itself: the `create_app_from_env` factory (~5 lines).
 
 ---
