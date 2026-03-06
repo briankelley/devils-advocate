@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
 import tempfile
 import time
@@ -343,6 +344,11 @@ class StorageManager:
             raise StorageError(
                 f"Point/group {point_id} not found in review {review_id}"
             )
+
+        # Create backup before write
+        backup = path.with_suffix(path.suffix + ".bak")
+        shutil.copy2(str(path), str(backup))
+
         self._atomic_write(path, json.dumps(ledger, indent=2, default=str))
 
     def load_manifest(self) -> dict | None:

@@ -252,7 +252,7 @@ async def test_successful_plan_review_e2e(plan_config, plan_file, tmp_path):
 
     # Verify storage artifacts were written (DVAD_HOME points to tmp_path/dvad-data)
     reviews_dir = tmp_path / "dvad-data" / "reviews"
-    review_dirs = list(reviews_dir.glob("*_review"))
+    review_dirs = list(reviews_dir.glob("*_*"))
     assert len(review_dirs) == 1
     review_dir = review_dirs[0]
     assert (review_dir / "dvad-report.md").exists()

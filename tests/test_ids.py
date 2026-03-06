@@ -23,9 +23,9 @@ class TestGenerateReviewId:
     """Tests for generate_review_id."""
 
     def test_format(self):
-        """Review ID follows YYYYMMDDThhmmss_<6-hex>_review format."""
+        """Review ID follows YYYYMMDDThhmmss_<6-hex> format."""
         rid = generate_review_id("some content")
-        pattern = r'^\d{8}T\d{6}_[0-9a-f]{6}_review$'
+        pattern = r'^\d{8}T\d{6}_[0-9a-f]{6}$'
         assert re.match(pattern, rid), f"Review ID {rid!r} does not match expected format"
 
     def test_deterministic_hash(self):

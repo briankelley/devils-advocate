@@ -98,6 +98,11 @@ async def _mutate_yaml_config(request: Request, mutator: Callable[[dict], None])
 
         mutator(data)
 
+        # Create backup before write
+        if target.exists():
+            backup = target.with_suffix(target.suffix + ".bak")
+            await asyncio.to_thread(shutil.copy2, str(target), str(backup))
+
         stream = StringIO()
         yaml.dump(data, stream)
         await asyncio.to_thread(StorageManager._atomic_write, target, stream.getvalue())
@@ -753,6 +758,8 @@ async def set_model_max_tokens(request: Request):
         raise HTTPException(status_code=400, detail="model_name is required")
 
     if max_tokens is not None:
+        if isinstance(max_tokens, bool):
+            raise HTTPException(status_code=400, detail="max_out_configured must be an integer between 1 and 1000000")
         try:
             max_tokens = int(max_tokens)
             if max_tokens < 1 or max_tokens > 1000000:
@@ -880,6 +887,8 @@ async def save_config(request: Request):
 
     # Raw YAML path: { yaml: "..." }
     yaml_content = body.get("yaml", "")
+    if not yaml_content or not yaml_content.strip():
+        raise HTTPException(status_code=400, detail="YAML content is empty")
 
     import yaml
     try:
@@ -1138,6 +1147,11 @@ async def save_single_env_var(request: Request, env_name: str):
     env_file_path = _get_env_file_path(request)
     existing_lines, _ = _read_env_file(env_file_path)
 
+    # Create backup before write
+    if env_file_path.is_file():
+        backup = env_file_path.with_suffix(".bak")
+        shutil.copy2(str(env_file_path), str(backup))
+
     try:
         _write_env_file(env_file_path, existing_lines, {env_name: value})
         os.environ[env_name] = value
@@ -1227,8 +1241,8 @@ async def save_env_vars(request: Request):
     # Read existing content
     existing_lines, _ = _read_env_file(env_file_path)
 
-    # Backup .env before any destructive changes
-    if has_deletions and env_file_path.is_file():
+    # Backup .env before any write
+    if env_file_path.is_file():
         backup = env_file_path.with_suffix(".bak")
         shutil.copy2(str(env_file_path), str(backup))
 

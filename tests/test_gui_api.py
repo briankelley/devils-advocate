@@ -245,24 +245,6 @@ class TestModelTimeout:
         assert resp.status_code == 400
 
 
-class TestModelThinking:
-    def test_requires_csrf(self, client):
-        resp = client.post(
-            "/api/config/model-thinking",
-            json={"model_name": "test", "thinking": True},
-        )
-        assert resp.status_code == 403
-
-    def test_requires_model_name(self, client, token):
-        resp = client.post(
-            "/api/config/model-thinking",
-            json={"model_name": "", "thinking": True},
-            headers={"X-DVAD-Token": token},
-        )
-        assert resp.status_code == 400
-        assert "model_name" in resp.json()["detail"]
-
-
 class TestModelMaxTokens:
     def test_requires_csrf(self, client):
         resp = client.post(

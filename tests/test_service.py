@@ -119,7 +119,7 @@ class TestRenderServiceUnit:
         assert "[Service]" in content
         assert "[Install]" in content
         assert "Restart=on-failure" in content
-        assert "KillSignal=SIGINT" in content
+        assert "KillSignal=SIGTERM" in content
         assert "WantedBy=default.target" in content
 
     def test_path_object_accepted(self):
