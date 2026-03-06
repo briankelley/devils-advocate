@@ -1457,6 +1457,7 @@ const dvad = {
         // Attach click handlers to role icons in model cards
         document.querySelectorAll('.model-role-icons .role-icon').forEach(icon => {
             icon.addEventListener('click', (e) => {
+                e.preventDefault();
                 e.stopPropagation();
                 const model = icon.dataset.model;
                 const dataRole = icon.dataset.role;
@@ -1467,6 +1468,7 @@ const dvad = {
         // Attach click handlers to thinking icons in model cards
         document.querySelectorAll('.model-role-icons .thinking-icon').forEach(icon => {
             icon.addEventListener('click', (e) => {
+                e.preventDefault();
                 e.stopPropagation();
                 const model = icon.dataset.model;
                 this._handleThinkingClick(model);
