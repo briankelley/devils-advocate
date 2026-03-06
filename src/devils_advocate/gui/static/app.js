@@ -1406,6 +1406,15 @@ const dvad = {
         document.getElementById('confirm-modal').classList.remove('visible');
     },
 
+    // ── UI Size Cycling ─────────────────────────────────────────────
+    cycleUiSize() {
+        const sizes = [1.0, 1.15, 1.3];
+        let level = parseInt(localStorage.getItem('dvad-ui-size') || '0', 10);
+        level = (level + 1) % sizes.length;
+        localStorage.setItem('dvad-ui-size', String(level));
+        document.documentElement.style.zoom = sizes[level];
+    },
+
     _removeSelectedFile(targetField, path) {
         this._selectedPaths[targetField] = this._selectedPaths[targetField].filter(s => s.path !== path);
         const remaining = this._selectedPaths[targetField];

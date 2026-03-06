@@ -10,6 +10,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400&display=swap" rel="stylesheet">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script>
+    (function() {
+        var sizes = [1.0, 1.15, 1.3];
+        var level = parseInt(localStorage.getItem('dvad-ui-size') || '0', 10);
+        if (level > 0 && level < sizes.length) {
+            document.documentElement.style.zoom = sizes[level];
+        }
+    })();
+    </script>
 </head>
 <body>
     <nav class="topnav">
@@ -18,6 +27,7 @@
             <span class="nav-title">Devil's Advocate</span>
         </a>
         <div class="nav-links">
+            <span class="nav-size-toggle" onclick="dvad.cycleUiSize()" title="Cycle UI size">aA</span>
             <a href="/config" title="Settings" class="nav-settings">
                 <span class="nav-version">v{{ version }}</span>
                 <i data-lucide="settings"></i>

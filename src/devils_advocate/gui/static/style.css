@@ -65,6 +65,16 @@ body {
 .nav-links svg { width: 16px; height: 16px; }
 .nav-settings { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .nav-version { font-size: 9px; color: var(--text-dim); font-family: var(--font-mono); line-height: 1; }
+.nav-size-toggle {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-right: var(--pad-lg);
+    user-select: none;
+    transition: color 0.15s;
+}
+.nav-size-toggle:hover { color: var(--text); }
 
 /* ── Layout ─────────────────────────────────────────────────────────── */
 
