@@ -33,6 +33,8 @@ curl -fsSL https://raw.githubusercontent.com/briankelley/devils-advocate/main/in
 
 Installs dvad, initializes config, sets up the systemd service, and launches the web GUI on port 8411.
 
+
+
 ## Manual Install
 
 ```bash
@@ -42,23 +44,21 @@ ln -sf ~/.local/share/devils-advocate/venv/bin/dvad ~/.local/bin/dvad
 dvad install
 ```
 
-## Getting Started
-
-### 1. Configure your models
+##### 1. Configure your models
 
 Run `dvad config --init` to generate `~/.config/devils-advocate/models.yaml`, then edit it. Each model needs a provider, model ID, and an environment variable name for its API key. See `examples/models.yaml.example` for a fully annotated template.
 
-### 2. Set your API keys
+##### 2. Set your API keys
 
 API keys are resolved from environment variables — never stored in the config file. Set them in your shell or in `~/.config/devils-advocate/.env` (auto-loaded, won't override existing env vars).
 
-### 3. Validate
+##### 3. Validate
 
 ```bash
 dvad config --show
 ```
 
-## Web GUI
+##### 4. Web GUI
 
 The primary way to use Devil's Advocate. Covers the full workflow - submitting reviews, monitoring progress in real time, resolving escalated findings, and generating revised artifacts.
 
@@ -69,6 +69,8 @@ dvad gui
 Opens at `http://127.0.0.1:8411`. The GUI includes a dashboard for submitting and browsing reviews, real-time review progress via SSE with per-model cost tracking, governance override controls, revision generation, and visual model/role configuration with a raw YAML editor.
 
 By default the GUI refuses to bind to non-localhost interfaces. `--allow-nonlocal` overrides this and requires a CSRF token header on all mutating requests.
+
+
 
 ## How It Works
 
@@ -95,6 +97,8 @@ Escalated findings are resolved through the GUI's override controls or `dvad ove
 ## CLI Quick Start
 
 ```bash
+dvad config --show
+dvad history --project <project name>
 dvad review --mode plan --input plan.md --input ref.py --project myproject
 dvad review --mode code --input src/app.py --spec spec.md --project myproject
 dvad review --mode plan --input plan.md --project myproject --max-cost 0.50
