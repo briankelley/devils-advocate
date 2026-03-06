@@ -3,7 +3,6 @@
 const dvad = {
     _sseSource: null,
     _revisionContent: '',
-    _pendingRoles: {},
     _sortState: { col: null, asc: true },
     _picker: {
         targetField: null,
@@ -60,11 +59,9 @@ const dvad = {
         });
 
         this.initSorting();
-        this.initRolePills();
         this.initNewReviewForm();
         this.initTimeoutEditing();
         this.initMaxTokenEditing();
-        this.initThinkingToggle();
         this.initSettingsToggle();
         this.initEnvKeys();
     },
@@ -775,6 +772,26 @@ const dvad = {
 
     // ── Config tabs ──────────────────────────────────────────────────
     switchTab(tab) {
+        const onStructured = document.querySelector('.tab-btn.active')?.dataset.tab === 'structured';
+        if (onStructured && tab !== 'structured' && this._pendingState && this._originalState &&
+            JSON.stringify(this._pendingState) !== JSON.stringify(this._originalState)) {
+            this._showConfirmDialog(
+                'Unsaved Changes',
+                'You have unsaved role changes. Switching tabs will discard them.',
+                'Discard',
+                () => {
+                    this._pendingState = JSON.parse(JSON.stringify(this._originalState));
+                    this._renderRoles();
+                    this._doSwitchTab(tab);
+                },
+                true
+            );
+            return;
+        }
+        this._doSwitchTab(tab);
+    },
+
+    _doSwitchTab(tab) {
         document.querySelectorAll('.tab-btn').forEach(b => {
             b.classList.toggle('active', b.dataset.tab === tab);
         });
@@ -851,251 +868,6 @@ const dvad = {
             }
         } catch (err) {
             if (result) result.textContent = 'Error: ' + err.message;
-        }
-    },
-
-    // ── Role Icons ──────────────────────────────────────────────────
-    initRolePills() {
-        const icons = document.querySelectorAll('.role-icon');
-        if (!icons.length || this._rolePillsInitialized) return;
-        this._rolePillsInitialized = true;
-
-        icons.forEach(icon => {
-            icon.addEventListener('click', (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                const model = icon.dataset.model;
-                const role = icon.dataset.role;
-                const isActive = icon.classList.contains('role-active');
-
-                // Radio roles: only one model per role (except reviewer which is multi)
-                const radioRoles = ['author', 'deduplication', 'integration_reviewer', 'normalization', 'revision'];
-
-                if (radioRoles.includes(role)) {
-                    // Deactivate all other icons for this role
-                    document.querySelectorAll(`.role-icon[data-role="${role}"]`).forEach(p => {
-                        p.classList.remove('role-active');
-                        p.title = p.title.replace(' (assigned)', '');
-                    });
-                    // Activate this one (unless toggling off)
-                    if (!isActive) {
-                        icon.classList.add('role-active');
-                        if (!icon.title.includes('(assigned)')) {
-                            icon.title = icon.title + ' (assigned)';
-                        }
-                    }
-                } else {
-                    // Checkbox role (reviewer): toggle, max 2
-                    icon.classList.toggle('role-active');
-                    if (icon.classList.contains('role-active')) {
-                        if (!icon.title.includes('(assigned)')) {
-                            icon.title = icon.title + ' (assigned)';
-                        }
-                        // Cap at 2 reviewers: drop the oldest if over limit
-                        const active = Array.from(document.querySelectorAll('.role-icon[data-role="reviewer"].role-active'));
-                        if (active.length > 2) {
-                            const oldest = active.find(el => el !== icon);
-                            if (oldest) {
-                                oldest.classList.remove('role-active');
-                                oldest.title = oldest.title.replace(' (assigned)', '');
-                            }
-                        }
-                    } else {
-                        icon.title = icon.title.replace(' (assigned)', '');
-                    }
-                }
-
-                this._markRolesDirty();
-            });
-        });
-        if (typeof modelThinking !== 'undefined') {
-            this._updateRoleSummary();
-        }
-    },
-
-    _markRolesDirty() {
-        const toast = document.getElementById('save-roles-toast');
-        if (toast) toast.classList.add('visible');
-        this._updateRoleSummary();
-    },
-
-    _updateRoleSummary() {
-        const summary = document.getElementById('role-summary');
-        if (!summary) return;
-
-        // Scan all active role icons
-        const roles = {};
-        document.querySelectorAll('.role-icon.role-active').forEach(pill => {
-            const model = pill.dataset.model;
-            const role = pill.dataset.role;
-            if (role === 'reviewer') {
-                if (!roles.reviewers) roles.reviewers = [];
-                roles.reviewers.push(model);
-            } else {
-                roles[role] = model;
-            }
-        });
-
-        // Update single-assignment roles
-        const singleRoles = ['author', 'deduplication', 'normalization', 'revision', 'integration_reviewer'];
-        singleRoles.forEach(role => {
-            const el = document.getElementById('rs-' + role);
-            if (!el) return;
-            if (roles[role]) {
-                el.textContent = roles[role];
-                el.className = 'role-summary-value';
-            } else {
-                el.textContent = 'unassigned';
-                el.className = 'role-summary-value unassigned';
-            }
-        });
-
-        // Update reviewers
-        const rv1 = document.getElementById('rs-reviewer1');
-        const rv2 = document.getElementById('rs-reviewer2');
-        if (rv1) {
-            if (roles.reviewers && roles.reviewers[0]) {
-                rv1.textContent = roles.reviewers[0];
-                rv1.className = 'role-summary-value';
-            } else {
-                rv1.textContent = 'unassigned';
-                rv1.className = 'role-summary-value unassigned';
-            }
-        }
-        if (rv2) {
-            if (roles.reviewers && roles.reviewers[1]) {
-                rv2.textContent = roles.reviewers[1];
-                rv2.className = 'role-summary-value';
-            } else {
-                rv2.textContent = '\u2014';
-                rv2.className = 'role-summary-value';
-            }
-        }
-
-        // Update vendor icons + brain icons in role summary
-        this._updateRoleSummaryIcons(roles);
-
-        // Update thinking icon eligibility on model cards
-        this._updateThinkingEligibility();
-    },
-
-    _updateRoleSummaryIcons(roles) {
-        const roleKeys = [
-            { key: 'author', prefix: 'author' },
-            { key: 'reviewer1', prefix: 'reviewer1', get: (r) => r.reviewers?.[0] },
-            { key: 'reviewer2', prefix: 'reviewer2', get: (r) => r.reviewers?.[1] },
-            { key: 'deduplication', prefix: 'deduplication' },
-            { key: 'normalization', prefix: 'normalization' },
-            { key: 'revision', prefix: 'revision' },
-            { key: 'integration_reviewer', prefix: 'integration_reviewer' },
-        ];
-
-        roleKeys.forEach(({ key, prefix, get }) => {
-            const model = get ? get(roles) : roles[key];
-
-            // Role icon: green when assigned
-            const iconEl = document.getElementById('rsi-' + prefix);
-            if (iconEl) {
-                iconEl.classList.toggle('icon-active', !!model);
-            }
-
-            // CoT brain icon: active when model has thinking enabled
-            const cotEl = document.getElementById('rsc-' + prefix);
-            if (cotEl) {
-                if (model && typeof modelThinking !== 'undefined' && modelThinking[model]) {
-                    cotEl.classList.add('cot-active');
-                } else {
-                    cotEl.classList.remove('cot-active');
-                }
-            }
-        });
-    },
-
-    _updateThinkingEligibility() {
-        document.querySelectorAll('.thinking-icon').forEach(icon => {
-            const model = icon.dataset.model;
-            const hasActiveRole = document.querySelector(`.role-icon.role-active[data-model="${model}"]`);
-            if (hasActiveRole) {
-                icon.classList.add('thinking-eligible');
-            } else {
-                icon.classList.remove('thinking-eligible');
-                icon.classList.remove('thinking-active');
-            }
-        });
-    },
-
-    async saveRoleAssignments() {
-        const editor = document.getElementById('yaml-editor');
-        if (!editor || typeof jsyaml === 'undefined') {
-            alert('YAML editor or js-yaml library not available. Switch to Raw YAML tab to edit roles.');
-            return;
-        }
-
-        let config;
-        try {
-            config = jsyaml.load(editor.value);
-        } catch (e) {
-            alert('Failed to parse current YAML: ' + e.message);
-            return;
-        }
-
-        // Build roles from active pills
-        const roles = {};
-        const reviewers = [];
-
-        document.querySelectorAll('.role-icon.role-active').forEach(icon => {
-            const model = icon.dataset.model;
-            const role = icon.dataset.role;
-
-            if (role === 'reviewer') {
-                reviewers.push(model);
-            } else {
-                roles[role] = model;
-            }
-        });
-
-        if (reviewers.length > 0) {
-            roles.reviewers = reviewers;
-        }
-
-        config.roles = roles;
-
-        // Serialize and save
-        const newYaml = jsyaml.dump(config, { lineWidth: -1, noRefs: true });
-        editor.value = newYaml;
-
-        this._showConfirmDialog(
-            'Save Configuration?',
-            'This will overwrite the current models.yaml file with updated roles.',
-            'Save Config',
-            () => this._doSaveRoleAssignments(newYaml),
-            false,
-        );
-    },
-
-    async _doSaveRoleAssignments(newYaml) {
-        try {
-            const resp = await fetch('/api/config', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-DVAD-Token': this.getToken(),
-                },
-                body: JSON.stringify({ yaml: newYaml }),
-            });
-            const data = await resp.json();
-
-            const toast = document.getElementById('save-roles-toast');
-            if (toast) toast.classList.remove('visible');
-
-            const vr = document.getElementById('validation-result');
-            if (resp.ok) {
-                if (vr) vr.innerHTML = '<div class="issue issue-ok">Roles saved. Configuration is valid.</div>';
-            } else {
-                if (vr) vr.innerHTML = `<div class="issue issue-error">ERROR: ${data.detail}</div>`;
-            }
-        } catch (err) {
-            alert('Network error: ' + err.message);
         }
     },
 
@@ -1192,67 +964,6 @@ const dvad = {
             placeholder: 'unset',
             emptyValue: 'unset',
         });
-    },
-
-    // ── Thinking Toggle ─────────────────────────────────────────────
-    initThinkingToggle() {
-        if (this._thinkingToggleInitialized) return;
-        this._thinkingToggleInitialized = true;
-
-        document.querySelectorAll('.thinking-icon').forEach(el => {
-            el.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                const model = el.dataset.model;
-
-                // Only allow toggle if model has an active role
-                if (!el.classList.contains('thinking-eligible') && !el.classList.contains('thinking-active')) return;
-
-                const currentlyOn = el.classList.contains('thinking-active');
-                const newValue = !currentlyOn;
-
-                const resp = await fetch('/api/config/model-thinking', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-DVAD-Token': dvad.getToken(),
-                    },
-                    body: JSON.stringify({ model_name: model, thinking: newValue }),
-                });
-
-                if (resp.ok) {
-                    el.classList.toggle('thinking-active', newValue);
-                    el.title = 'Chain of Thought: ' + (newValue ? 'enabled' : 'disabled');
-                    // Update modelThinking map if available
-                    if (typeof modelThinking !== 'undefined') {
-                        modelThinking[model] = newValue;
-                    }
-                    // Update brain icons in role summary
-                    this._updateRoleSummary();
-                    // Refresh editor YAML so role saves don't overwrite thinking change
-                    this._refreshEditorYaml();
-                }
-            });
-        });
-    },
-
-    _refreshEditorYaml() {
-        const editor = document.getElementById('yaml-editor');
-        if (!editor || typeof jsyaml === 'undefined') return;
-        try {
-            const config = jsyaml.load(editor.value);
-            // Sync thinking flags from live modelThinking map
-            if (config && config.models && typeof modelThinking !== 'undefined') {
-                for (const [name, val] of Object.entries(modelThinking)) {
-                    if (config.models[name]) {
-                        config.models[name].thinking = val;
-                    }
-                }
-            }
-            editor.value = jsyaml.dump(config, { lineWidth: -1, noRefs: true });
-        } catch (e) {
-            // If YAML is invalid, skip refresh
-        }
     },
 
     // ── Settings Toggle ──────────────────────────────────────────────
@@ -1716,6 +1427,231 @@ const dvad = {
                 `<span class="file-chip">${s.name}<button class="chip-remove" onclick="event.stopPropagation(); dvad._removeSelectedFile('${targetField}', '${s.path.replace(/'/g, "\\'")}')">&times;</button></span>`
             ).join('');
         }
+    },
+
+    // ── Role/CoT Interactivity (Config Page) ─────────────────────────
+
+    _pendingState: null,
+    _originalState: null,
+
+    // Role key to data-role attribute mapping (used in models table icons)
+    _roleKeyToDataRole: {
+        author: 'author',
+        reviewer1: 'reviewer',
+        reviewer2: 'reviewer',
+        dedup: 'deduplication',
+        normalization: 'normalization',
+        revision: 'revision',
+        integration: 'integration_reviewer',
+    },
+
+    // Singular roles (not reviewer)
+    _singularRoles: ['author', 'dedup', 'normalization', 'revision', 'integration'],
+
+    initRoleInteractivity() {
+        if (typeof initialRoleState === 'undefined') return;
+
+        this._pendingState = JSON.parse(JSON.stringify(initialRoleState));
+        this._originalState = JSON.parse(JSON.stringify(initialRoleState));
+
+        // Attach click handlers to role icons in model cards
+        document.querySelectorAll('.model-role-icons .role-icon').forEach(icon => {
+            icon.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const model = icon.dataset.model;
+                const dataRole = icon.dataset.role;
+                this._handleRoleClick(model, dataRole);
+            });
+        });
+
+        // Attach click handlers to thinking icons in model cards
+        document.querySelectorAll('.model-role-icons .thinking-icon').forEach(icon => {
+            icon.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const model = icon.dataset.model;
+                this._handleThinkingClick(model);
+            });
+        });
+
+        this._renderRoles();
+    },
+
+    _handleRoleClick(model, dataRole) {
+        const roles = this._pendingState.roles;
+
+        if (dataRole === 'reviewer') {
+            // Reviewer logic: ceiling = 2
+            if (roles.reviewer1 === model) {
+                // Unassign reviewer1, compact
+                roles.reviewer1 = roles.reviewer2;
+                roles.reviewer2 = null;
+                this._clearThinkingIfOrphaned(model);
+            } else if (roles.reviewer2 === model) {
+                // Unassign reviewer2
+                roles.reviewer2 = null;
+                this._clearThinkingIfOrphaned(model);
+            } else if (!roles.reviewer1) {
+                roles.reviewer1 = model;
+                this._pendingState.thinking[model] = this._pendingState.thinking[model] || false;
+            } else if (!roles.reviewer2) {
+                roles.reviewer2 = model;
+                this._pendingState.thinking[model] = this._pendingState.thinking[model] || false;
+            }
+            // else: both slots full, no-op
+        } else {
+            // Singular role: map data-role to role key
+            const roleKey = this._dataRoleToKey(dataRole);
+            if (!roleKey) return;
+
+            if (roles[roleKey] === model) {
+                // Unassign
+                roles[roleKey] = null;
+                this._clearThinkingIfOrphaned(model);
+            } else {
+                // Assign (replaces any existing model)
+                const oldModel = roles[roleKey];
+                roles[roleKey] = model;
+                this._pendingState.thinking[model] = this._pendingState.thinking[model] || false;
+                if (oldModel) this._clearThinkingIfOrphaned(oldModel);
+            }
+        }
+
+        this._renderRoles();
+    },
+
+    _dataRoleToKey(dataRole) {
+        const map = {
+            author: 'author',
+            deduplication: 'dedup',
+            normalization: 'normalization',
+            revision: 'revision',
+            integration_reviewer: 'integration',
+        };
+        return map[dataRole] || null;
+    },
+
+    _handleThinkingClick(model) {
+        // No-op if model has no role assignments
+        if (!this._modelHasRole(model)) return;
+        this._pendingState.thinking[model] = !this._pendingState.thinking[model];
+        this._renderRoles();
+    },
+
+    _modelHasRole(model) {
+        const r = this._pendingState.roles;
+        return r.author === model || r.reviewer1 === model || r.reviewer2 === model ||
+            r.dedup === model || r.normalization === model || r.revision === model ||
+            r.integration === model;
+    },
+
+    _clearThinkingIfOrphaned(model) {
+        if (!this._modelHasRole(model)) {
+            this._pendingState.thinking[model] = false;
+        }
+    },
+
+    _renderRoles() {
+        const roles = this._pendingState.roles;
+        const thinking = this._pendingState.thinking;
+
+        // Update model card role icons
+        document.querySelectorAll('.model-role-icons .role-icon').forEach(icon => {
+            const model = icon.dataset.model;
+            const dataRole = icon.dataset.role;
+            let isActive = false;
+
+            if (dataRole === 'reviewer') {
+                isActive = roles.reviewer1 === model || roles.reviewer2 === model;
+            } else {
+                const roleKey = this._dataRoleToKey(dataRole);
+                if (roleKey) isActive = roles[roleKey] === model;
+            }
+
+            icon.classList.toggle('role-active', isActive);
+        });
+
+        // Update thinking icons in model cards
+        document.querySelectorAll('.model-role-icons .thinking-icon').forEach(icon => {
+            const model = icon.dataset.model;
+            const hasRole = this._modelHasRole(model);
+            const isActive = hasRole && !!thinking[model];
+
+            icon.classList.toggle('thinking-active', isActive);
+            icon.classList.toggle('thinking-inert', !hasRole);
+        });
+
+        // Update role summary table
+        document.querySelectorAll('#role-summary .role-summary-row').forEach(row => {
+            const roleKey = row.dataset.roleKey;
+            if (!roleKey) return;
+
+            const model = roles[roleKey] || null;
+            const modelThinking = model ? !!thinking[model] : false;
+
+            const iconEl = row.querySelector('.role-summary-icon');
+            if (iconEl) iconEl.classList.toggle('icon-active', !!model);
+
+            const cotEl = row.querySelector('.role-summary-cot');
+            if (cotEl) cotEl.classList.toggle('cot-active', modelThinking);
+
+            const valueEl = row.querySelector('.role-summary-value');
+            if (valueEl) {
+                if (model) {
+                    valueEl.textContent = model;
+                    valueEl.classList.remove('unassigned');
+                } else {
+                    valueEl.textContent = '-';
+                    valueEl.classList.add('unassigned');
+                }
+            }
+        });
+
+        // Show/hide save toast
+        const changed = JSON.stringify(this._pendingState) !== JSON.stringify(this._originalState);
+        const toast = document.getElementById('save-roles-toast');
+        if (toast) toast.classList.toggle('visible', changed);
+    },
+
+    saveRoles() {
+        this._showConfirmDialog(
+            'Save Role Configuration?',
+            'This will update models.yaml with the new role assignments and CoT settings.',
+            'Save Config',
+            () => this._doSaveRoles(),
+            false,
+        );
+    },
+
+    async _doSaveRoles() {
+        const toast = document.getElementById('save-roles-toast');
+        const btn = toast ? toast.querySelector('.btn') : null;
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+        try {
+            const resp = await fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-DVAD-Token': this.getToken(),
+                },
+                body: JSON.stringify({
+                    roles: this._pendingState.roles,
+                    thinking: this._pendingState.thinking,
+                }),
+            });
+
+            if (resp.ok) {
+                this._originalState = JSON.parse(JSON.stringify(this._pendingState));
+                this._renderRoles();
+            } else {
+                const data = await resp.json();
+                alert(data.detail || 'Save failed');
+            }
+        } catch (err) {
+            alert('Network error: ' + err.message);
+        }
+
+        if (btn) { btn.disabled = false; btn.textContent = 'Save Changes'; }
     },
 };
 

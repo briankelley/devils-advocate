@@ -30,6 +30,51 @@ def _find_dvad_binary() -> str:
     return "(not found in PATH)"
 
 
+def _build_role_assignments(config_path: str | None) -> tuple[list[dict], dict]:
+    """Build role assignments from raw YAML — single source of truth for both pages.
+
+    Returns (role_assignments list, model_thinking dict).
+    """
+    from ..config import load_config, find_config
+    import yaml
+
+    resolved = Path(config_path) if config_path else find_config()
+    config = load_config(resolved)
+
+    with open(str(resolved)) as f:
+        raw = yaml.safe_load(f) or {}
+
+    roles = raw.get("roles", {})
+    all_models = config.get("all_models", config.get("models", {}))
+
+    # Build model thinking map
+    model_thinking = {}
+    for name, m in all_models.items():
+        model_thinking[name] = bool(getattr(m, "thinking", False))
+
+    reviewers = roles.get("reviewers", [])
+
+    def _entry(label, icon, model_name):
+        return {
+            "label": label,
+            "icon": icon,
+            "model": model_name or None,
+            "thinking": model_thinking.get(model_name, False) if model_name else False,
+        }
+
+    role_assignments = [
+        _entry("Author", "pen-tool", roles.get("author")),
+        _entry("Reviewer 1", "scan-eye", reviewers[0] if len(reviewers) > 0 else None),
+        _entry("Reviewer 2", "scan-eye", reviewers[1] if len(reviewers) > 1 else None),
+        _entry("Dedup", "combine", roles.get("deduplication")),
+        _entry("Normalization", "scale", roles.get("normalization")),
+        _entry("Revision", "file-pen", roles.get("revision")),
+        _entry("Integration", "puzzle", roles.get("integration_reviewer")),
+    ]
+
+    return role_assignments, model_thinking
+
+
 # Simple TTL cache for review list
 _review_cache: dict = {"data": None, "expires": 0}
 _CACHE_TTL = 5  # seconds
@@ -66,39 +111,22 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
 
     dvad_binary = _find_dvad_binary()
 
-    # Load role assignments for display (mirrors config page's Role Assignments table)
+    # Load role assignments for display — same routine as config page
     role_assignments = []
     mode_readiness = {}
     has_config_errors = False
     config_error_summary = ""
     try:
-        from ..config import load_config, get_models_by_role, get_config_health, get_mode_readiness
+        from ..config import load_config, get_config_health, get_mode_readiness
         config_path = request.app.state.config_path
         config = load_config(Path(config_path) if config_path else None)
-        roles = get_models_by_role(config)
 
-        # Check for validation issues
         has_config_errors, config_error_summary = get_config_health(config)
         mode_readiness = get_mode_readiness(config)
 
-        def _role_entry(label, icon, model):
-            return {
-                "label": label,
-                "icon": icon,
-                "model": model.name if model else None,
-                "thinking": bool(getattr(model, "thinking", False)) if model else False,
-            }
-
-        reviewers = roles.get("reviewers", [])
-        role_assignments = [
-            _role_entry("Author", "pen-tool", roles.get("author")),
-            _role_entry("Reviewer 1", "scan-eye", reviewers[0] if len(reviewers) > 0 else None),
-            _role_entry("Reviewer 2", "scan-eye", reviewers[1] if len(reviewers) > 1 else None),
-            _role_entry("Dedup", "combine", roles.get("dedup")),
-            _role_entry("Normalization", "scale", roles.get("normalization")),
-            _role_entry("Revision", "file-pen", roles.get("revision")),
-            _role_entry("Integration", "puzzle", roles.get("integration")),
-        ]
+        role_assignments, _ = await asyncio.to_thread(
+            _build_role_assignments, request.app.state.config_path
+        )
     except Exception:
         has_config_errors = True
         config_error_summary = "Configuration could not be loaded"
@@ -394,10 +422,28 @@ async def config_page(request: Request):
         all_models = config.get("all_models", config.get("models", {}))
         model_names = sorted(all_models.keys())
 
-        # Extract current roles
+        # Extract current roles and thinking — shared routine with dashboard
         raw = await asyncio.to_thread(_load_raw_yaml, config_file)
         roles_block = raw.get("roles", {})
         settings_block = raw.get("settings", {})
+        role_assignments, model_thinking = await asyncio.to_thread(
+            _build_role_assignments, request.app.state.config_path
+        )
+
+        # Build initial_role_state for JS pendingState initialization
+        reviewers_list = [r for r in roles_block.get("reviewers", []) if r]
+        initial_role_state = {
+            "roles": {
+                "author": roles_block.get("author") or None,
+                "reviewer1": reviewers_list[0] if len(reviewers_list) > 0 else None,
+                "reviewer2": reviewers_list[1] if len(reviewers_list) > 1 else None,
+                "dedup": roles_block.get("deduplication") or None,
+                "normalization": roles_block.get("normalization") or None,
+                "revision": roles_block.get("revision") or None,
+                "integration": roles_block.get("integration_reviewer") or None,
+            },
+            "thinking": {k: bool(v) for k, v in model_thinking.items()},
+        }
 
         # Group models by vendor (derived from api_base or provider)
         models_by_provider: dict[str, list[tuple[str, object]]] = {}
@@ -430,12 +476,10 @@ async def config_page(request: Request):
         import importlib.resources
         templates_dir = str(importlib.resources.files("devils_advocate") / "templates")
 
-        # Model vendors + thinking maps for JS
+        # Model vendors map (used by config template)
         model_vendors = {}
-        model_thinking = {}
         for name, m in all_models.items():
             model_vendors[name] = _infer_vendor(m)
-            model_thinking[name] = bool(getattr(m, "thinking", False))
 
     except Exception as exc:
         config = None
@@ -456,6 +500,8 @@ async def config_page(request: Request):
         templates_dir = ""
         model_vendors = {}
         model_thinking = {}
+        role_assignments = []
+        initial_role_state = {"roles": {}, "thinking": {}}
 
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "config.html", {
@@ -477,6 +523,8 @@ async def config_page(request: Request):
         "templates_dir": templates_dir,
         "model_vendors": model_vendors,
         "model_thinking": model_thinking,
+        "role_assignments": role_assignments,
+        "initial_role_state": initial_role_state,
         "settings": settings_block,
         "csrf_token": request.app.state.csrf_token,
     })

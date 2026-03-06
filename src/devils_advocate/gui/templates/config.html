@@ -123,48 +123,19 @@
             </div>
             <h2 style="margin-top:12px">Role Assignments</h2>
             <div class="role-summary" id="role-summary">
-                <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-author"><i data-lucide="pen-tool"></i></span>
-                    <span class="role-summary-cot" id="rsc-author"><i data-lucide="brain"></i></span>
-                    <span class="role-summary-label">Author:</span>
-                    <span class="role-summary-value" id="rs-author">—</span>
+                {% set role_keys = ['author', 'reviewer1', 'reviewer2', 'dedup', 'normalization', 'revision', 'integration'] %}
+                {% for r in role_assignments %}
+                <div class="role-summary-row" data-role-key="{{ role_keys[loop.index0] }}">
+                    <span class="role-summary-icon {{ 'icon-active' if r.model }}"><i data-lucide="{{ r.icon }}"></i></span>
+                    <span class="role-summary-cot {{ 'cot-active' if r.thinking }}"><i data-lucide="brain"></i></span>
+                    <span class="role-summary-label">{{ r.label }}:</span>
+                    {% if r.model %}
+                    <span class="role-summary-value">{{ r.model }}</span>
+                    {% else %}
+                    <span class="role-summary-value unassigned">-</span>
+                    {% endif %}
                 </div>
-                <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-reviewer1"><i data-lucide="scan-eye"></i></span>
-                    <span class="role-summary-cot" id="rsc-reviewer1"><i data-lucide="brain"></i></span>
-                    <span class="role-summary-label">Reviewer 1:</span>
-                    <span class="role-summary-value" id="rs-reviewer1">—</span>
-                </div>
-                <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-reviewer2"><i data-lucide="scan-eye"></i></span>
-                    <span class="role-summary-cot" id="rsc-reviewer2"><i data-lucide="brain"></i></span>
-                    <span class="role-summary-label">Reviewer 2:</span>
-                    <span class="role-summary-value" id="rs-reviewer2">—</span>
-                </div>
-                <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-deduplication"><i data-lucide="combine"></i></span>
-                    <span class="role-summary-cot" id="rsc-deduplication"><i data-lucide="brain"></i></span>
-                    <span class="role-summary-label">Dedup:</span>
-                    <span class="role-summary-value" id="rs-deduplication">—</span>
-                </div>
-                <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-normalization"><i data-lucide="scale"></i></span>
-                    <span class="role-summary-cot" id="rsc-normalization"><i data-lucide="brain"></i></span>
-                    <span class="role-summary-label">Normalization:</span>
-                    <span class="role-summary-value" id="rs-normalization">—</span>
-                </div>
-                <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-revision"><i data-lucide="file-pen"></i></span>
-                    <span class="role-summary-cot" id="rsc-revision"><i data-lucide="brain"></i></span>
-                    <span class="role-summary-label">Revision:</span>
-                    <span class="role-summary-value" id="rs-revision">—</span>
-                </div>
-                <div class="role-summary-row">
-                    <span class="role-summary-icon" id="rsi-integration_reviewer"><i data-lucide="puzzle"></i></span>
-                    <span class="role-summary-cot" id="rsc-integration_reviewer"><i data-lucide="brain"></i></span>
-                    <span class="role-summary-label">Integration:</span>
-                    <span class="role-summary-value" id="rs-integration_reviewer">—</span>
-                </div>
+                {% endfor %}
             </div>
             <div class="role-descriptions">
                 <details>
@@ -192,8 +163,9 @@
     </div>
 </div>
 
+{# ── Save Roles Toast ───────────────────────────────────────────────── #}
 <div class="save-roles-toast" id="save-roles-toast">
-    <button class="btn btn-accent" onclick="dvad.saveRoleAssignments()">Save Role Assignments</button>
+    <button class="btn btn-accent" onclick="dvad.saveRoles()">Save Changes</button>
 </div>
 
 {# ── Raw YAML Tab ───────────────────────────────────────────────────── #}
@@ -211,21 +183,15 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
 <script>
-    var modelVendors = {{ model_vendors|tojson }};
-    var modelThinking = {{ model_thinking|tojson }};
+var initialRoleState = {{ initial_role_state|tojson }};
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     if (typeof lucide !== 'undefined') {
         lucide.createIcons();
     }
-    // Re-init role icons after Lucide replaces <i> with <svg>
-    dvad.initRolePills();
-    dvad.initThinkingToggle();
     dvad.initSettingsToggle();
-    // Re-run now that modelVendors/modelThinking are available
-    // (dvad.init() ran before these vars were defined)
-    dvad._updateRoleSummary();
+    dvad.initRoleInteractivity();
 });
 window.addEventListener('pageshow', function(event) {
     if (event.persisted) {

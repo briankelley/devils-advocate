@@ -741,26 +741,6 @@ async def set_model_timeout(request: Request):
     return JSONResponse({"status": "ok", "model_name": model_name, "timeout": timeout})
 
 
-@router.post("/config/model-thinking")
-async def set_model_thinking(request: Request):
-    """Toggle a model's thinking/reasoning setting."""
-    _check_csrf(request)
-    body = await request.json()
-    model_name = body.get("model_name", "")
-    thinking = body.get("thinking", False)
-
-    if not model_name:
-        raise HTTPException(status_code=400, detail="model_name is required")
-
-    def _apply(data: dict) -> None:
-        if "models" not in data or model_name not in data["models"]:
-            raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found in config")
-        data["models"][model_name]["thinking"] = bool(thinking)
-
-    await _mutate_yaml_config(request, _apply)
-    return JSONResponse({"status": "ok", "model_name": model_name, "thinking": bool(thinking)})
-
-
 @router.post("/config/model-max-tokens")
 async def set_model_max_tokens(request: Request):
     """Update a single model's max_out_configured value in the config file."""
@@ -890,9 +870,15 @@ async def get_readiness(request: Request):
 
 @router.post("/config")
 async def save_config(request: Request):
-    """Save config YAML (overwrites the loaded config file only)."""
+    """Save config - accepts raw YAML or structured role/thinking payload."""
     _check_csrf(request)
     body = await request.json()
+
+    # Structured payload path: { roles: {...}, thinking: {...} }
+    if "roles" in body and "yaml" not in body:
+        return await _save_structured_config(request, body)
+
+    # Raw YAML path: { yaml: "..." }
     yaml_content = body.get("yaml", "")
 
     import yaml
@@ -958,6 +944,41 @@ async def save_config(request: Request):
     await asyncio.to_thread(StorageManager._atomic_write, target, final_content)
 
     return JSONResponse({"status": "ok", "path": str(target)})
+
+
+async def _save_structured_config(request: Request, body: dict):
+    """Handle structured role/thinking payload from the config page UI."""
+    roles_payload = body.get("roles", {})
+    thinking_payload = body.get("thinking", {})
+
+    def _apply(data: dict) -> None:
+        # Update roles block
+        if "roles" not in data:
+            data["roles"] = {}
+
+        data["roles"]["author"] = roles_payload.get("author") or None
+
+        # Build reviewers list from reviewer1/reviewer2
+        reviewers = []
+        for key in ("reviewer1", "reviewer2"):
+            val = roles_payload.get(key)
+            if val:
+                reviewers.append(val)
+        data["roles"]["reviewers"] = reviewers if reviewers else []
+
+        data["roles"]["deduplication"] = roles_payload.get("dedup") or None
+        data["roles"]["normalization"] = roles_payload.get("normalization") or None
+        data["roles"]["revision"] = roles_payload.get("revision") or None
+        data["roles"]["integration_reviewer"] = roles_payload.get("integration") or None
+
+        # Update per-model thinking flags
+        models = data.get("models", {})
+        for model_name, enabled in thinking_payload.items():
+            if model_name in models:
+                models[model_name]["thinking"] = bool(enabled)
+
+    await _mutate_yaml_config(request, _apply)
+    return JSONResponse({"status": "ok"})
 
 
 # ── .env File Helpers ────────────────────────────────────────────────────────
