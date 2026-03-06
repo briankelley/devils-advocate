@@ -138,7 +138,7 @@
     <span class="summary-tag tag-overridden">Overridden: {{ overridden|length }}</span>
     {% if elapsed_str %}<span class="summary-tag" style="color:var(--text-dim)">Elapsed: {{ elapsed_str }}</span>{% endif %}
 </div>
-<div class="overrides-banner" id="overrides-banner">All escalations resolved — ready for revision</div>
+<div class="overrides-banner" id="overrides-banner">Escalation resolved — updated revision available</div>
 {% endif %}
 
 {# Cost Estimate Table (dry_run only) #}
@@ -351,16 +351,23 @@
 
 {# Footer Actions #}
 <div class="footer-actions">
-    {% if has_revised and revision_stale %}
-    <a href="/api/review/{{ review_id }}/revised" class="btn download-revised-link">Download Revised (stale)</a>
-    <button class="btn btn-accent" id="revise-btn" onclick="dvad.startRevision('{{ review_id }}')">Regenerate Revised</button>
-    {% elif has_revised %}
-    <a href="/api/review/{{ review_id }}/revised" class="btn btn-green download-revised-link">Download Revised</a>
-    {% elif has_original %}
-    <button class="btn btn-accent" id="revise-btn" onclick="dvad.startRevision('{{ review_id }}')">Generate Revision</button>
-    {% else %}
-    <button class="btn btn-disabled" disabled title="original_content.txt not found">Generate Revision</button>
+    {# Always show download if revision exists #}
+    {% if has_revised %}
+    <a href="/api/review/{{ review_id }}/revised" class="btn btn-green download-revised-link">Download Current Revision</a>
     {% endif %}
+
+    {# Show generate/regenerate button when original exists #}
+    {% if has_original %}
+        {% if escalated|length > 0 %}
+        <button class="btn" id="revise-btn" disabled
+                onclick="dvad.startRevision('{{ review_id }}')"
+                title="Resolve at least one escalation to enable">Generate Updated Revision</button>
+        {% elif not has_revised %}
+        <button class="btn btn-accent" id="revise-btn"
+                onclick="dvad.startRevision('{{ review_id }}')">Generate Revision</button>
+        {% endif %}
+    {% endif %}
+
     {% if has_report and ledger.get('result') not in ('dry_run', 'cost_exceeded', 'cost_aborted', 'failed') %}
     <a href="/api/review/{{ review_id }}/report" class="btn">Download Report</a>
     {% endif %}

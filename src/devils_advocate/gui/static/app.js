@@ -365,7 +365,7 @@ const dvad = {
                     }[resolution] || resolution;
                     actions.innerHTML = `<span class="dim">Resolution: ${label}</span>`;
                 }
-                this._checkAllOverridesResolved();
+                this._checkAnyOverrideResolved();
             } else {
                 alert(data.detail || 'Override failed');
                 buttons.forEach(b => b.disabled = false);
@@ -605,24 +605,27 @@ const dvad = {
         }
     },
 
-    _checkAllOverridesResolved() {
+    _checkAnyOverrideResolved() {
         const cards = document.querySelectorAll('.group-card.card-escalated');
         if (!cards.length) return;
-        const allResolved = Array.from(cards).every(c => c.classList.contains('resolved'));
-        if (allResolved) {
-            // Mark overrides pipeline step as done
-            const overrideStep = document.getElementById('pipe-overrides');
-            if (overrideStep) {
-                overrideStep.className = 'pipeline-step done';
+        const anyResolved = Array.from(cards).some(c => c.classList.contains('resolved'));
+        if (anyResolved) {
+            // Enable the "Generate Updated Revision" button
+            const reviseBtn = document.getElementById('revise-btn');
+            if (reviseBtn) {
+                reviseBtn.disabled = false;
+                reviseBtn.classList.add('btn-accent');
             }
             // Show banner
             const banner = document.getElementById('overrides-banner');
             if (banner) banner.classList.add('visible');
-            // Highlight revision button
-            const reviseBtn = document.getElementById('revise-btn');
-            if (reviseBtn) {
-                reviseBtn.classList.add('btn-accent');
-                reviseBtn.style.animation = 'step-pulse 2s ease-in-out 3';
+        }
+        // Mark overrides pipeline step as done when ALL are resolved
+        const allResolved = Array.from(cards).every(c => c.classList.contains('resolved'));
+        if (allResolved) {
+            const overrideStep = document.getElementById('pipe-overrides');
+            if (overrideStep) {
+                overrideStep.className = 'pipeline-step done';
             }
         }
     },
@@ -663,19 +666,24 @@ const dvad = {
                     this._showPatchStatus(data);
                 }
 
-                // Hide generate button, update or add download link
-                if (btn) btn.style.display = 'none';
+                // Update download link and keep button available for re-generation
                 const footer = document.querySelector('.footer-actions');
                 const existing = footer && footer.querySelector('.download-revised-link');
                 if (existing) {
-                    existing.textContent = 'Download Revised';
+                    existing.textContent = 'Download Current Revision';
                     existing.className = 'btn btn-green download-revised-link';
                 } else if (footer) {
                     const link = document.createElement('a');
                     link.href = `/api/review/${reviewId}/revised`;
                     link.className = 'btn btn-green download-revised-link';
-                    link.textContent = 'Download Revised';
+                    link.textContent = 'Download Current Revision';
                     footer.insertBefore(link, footer.firstChild);
+                }
+                // Re-enable button for subsequent regenerations
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Regenerate Updated Revision';
+                    btn.classList.add('btn-accent');
                 }
                 // Mark revision pipeline step as done
                 const revisionStep = document.getElementById('pipe-revision');
