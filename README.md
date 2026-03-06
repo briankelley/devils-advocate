@@ -25,7 +25,7 @@ DVAD is borne from my frustrations with code generated inside an AI echo chamber
 - Comfortably Confrontational: 3 API keys from 3 different providers - one for the author, one per reviewer. (*Different providers mean different blind spots and that's where the friction comes from. Friction is good.*)
 - Supported providers: Every frontier provider that uses OpenAI-compatible, Anthropic, or Minimax prompt formatting. (Google Gemini, ChatGPT, Claude, DeepSeek, xAI/Grok, Minimax, Kimi, etc.) 
 
-## Quick Install & Update
+## Quick Install (or update to latest)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/briankelley/devils-advocate/main/install.sh | bash
