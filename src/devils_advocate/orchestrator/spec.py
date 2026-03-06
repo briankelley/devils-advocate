@@ -223,7 +223,6 @@ async def run_spec_review(
                 points = result
                 all_points.extend(points)
                 console.print(f"  {r.name}: {len(points)} suggestions")
-                storage.log(f"Parsed {len(points)} suggestions from {r.name}")
                 storage.save_intermediate(
                     review_id,
                     "round1",
@@ -286,7 +285,7 @@ async def run_spec_review(
                 f"({multi_source} with multi-reviewer consensus)"
             )
             storage.log(
-                f"  Deduplication: {len(groups)} groups from {len(all_points)} suggestions "
+                f"  Deduplication: combined {len(all_points)} suggestions into {len(groups)} groups "
                 f"({multi_source} with multi-reviewer consensus)"
             )
 

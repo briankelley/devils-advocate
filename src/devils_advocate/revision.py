@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 
-from .cost import check_context_window
+from .cost import check_context_window, estimate_tokens
 from .prompts import load_template
 from .providers import call_with_retry
 from .types import CostTracker, ModelConfig, ReviewGroup
@@ -234,13 +234,20 @@ async def _run_revision_core(
             f"caps output (role default was {REVISION_MAX_OUTPUT_TOKENS})"
         )
 
-    thinking_str = ", thinking: on" if revision_model.thinking else ""
-    max_str = f"{revision_model.max_out_configured}/{effective_max}" if revision_model.max_out_configured else str(effective_max)
-    base_info = f"timeout: {revision_model.timeout}s, max_out: {max_str}{thinking_str}"
+    sent = estimate_tokens(prompt)
+    configured = revision_model.max_out_configured or effective_max
+    thinking_str = "on" if revision_model.thinking else "off"
+    call_info = (
+        f"sent: {sent}, timeout: {revision_model.timeout}s, "
+        f"max_out: {configured}/{effective_max}, thinking: {thinking_str}"
+    )
     if finding_count:
-        storage.log(f"Revision: calling {revision_model.name} ({base_info}, incorporating {finding_count} accepted findings)")
+        storage.log(
+            f"Revision: calling {revision_model.name} to incorporate "
+            f"{finding_count} findings ({call_info})"
+        )
     else:
-        storage.log(f"Revision: calling {revision_model.name} ({base_info})")
+        storage.log(f"Revision: calling {revision_model.name} ({call_info})")
     raw, usage = await call_with_retry(
         client,
         revision_model,
@@ -263,7 +270,7 @@ async def _run_revision_core(
     )
     storage.log(
         f"Revision: {revision_model.name} responded "
-        f"({usage['output_tokens']} output tokens)"
+        f"(recv: {usage['output_tokens']})"
     )
 
     storage.save_intermediate(review_id, "revision", "revision_raw.txt", raw)

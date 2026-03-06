@@ -18,7 +18,7 @@ class TestClassifyLogMessage:
 
     def test_round1_responded(self):
         ev = classify_log_message(
-            "Round 1: gpt-4o responded (in: 1200, out: 4821 tokens, running total: 6021)"
+            "Round 1: gpt-4o responded (recv: 4821)"
         )
         assert ev.phase == "round1_responded"
         assert "gpt-4o" in ev.detail["groups"]
@@ -31,10 +31,57 @@ class TestClassifyLogMessage:
 
     def test_round1_author(self):
         ev = classify_log_message(
-            "Round 1: author responding to grouped feedback "
-            "(timeout: 120s, max_out: 32000)"
+            "Round 1: calling author to respond to grouped feedback "
+            "(sent: 810, timeout: 120s, max_out: 32000/32000, thinking: off)"
         )
         assert ev.phase == "round1_author"
+
+    def test_round2_sending(self):
+        ev = classify_log_message(
+            "Round 2: sending author responses to reviewers for rebuttal"
+        )
+        assert ev.phase == "round2_sending"
+
+    def test_round2_calling(self):
+        ev = classify_log_message(
+            "Round 2: calling gpt-4o (sent: 3200, timeout: 120s, max_out: 8192/8192, thinking: off)"
+        )
+        assert ev.phase == "round2_calling"
+
+    def test_round2_responded(self):
+        ev = classify_log_message("Round 2: gpt-4o responded (recv: 1500)")
+        assert ev.phase == "round2_responded"
+
+    def test_round2_complete(self):
+        ev = classify_log_message("Round 2: rebuttals complete -- 3 challenge(s)")
+        assert ev.phase == "round2_complete"
+
+    def test_round2_author_last_word(self):
+        ev = classify_log_message(
+            "Round 2: giving author last word on 3 challenge(s)"
+        )
+        assert ev.phase == "round2_author"
+
+    def test_round2_author_calling(self):
+        ev = classify_log_message(
+            "Round 2: calling author to respond to rebuttals "
+            "(sent: 5000, timeout: 120s, max_out: 32000/32000, thinking: off)"
+        )
+        assert ev.phase == "round2_author_calling"
+
+    def test_round2_author_responded(self):
+        ev = classify_log_message("Round 2: author responded (recv: 2000)")
+        assert ev.phase == "round2_author_responded"
+
+    def test_governance_applying(self):
+        ev = classify_log_message("Governance: applying deterministic rules")
+        assert ev.phase == "governance_applying"
+
+    def test_revision_generating(self):
+        ev = classify_log_message(
+            "Revision: generating revised artifact with authors final input"
+        )
+        assert ev.phase == "revision_generating"
 
     def test_round2_skip_all(self):
         ev = classify_log_message(
@@ -84,7 +131,7 @@ class TestClassifyLogMessage:
 
     def test_revision_responded(self):
         ev = classify_log_message(
-            "Revision: claude-sonnet responded (8000 output tokens)"
+            "Revision: claude-sonnet responded (recv: 8000)"
         )
         assert ev.phase == "revision_responded"
 

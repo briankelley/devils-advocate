@@ -210,7 +210,6 @@ async def run_plan_review(
                 points = result
                 all_points.extend(points)
                 console.print(f"  {r.name}: {len(points)} review points")
-                storage.log(f"Parsed {len(points)} review points from {r.name}")
                 storage.save_intermediate(
                     review_id,
                     "round1",
@@ -260,7 +259,7 @@ async def run_plan_review(
                 )
                 assign_guids(groups)
                 storage.log(
-                    f"  Deduplication: {len(groups)} groups from {len(all_points)} points"
+                    f"  Deduplication: combined {len(all_points)} points into {len(groups)} groups"
                 )
             storage.save_intermediate(
                 review_id,

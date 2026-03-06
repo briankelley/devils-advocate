@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 
 from .types import CostTracker, ModelConfig, ReviewContext, ReviewGroup, ReviewPoint
-from .cost import check_context_window
+from .cost import check_context_window, estimate_tokens
 from .prompts import build_dedup_prompt, build_spec_dedup_prompt
 from .providers import MAX_OUTPUT_TOKENS, call_with_retry
 from .parser import parse_dedup_response, parse_spec_dedup_response
@@ -97,10 +97,13 @@ async def deduplicate_points(
         return promote_points_to_groups(all_points, ctx)
 
     if log_fn:
-        thinking_str = ", thinking: on" if model.thinking else ""
+        sent = estimate_tokens(prompt)
+        configured = model.max_out_configured or MAX_OUTPUT_TOKENS
+        thinking_str = "on" if model.thinking else "off"
         log_fn(
             f"  Deduplication: calling {model.name} "
-            f"({len(all_points)} points, max_out: {MAX_OUTPUT_TOKENS}{thinking_str})"
+            f"({len(all_points)} points, sent: {sent}, timeout: {model.timeout}s, "
+            f"max_out: {configured}/{MAX_OUTPUT_TOKENS}, thinking: {thinking_str})"
         )
 
     text, usage = await call_with_retry(
@@ -121,7 +124,7 @@ async def deduplicate_points(
     if log_fn:
         log_fn(
             f"  Deduplication: {model.name} responded "
-            f"({usage.get('output_tokens', 0)} output tokens)"
+            f"(recv: {usage.get('output_tokens', 0)})"
         )
 
     if mode == "spec":

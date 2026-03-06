@@ -412,8 +412,6 @@ def parse_author_response(
                     candidate = groups[seq - 1].group_id
                     if candidate not in matched_group_ids:
                         matched_gid = candidate
-                        if log_fn:
-                            log_fn(f"  ID match: positional fallback {seq} -> '{matched_gid}'")
 
         if not matched_gid:
             id_failures += 1

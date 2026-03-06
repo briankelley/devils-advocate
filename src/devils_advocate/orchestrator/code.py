@@ -205,7 +205,7 @@ async def run_code_review(
                 )
                 assign_guids(groups)
                 storage.log(
-                    f"  Deduplication: {len(groups)} groups from {len(all_points)} points"
+                    f"  Deduplication: combined {len(all_points)} points into {len(groups)} groups"
                 )
             storage.save_intermediate(
                 review_id,

@@ -39,12 +39,13 @@ _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     # Cost events (must be first — suppressed from console log)
     (r"§cost role=(\S+) model=(.+?) cost=([\d.]+) total=([\d.]+)(?: in_tokens=(\d+) out_tokens=(\d+) total_tokens=(\d+))?", "cost_update", {}),
 
-    # Round 1 reviewer calls
+    # Round 1
+    (r"Round 1: calling author to respond to grouped feedback", "round1_author", {}),
     (r"Round 1: calling (.+)", "round1_calling", {}),
+    (r"Round 1: author responded", "round1_author_responded", {}),
     (r"Round 1: (.+) responded \(", "round1_responded", {}),
     (r"No structured points from (.+) -- trying LLM normalization", "normalization", {}),
     (r"Normalization: calling (.+?) \(fallback for (.+?),", "normalization", {}),
-    (r"Round 1: author responding to grouped feedback", "round1_author", {}),
 
     # Dedup
     (r"Deduplication: calling (.+?) \((\d+) points", "dedup_calling", {}),
@@ -53,11 +54,19 @@ _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     # Round 2
     (r"Round 2: all groups accepted by author -- skipping", "round2_skip", {}),
     (r"Round 2: (.+) has no contested groups -- skipping", "round2_skip_reviewer", {}),
+    (r"Round 2: sending author responses", "round2_sending", {}),
+    (r"Round 2: calling author to respond to rebuttals", "round2_author_calling", {}),
+    (r"Round 2: calling (.+?)(?:\s*\(|$)", "round2_calling", {}),
+    (r"Round 2: author responded", "round2_author_responded", {}),
+    (r"Round 2: (.+) responded \(", "round2_responded", {}),
+    (r"Round 2: rebuttals complete", "round2_complete", {}),
+    (r"Round 2: giving author last word", "round2_author", {}),
     (r"Skipping (.+) rebuttal: context exceeded", "round2_skip_context", {}),
     (r"Rebuttal (.+) failed: (.+)", "round2_rebuttal_failed", {}),
     (r"Author final response failed: (.+)", "round2_author_failed", {}),
 
     # Governance
+    (r"Governance: applying", "governance_applying", {}),
     (r"Catastrophic parse failure", "governance_catastrophic", {}),
     (r"Governance complete: (.+)", "governance_complete", {}),
 
@@ -66,6 +75,7 @@ _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     (r"Cost limit exceeded: \$(.+) >= \$(.+)", "cost_exceeded", {}),
 
     # Revision
+    (r"Revision: generating revised artifact", "revision_generating", {}),
     (r"Revision: large context .+ expect ~(\d+) min", "revision_duration_estimate", {}),
     (r"Revision: calling (.+?)(?:\s*\(|$)", "revision_calling", {}),
     (r"Revision: (.+) responded \(", "revision_responded", {}),

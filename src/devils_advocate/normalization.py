@@ -11,6 +11,7 @@ from __future__ import annotations
 import httpx
 
 from .types import CostTracker, ModelConfig, ReviewPoint
+from .cost import estimate_tokens
 from .prompts import build_normalization_prompt
 from .providers import MAX_OUTPUT_TOKENS, call_with_retry
 from .parser import parse_review_response
@@ -29,10 +30,13 @@ async def normalize_review_response(
     """LLM normalization fallback: send raw response to a model for structured extraction."""
     prompt = build_normalization_prompt(raw)
     if log_fn:
-        thinking_str = ", thinking: on" if model.thinking else ""
+        sent = estimate_tokens(prompt)
+        configured = model.max_out_configured or MAX_OUTPUT_TOKENS
+        thinking_str = "on" if model.thinking else "off"
         log_fn(
             f"  Normalization: calling {model.name} "
-            f"(fallback for {reviewer_name}, max_out: {MAX_OUTPUT_TOKENS}{thinking_str})"
+            f"(fallback for {reviewer_name}, sent: {sent}, timeout: {model.timeout}s, "
+            f"max_out: {configured}/{MAX_OUTPUT_TOKENS}, thinking: {thinking_str})"
         )
 
     try:

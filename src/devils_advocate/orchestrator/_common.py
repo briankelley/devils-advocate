@@ -74,16 +74,15 @@ from ._formatting import (  # noqa: F401
 )
 
 
-def _model_settings_str(model: ModelConfig, effective_max: int) -> str:
-    """Build a compact settings string for log lines."""
-    parts = [f"timeout: {model.timeout}s"]
-    if model.max_out_configured:
-        parts.append(f"max_out: {model.max_out_configured}/{effective_max}")
-    else:
-        parts.append(f"max_out: {effective_max}")
-    if model.thinking:
-        parts.append("thinking: on")
-    return ", ".join(parts)
+def _call_info(model: ModelConfig, prompt: str, effective_max: int) -> str:
+    """Build the standard parenthetical for 'calling' log lines."""
+    sent = estimate_tokens(prompt)
+    configured = model.max_out_configured or effective_max
+    thinking_str = "on" if model.thinking else "off"
+    return (
+        f"sent: {sent}, timeout: {model.timeout}s, "
+        f"max_out: {configured}/{effective_max}, thinking: {thinking_str}"
+    )
 
 
 def _save_stub_ledger(
@@ -188,7 +187,7 @@ async def _call_reviewer(
     effective_max = reviewer.max_out_configured or MAX_OUTPUT_TOKENS
     storage.log(
         f"Round 1: calling {reviewer.name} "
-        f"({_model_settings_str(reviewer, effective_max)})"
+        f"({_call_info(reviewer, prompt, effective_max)})"
     )
     sys_prompt = system_prompt if system_prompt is not None else get_reviewer_system_prompt()
     text, usage = await call_with_retry(
@@ -210,8 +209,7 @@ async def _call_reviewer(
     )
     storage.log(
         f"Round 1: {reviewer.name} responded "
-        f"(in: {usage['input_tokens']}, out: {usage['output_tokens']} tokens, "
-        f"running total: {cost_tracker.total_input_tokens + cost_tracker.total_output_tokens})"
+        f"(recv: {usage['output_tokens']})"
     )
 
     # Save raw response
@@ -314,6 +312,11 @@ async def _run_round2_exchange(
             storage.log(f"Skipping {r.name} rebuttal: context exceeded")
             continue
 
+        effective_max_r = r.max_out_configured or MAX_OUTPUT_TOKENS
+        storage.log(
+            f"Round 2: calling {r.name} "
+            f"({_call_info(r, rebuttal_prompt, effective_max_r)})"
+        )
         rebuttal_reviewers.append(r)
         rebuttal_coroutines.append(
             call_with_retry(
@@ -321,20 +324,12 @@ async def _run_round2_exchange(
                 r,
                 get_reviewer_system_prompt(),
                 rebuttal_prompt,
-                r.max_out_configured or MAX_OUTPUT_TOKENS,
+                effective_max_r,
                 log_fn=storage.log,
                 mode=mode,
             )
         )
 
-    def _brief(r):
-        parts = [f"{r.timeout}s"]
-        if r.thinking:
-            parts.append("thinking")
-        return f"{r.name} ({', '.join(parts)})"
-
-    reviewer_info = ", ".join(_brief(r) for r in rebuttal_reviewers)
-    storage.log(f"Round 2: calling {len(rebuttal_reviewers)} reviewer(s) for rebuttal: {reviewer_info}")
     console.print(f"  Sending rebuttals to {len(rebuttal_reviewers)} reviewer(s)")
 
     rebuttal_results = await asyncio.gather(
@@ -355,6 +350,10 @@ async def _run_round2_exchange(
             r.cost_per_1k_input,
             r.cost_per_1k_output,
             role=reviewer_roles.get(r.name, "reviewer") if reviewer_roles else "reviewer",
+        )
+        storage.log(
+            f"Round 2: {r.name} responded "
+            f"(recv: {rebuttal_usage['output_tokens']})"
         )
         storage.save_intermediate(
             review_id, "round2", f"{r.name}_rebuttal_raw.txt", rebuttal_raw
@@ -391,7 +390,10 @@ async def _run_round2_exchange(
     )
 
     if challenged_group_ids:
-        storage.log(f"Round 2: author responding to {len(challenged_group_ids)} challenge(s)")
+        storage.log(
+            f"Round 2: giving author last word on "
+            f"{len(challenged_group_ids)} challenge(s)"
+        )
         console.print(
             Panel(
                 f"[bold]Round 2:[/bold] Author responding to "
@@ -414,6 +416,10 @@ async def _run_round2_exchange(
             # Fall through -- governance runs on Round 1 positions only
         else:
             try:
+                storage.log(
+                    f"Round 2: calling author to respond to rebuttals "
+                    f"({_call_info(author, final_prompt, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS)})"
+                )
                 final_raw, final_usage = await call_with_retry(
                     client,
                     author,
@@ -430,6 +436,10 @@ async def _run_round2_exchange(
                     author.cost_per_1k_input,
                     author.cost_per_1k_output,
                     role="author",
+                )
+                storage.log(
+                    f"Round 2: author responded "
+                    f"(recv: {final_usage['output_tokens']})"
                 )
                 storage.save_intermediate(
                     review_id, "round2", "author_final_raw.txt", final_raw
@@ -603,8 +613,8 @@ async def _run_adversarial_pipeline(
         f"  Prompt size: ~{estimate_tokens(round1_author_prompt)} tokens"
     )
     storage.log(
-        f"Round 1: author responding to grouped feedback "
-        f"({_model_settings_str(author, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS)})"
+        f"Round 1: calling author to respond to grouped feedback "
+        f"({_call_info(author, round1_author_prompt, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS)})"
     )
     author_raw, author_usage = await call_with_retry(
         client,
@@ -628,8 +638,7 @@ async def _run_adversarial_pipeline(
     )
     storage.log(
         f"Round 1: author responded "
-        f"(in: {author_usage['input_tokens']}, out: {author_usage['output_tokens']} tokens, "
-        f"running total: {cost_tracker.total_input_tokens + cost_tracker.total_output_tokens})"
+        f"(recv: {author_usage['output_tokens']})"
     )
     storage.save_intermediate(review_id, "round2", "author_raw.txt", author_raw)
 
@@ -648,7 +657,6 @@ async def _run_adversarial_pipeline(
     parsed_count = len(author_responses)
     total_count = len(groups)
     console.print(f"  Parsed: {parsed_count}/{total_count} groups matched")
-    storage.log("Author response parsing complete — continuing review pipeline...")
     if parsed_count < total_count:
         console.print(
             f"  [yellow]Warning: {total_count - parsed_count} groups "
@@ -759,7 +767,7 @@ async def _run_adversarial_pipeline(
         for d in decisions
     )
     if has_actionable:
-        storage.log("Revision: generating revised artifact")
+        storage.log("Revision: generating revised artifact with authors final input")
         console.print(
             Panel(
                 "[bold]Revision:[/bold] Generating revised artifact...",
