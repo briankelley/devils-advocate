@@ -795,10 +795,15 @@ class TestValidateReviewReadiness:
                 provider: openai
                 model_id: test
                 api_key_env: TEST_KEY
+              dedup:
+                provider: openai
+                model_id: test
+                api_key_env: TEST_KEY
             roles:
               author: author
               reviewers:
                 - rev1
+              deduplication: dedup
         """
         config = self._load(tmp_path, yaml_text, monkeypatch)
         issues = validate_review_readiness(config, "plan")
@@ -834,6 +839,7 @@ class TestValidateReviewReadiness:
         assert any("Dedup" in e for e in errors)
 
     def test_plan_one_reviewer_no_dedup_ok(self, tmp_path, monkeypatch):
+        """With 1 reviewer and normalization covered, no dedup error is raised."""
         yaml_text = """\
             models:
               author:
@@ -844,10 +850,15 @@ class TestValidateReviewReadiness:
                 provider: openai
                 model_id: test
                 api_key_env: TEST_KEY
+              norm:
+                provider: openai
+                model_id: test
+                api_key_env: TEST_KEY
             roles:
               author: author
               reviewers:
                 - rev1
+              normalization: norm
         """
         config = self._load(tmp_path, yaml_text, monkeypatch)
         issues = validate_review_readiness(config, "plan")
@@ -969,7 +980,8 @@ class TestValidateReviewReadiness:
         errors = [msg for lvl, msg in issues if lvl == "error"]
         assert not any("Revision" in e for e in errors)
 
-    def test_no_revision_no_author_errors(self, tmp_path, monkeypatch):
+    def test_no_revision_no_author_warns(self, tmp_path, monkeypatch):
+        """Missing revision (with no author fallback) produces a warning, not error."""
         yaml_text = """\
             models:
               rev1:
@@ -982,5 +994,5 @@ class TestValidateReviewReadiness:
         """
         config = self._load(tmp_path, yaml_text, monkeypatch)
         issues = validate_review_readiness(config, "integration")
-        errors = [msg for lvl, msg in issues if lvl == "error"]
-        assert any("Revision" in e for e in errors)
+        warnings = [msg for lvl, msg in issues if lvl == "warn"]
+        assert any("Revision" in w for w in warnings)

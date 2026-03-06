@@ -46,12 +46,18 @@
         <div class="mode-card-meta">
             <div><strong>requires:</strong> spec file(s) in txt or md format</div>
             <div><strong>returns:</strong> revised spec with all suggestions from all reviewers</div>
-            <div class="mode-card-roles"><strong>uses:</strong>
-                {% if mode_readiness.get('spec') %}
-                {% for role in mode_readiness.spec.roles %}
-                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else ('mode-role-assigned' if role.assigned else '') }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
-                {% endfor %}
-                {% else %}reviewer, revision{% endif %}
+            <div class="mode-card-roles">
+                <div class="mode-roles-group">
+                    <span class="mode-roles-label">minimum:</span>
+                    <span class="mode-role">Reviewer 1</span>
+                    <span class="mode-role">Normalization</span>
+                </div>
+                <div class="mode-roles-group">
+                    <span class="mode-roles-label">recommended:</span>
+                    <span class="mode-role">Reviewer 2</span>
+                    <span class="mode-role">Dedup</span>
+                    <span class="mode-role">Revision</span>
+                </div>
             </div>
         </div>
         <div class="mode-card-tip">Mid-tier models produce comparable results to more expensive flagship models here.</div>
@@ -66,12 +72,19 @@
         <div class="mode-card-meta">
             <div><strong>requires:</strong> exactly one code file</div>
             <div><strong>returns:</strong> revised diff patch</div>
-            <div class="mode-card-roles"><strong>uses:</strong>
-                {% if mode_readiness.get('code') %}
-                {% for role in mode_readiness.code.roles %}
-                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else ('mode-role-assigned' if role.assigned else '') }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
-                {% endfor %}
-                {% else %}author, reviewer, revision{% endif %}
+            <div class="mode-card-roles">
+                <div class="mode-roles-group">
+                    <span class="mode-roles-label">minimum:</span>
+                    <span class="mode-role">Author</span>
+                    <span class="mode-role">Reviewer 1</span>
+                    <span class="mode-role">Normalization</span>
+                </div>
+                <div class="mode-roles-group">
+                    <span class="mode-roles-label">recommended:</span>
+                    <span class="mode-role">Reviewer 2</span>
+                    <span class="mode-role">Dedup</span>
+                    <span class="mode-role">Revision</span>
+                </div>
             </div>
         </div>
         <div class="mode-card-tip">Use deep thinkers to catch subtle bugs/blindspots; otherwise mid-tier models perform well here.</div>
@@ -86,12 +99,16 @@
         <div class="mode-card-meta">
             <div><strong>requires:</strong> optional files + project directory</div>
             <div><strong>returns:</strong> remediation plan</div>
-            <div class="mode-card-roles"><strong>uses:</strong>
-                {% if mode_readiness.get('integration') %}
-                {% for role in mode_readiness.integration.roles %}
-                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else ('mode-role-assigned' if role.assigned else '') }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
-                {% endfor %}
-                {% else %}integration, revision{% endif %}
+            <div class="mode-card-roles">
+                <div class="mode-roles-group">
+                    <span class="mode-roles-label">minimum:</span>
+                    <span class="mode-role">Integration Reviewer</span>
+                    <span class="mode-role">Normalization</span>
+                </div>
+                <div class="mode-roles-group">
+                    <span class="mode-roles-label">recommended:</span>
+                    <span class="mode-role">Revision</span>
+                </div>
             </div>
         </div>
         <div class="mode-card-tip">Models with large context windows hold more of your codebase in view and make better cross-system connections. See note on project directory setting below.</div>
@@ -106,12 +123,19 @@
         <div class="mode-card-meta">
             <div><strong>requires:</strong> plan file</div>
             <div><strong>returns:</strong> revised plan with incorporated feedback</div>
-            <div class="mode-card-roles"><strong>uses:</strong>
-                {% if mode_readiness.get('plan') %}
-                {% for role in mode_readiness.plan.roles %}
-                <span class="mode-role {{ 'mode-role-missing' if (role.required == true and not role.assigned) else ('mode-role-assigned' if role.assigned else '') }}">{{ role.label }}{% if not loop.last %},{% endif %}</span>
-                {% endfor %}
-                {% else %}author, reviewer, revision{% endif %}
+            <div class="mode-card-roles">
+                <div class="mode-roles-group">
+                    <span class="mode-roles-label">minimum:</span>
+                    <span class="mode-role">Author</span>
+                    <span class="mode-role">Reviewer 1</span>
+                    <span class="mode-role">Normalization</span>
+                </div>
+                <div class="mode-roles-group">
+                    <span class="mode-roles-label">recommended:</span>
+                    <span class="mode-role">Reviewer 2</span>
+                    <span class="mode-role">Dedup</span>
+                    <span class="mode-role">Revision</span>
+                </div>
             </div>
         </div>
         <div class="mode-card-tip">SOTA flagship models provide the strongest adversarial feedback here. Different providers for each role and increased timeouts recommended.</div>

@@ -1375,15 +1375,27 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     max-width: 95vw;
 }
 
+.mode-card-roles {
+    margin-top: 4px;
+}
+.mode-roles-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 4px;
+    margin-bottom: 2px;
+}
+.mode-roles-label {
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: lowercase;
+    margin-right: 2px;
+    flex-shrink: 0;
+}
 .mode-role {
     display: inline;
-    margin-right: 2px;
-}
-.mode-role-missing {
-    color: var(--red, #ff4757);
-}
-.mode-role-assigned {
-    color: var(--green, #2ed573);
+    font-size: 10px;
 }
 
 .mode-ready-badge {

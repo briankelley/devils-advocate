@@ -262,7 +262,9 @@ def validate_review_readiness(config: dict, mode: str) -> list[tuple[str, str]]:
     """Check whether config has the roles needed for the given review mode.
 
     Returns list of (level, message) tuples.
-    level is 'error' (fatal) or 'warn' (advisory).
+    level is 'error' (fatal — blocks review start) or 'warn' (advisory).
+
+    Only *minimum* roles produce errors; recommended roles produce warnings.
     """
     issues: list[tuple[str, str]] = []
     models = config["models"]
@@ -272,8 +274,12 @@ def validate_review_readiness(config: dict, mode: str) -> list[tuple[str, str]]:
     dedup = [m for m in models.values() if m.deduplication]
     integ = [m for m in models.values() if m.integration_reviewer]
     revision = [m for m in models.values() if "revision" in m.roles]
-    # Revision falls back to author in get_models_by_role, so check that too
+    normalization = [m for m in models.values() if "normalization" in m.roles]
+
+    # Revision falls back to author in get_models_by_role
     has_revision = bool(revision) or bool(authors)
+    # Normalization falls back to dedup in get_models_by_role
+    has_normalization = bool(normalization) or bool(dedup)
 
     # Author-dedup collision (applies to any mode that uses both)
     if authors and dedup:
@@ -281,32 +287,44 @@ def validate_review_readiness(config: dict, mode: str) -> list[tuple[str, str]]:
             issues.append(("error", "Deduplication model must NOT be the author. Assign different models to these roles on the Config page."))
 
     if mode in ("plan", "code"):
+        # Minimum roles
         if len(authors) < 1:
             issues.append(("error", f"{mode.title()} mode requires an Author role. Assign a model to the Author role on the Config page."))
         if len(reviewers) < 1:
             issues.append(("error", f"{mode.title()} mode requires at least 1 Reviewer. Assign a model to a Reviewer role on the Config page."))
-        elif len(reviewers) == 1:
-            issues.append(("warn", f"{mode.title()} review with 1 reviewer - adversarial coverage is significantly reduced."))
+        if not has_normalization:
+            issues.append(("error", f"{mode.title()} mode requires Normalization (falls back to Dedup model). Assign a model to Normalization or Dedup on the Config page."))
+        # Recommended roles
+        if len(reviewers) == 1:
+            issues.append(("warn", f"{mode.title()} review with 1 reviewer — adversarial coverage is significantly reduced."))
         if len(reviewers) >= 2 and len(dedup) == 0:
             issues.append(("error", "Dedup role is required when 2 reviewers are assigned. Assign a model to the Dedup role on the Config page."))
         if not has_revision:
-            issues.append(("error", f"{mode.title()} mode requires a Revision role (or Author as fallback)."))
+            issues.append(("warn", f"No Revision model assigned — the pipeline will fall back to the Author model for revision."))
 
     elif mode == "spec":
+        # Minimum roles
         if len(reviewers) < 1:
             issues.append(("error", "Spec mode requires at least 1 Reviewer. Assign a model to a Reviewer role on the Config page."))
-        elif len(reviewers) == 1:
-            issues.append(("warn", "Spec review with 1 reviewer - adversarial coverage is significantly reduced."))
+        if not has_normalization:
+            issues.append(("error", "Spec mode requires Normalization (falls back to Dedup model). Assign a model to Normalization or Dedup on the Config page."))
+        # Recommended roles
+        if len(reviewers) == 1:
+            issues.append(("warn", "Spec review with 1 reviewer — adversarial coverage is significantly reduced."))
         if len(reviewers) >= 2 and len(dedup) == 0:
             issues.append(("error", "Dedup role is required when 2 reviewers are assigned. Assign a model to the Dedup role on the Config page."))
         if not has_revision:
-            issues.append(("error", "Spec mode requires a Revision role (or Author as fallback)."))
+            issues.append(("warn", "No Revision model assigned — the pipeline will fall back to the Author model for revision."))
 
     elif mode == "integration":
+        # Minimum roles
         if len(integ) < 1:
             issues.append(("error", "Integration mode requires an Integration Reviewer. Assign a model to the Integration Reviewer role on the Config page."))
+        if not has_normalization:
+            issues.append(("error", "Integration mode requires Normalization (falls back to Dedup model). Assign a model to Normalization or Dedup on the Config page."))
+        # Recommended roles
         if not has_revision:
-            issues.append(("error", "Integration mode requires a Revision role (or Author as fallback)."))
+            issues.append(("warn", "No Revision model assigned — the pipeline will fall back to the Author model for revision."))
 
     return issues
 
@@ -366,31 +384,32 @@ def get_models_by_role(config: dict) -> dict:
 
 MODE_ROLES: dict[str, list[dict[str, object]]] = {
     "spec": [
-        {"key": "reviewers", "label": "Reviewer 1", "required": True},
-        {"key": "reviewers", "label": "Reviewer 2", "required": False},
-        {"key": "dedup", "label": "Dedup", "required": "conditional"},
-        {"key": "normalization", "label": "Normalization", "required": False},
-        {"key": "revision", "label": "Revision", "required": True},
+        {"key": "reviewers", "label": "Reviewer 1", "required": True, "tier": "minimum"},
+        {"key": "normalization", "label": "Normalization", "required": True, "tier": "minimum"},
+        {"key": "reviewers", "label": "Reviewer 2", "required": False, "tier": "recommended"},
+        {"key": "dedup", "label": "Dedup", "required": False, "tier": "recommended"},
+        {"key": "revision", "label": "Revision", "required": False, "tier": "recommended"},
     ],
     "plan": [
-        {"key": "author", "label": "Author", "required": True},
-        {"key": "reviewers", "label": "Reviewer 1", "required": True},
-        {"key": "reviewers", "label": "Reviewer 2", "required": False},
-        {"key": "dedup", "label": "Dedup", "required": "conditional"},
-        {"key": "normalization", "label": "Normalization", "required": False},
-        {"key": "revision", "label": "Revision", "required": True},
+        {"key": "author", "label": "Author", "required": True, "tier": "minimum"},
+        {"key": "reviewers", "label": "Reviewer 1", "required": True, "tier": "minimum"},
+        {"key": "normalization", "label": "Normalization", "required": True, "tier": "minimum"},
+        {"key": "reviewers", "label": "Reviewer 2", "required": False, "tier": "recommended"},
+        {"key": "dedup", "label": "Dedup", "required": False, "tier": "recommended"},
+        {"key": "revision", "label": "Revision", "required": False, "tier": "recommended"},
     ],
     "code": [
-        {"key": "author", "label": "Author", "required": True},
-        {"key": "reviewers", "label": "Reviewer 1", "required": True},
-        {"key": "reviewers", "label": "Reviewer 2", "required": False},
-        {"key": "dedup", "label": "Dedup", "required": "conditional"},
-        {"key": "normalization", "label": "Normalization", "required": False},
-        {"key": "revision", "label": "Revision", "required": True},
+        {"key": "author", "label": "Author", "required": True, "tier": "minimum"},
+        {"key": "reviewers", "label": "Reviewer 1", "required": True, "tier": "minimum"},
+        {"key": "normalization", "label": "Normalization", "required": True, "tier": "minimum"},
+        {"key": "reviewers", "label": "Reviewer 2", "required": False, "tier": "recommended"},
+        {"key": "dedup", "label": "Dedup", "required": False, "tier": "recommended"},
+        {"key": "revision", "label": "Revision", "required": False, "tier": "recommended"},
     ],
     "integration": [
-        {"key": "integration", "label": "Integration", "required": True},
-        {"key": "revision", "label": "Revision", "required": True},
+        {"key": "integration", "label": "Integration", "required": True, "tier": "minimum"},
+        {"key": "normalization", "label": "Normalization", "required": True, "tier": "minimum"},
+        {"key": "revision", "label": "Revision", "required": False, "tier": "recommended"},
     ],
 }
 
