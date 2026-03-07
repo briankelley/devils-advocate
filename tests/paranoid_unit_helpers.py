@@ -87,6 +87,15 @@ WRITE_ENDPOINTS: dict[str, dict[str, Any]] = {
         "empty_payload": {"model_name": "", "timeout": None},
         "valid_payload": {"model_name": "test-model", "timeout": 120},
     },
+    "POST /api/config/model-thinking": {
+        "method": "POST",
+        "path": "/api/config/model-thinking",
+        "writes_to": "models.yaml per-model thinking flag",
+        "destroys": "previous thinking value for the named model",
+        "requires_csrf": True,
+        "empty_payload": {"model_name": "", "thinking": None},
+        "valid_payload": {"model_name": "test-model", "thinking": True},
+    },
     "POST /api/config/model-max-tokens": {
         "method": "POST",
         "path": "/api/config/model-max-tokens",
@@ -221,6 +230,14 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "backup_exists": True,  # _mutate_yaml_config now creates .bak
         "confirmation_required": False,  # inline edit, no dialog
         "precondition": "model_name must exist in config, timeout must be 10-7200",
+    },
+    "POST /api/config/model-thinking": {
+        "on_empty_input": "HTTPException 400 (model_name required, thinking must be boolean)",
+        "on_all_empty": "HTTPException 400",
+        "reversible": True,
+        "backup_exists": True,  # _mutate_yaml_config now creates .bak
+        "confirmation_required": False,  # inline edit, no dialog
+        "precondition": "model_name must exist in config, thinking must be a boolean",
     },
     "POST /api/config/model-max-tokens": {
         "on_empty_input": "HTTPException 400 (model_name required)",
@@ -551,6 +568,7 @@ MUTATING_ROUTE_PATTERNS: list[tuple[str, str]] = [
     ("POST", "/api/config"),
     ("POST", "/api/config/validate"),
     ("POST", "/api/config/model-timeout"),
+    ("POST", "/api/config/model-thinking"),
     ("POST", "/api/config/model-max-tokens"),
     ("POST", "/api/config/settings-toggle"),
     ("PUT", "/api/config/env/{env_name}"),
