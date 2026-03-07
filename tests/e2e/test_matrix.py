@@ -837,8 +837,10 @@ class TestInputVariations:
             headers={"X-DVAD-Token": csrf},
         )
 
-        # Retry on 409 (prior review still running)
-        if resp.status == 409:
+        # Retry on 409 (prior review still running) — poll up to 60s
+        for _ in range(6):
+            if resp.status != 409:
+                break
             page.wait_for_timeout(10_000)
             resp = page.request.post(
                 f"{dvad_server}/api/review/start",

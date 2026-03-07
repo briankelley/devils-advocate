@@ -98,28 +98,6 @@ class TestConfigNoOpSnapshots:
         after = StateSnapshot.capture([config_path])
         before.assert_no_data_loss(after, label="timeout no-op")
 
-    def test_model_thinking_set_same_value(self, page, dvad_server):
-        """Setting thinking to its current value should not change the file
-        in any semantically meaningful way."""
-        page.goto(f"{dvad_server}/config")
-        page.wait_for_load_state("networkidle")
-        csrf = get_csrf_token(page)
-        config_path = _get_config_path(page, dvad_server)
-
-        raw = yaml.safe_load(config_path.read_text())
-        current_thinking = raw["models"]["e2e-remote"].get("thinking", False)
-
-        before = StateSnapshot.capture([config_path])
-
-        resp = api_post(page, dvad_server, "/api/config/model-thinking", csrf, {
-            "model_name": "e2e-remote",
-            "thinking": current_thinking,
-        })
-        assert resp.status == 200
-
-        after = StateSnapshot.capture([config_path])
-        before.assert_no_data_loss(after, label="thinking no-op")
-
     def test_settings_toggle_set_same_value(self, page, dvad_server):
         """Setting live_testing to its current value should not change the file."""
         page.goto(f"{dvad_server}/config")

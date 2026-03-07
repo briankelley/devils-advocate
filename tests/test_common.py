@@ -36,7 +36,7 @@ from devils_advocate.types import (
 )
 from devils_advocate.storage import StorageManager
 
-from conftest import (
+from helpers import (
     make_author_final,
     make_author_response,
     make_model_config,

@@ -13,7 +13,7 @@ from devils_advocate.ids import (
 )
 from devils_advocate.types import ReviewGroup
 
-from conftest import make_review_group, make_review_point
+from helpers import make_review_group, make_review_point
 
 
 # ─── TestGenerateReviewId ───────────────────────────────────────────────────

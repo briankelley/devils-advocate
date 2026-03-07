@@ -22,7 +22,7 @@ from devils_advocate.types import (
     ReviewPoint,
 )
 
-from conftest import (
+from helpers import (
     make_author_response,
     make_rebuttal,
     make_review_group,

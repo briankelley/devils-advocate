@@ -20,7 +20,7 @@ from devils_advocate.revision import (
 from devils_advocate.types import CostTracker, ModelConfig, ReviewGroup, ReviewPoint
 from devils_advocate.storage import StorageManager
 
-from conftest import make_review_group, make_review_point
+from helpers import make_review_group, make_review_point
 
 
 # ---------------------------------------------------------------------------

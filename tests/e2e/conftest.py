@@ -9,7 +9,7 @@ import socket
 import subprocess
 import sys
 import time
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,7 +21,6 @@ BASELINES = Path(__file__).parent / "baselines"
 FAILURES_DIR = Path(__file__).parent / "failures"
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
-REMOTE_LLM_URL = "https://38.72.121.134/llm"
 
 # Accumulator for findings report (populated by pytest_runtest_makereport)
 _collected_results: list[dict] = []
@@ -85,25 +84,6 @@ def pytest_runtest_makereport(item, call):
         })
 
 
-# ─── Remote LLM health check ────────────────────────────────────────────────
-
-
-def _remote_llm_is_healthy() -> bool:
-    """Check if the remote LLM endpoint is reachable."""
-    try:
-        resp = httpx.get(f"{REMOTE_LLM_URL}/health", timeout=10, verify=False)
-        return resp.status_code == 200
-    except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError):
-        return False
-
-
-@pytest.fixture(scope="session")
-def remote_llm():
-    """Ensure remote LLM is reachable. Skips the test session if not."""
-    if not _remote_llm_is_healthy():
-        pytest.skip(f"Remote LLM at {REMOTE_LLM_URL} is not reachable")
-    yield REMOTE_LLM_URL
-
 
 # ─── SSL bypass for httpx (self-signed cert on remote LLM) ──────────────────
 
@@ -137,9 +117,12 @@ _original_async_post = httpx.AsyncClient.post
 
 
 async def _patched_async_post(self, url, **kwargs):
-    """Inject thinking system prompt for local LLM requests."""
+    """Inject thinking system prompt for local/remote LLM requests."""
     url_str = str(url)
-    if "127.0.0.1:8080" in url_str and "chat/completions" in url_str:
+    _llm_url = os.environ.get("DVAD_LLM_URL", LOCAL_LLM_URL)
+    # Match against the configured LLM host (local or remote)
+    _llm_host = _llm_url.split("://")[-1].split("/")[0]
+    if _llm_host in url_str and "chat/completions" in url_str:
         json_body = kwargs.get("json")
         if json_body and isinstance(json_body, dict):
             messages = json_body.get("messages", [])
@@ -161,7 +144,7 @@ def _inject_local_thinking():
         yield
 
 
-# ─── Local LLM server management (kept for backward compat) ─────────────────
+# ─── LLM server management ───────────────────────────────────────────────────
 
 LLAMA_SERVER_BIN = Path("/media/kelleyb/DATA2/LLM/llama.cpp/build/bin/llama-server")
 LLAMA_LIB_DIR = LLAMA_SERVER_BIN.parent
@@ -182,12 +165,31 @@ def _llm_is_running() -> bool:
 
 @pytest.fixture(scope="session")
 def local_llm():
-    """Ensure a local LLM server is available for live flow tests.
+    """Ensure an LLM server is available for live flow tests.
 
-    If one is already running on port 8080, use it.
-    Otherwise, launch llama-server as a subprocess and tear it down after tests.
-    Skips if the binary or model file is missing.
+    Behaviour is controlled by the ``DVAD_LLM_URL`` environment variable:
+
+    * **Unset / ``http://127.0.0.1:8080``** — local mode.  Detects or launches
+      llama-server on port 8080 (original behaviour).
+    * **Any other URL** — remote mode.  Health-checks the endpoint and yields
+      the URL without starting a local process.  Used by ``run-tests e2eremote``
+      to target the .134 RTX 4000 SFF Ada server.
     """
+    llm_url = os.environ.get("DVAD_LLM_URL", LOCAL_LLM_URL)
+
+    # ── Remote mode ──────────────────────────────────────────────────────
+    if llm_url != LOCAL_LLM_URL:
+        health = f"{llm_url.rstrip('/')}/health"
+        try:
+            resp = httpx.get(health, timeout=10, verify=False)
+            if resp.status_code == 200:
+                yield llm_url
+                return
+        except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError):
+            pass
+        pytest.skip(f"Remote LLM at {llm_url} is not reachable")
+
+    # ── Local mode ───────────────────────────────────────────────────────
     if _llm_is_running():
         yield LOCAL_LLM_URL
         return
@@ -264,13 +266,31 @@ def seeded_data_dir(tmp_path_factory):
 
 @pytest.fixture(scope="session")
 def e2e_config_path(tmp_path_factory):
-    """Copy E2E models.yaml to a temp dir so API mutations don't corrupt the fixture."""
+    """Copy E2E models.yaml to a temp dir so API mutations don't corrupt the fixture.
+
+    When ``DVAD_LLM_URL`` is set to a remote endpoint, rewrite every model's
+    ``api_base`` so the dvad server talks to the remote LLM instead of localhost.
+    """
     src = FIXTURES / "models.yaml"
     if not src.exists():
         return None
     tmp = tmp_path_factory.mktemp("dvad_config")
     dst = tmp / "models.yaml"
     shutil.copy2(src, dst)
+
+    llm_url = os.environ.get("DVAD_LLM_URL")
+    if llm_url and llm_url != LOCAL_LLM_URL:
+        import yaml
+        with open(dst) as f:
+            config = yaml.safe_load(f)
+        remote_base = llm_url.rstrip("/")
+        if not remote_base.endswith("/v1"):
+            remote_base += "/v1"
+        for model in config.get("models", {}).values():
+            model["api_base"] = remote_base
+        with open(dst, "w") as f:
+            yaml.dump(config, f, default_flow_style=False)
+
     return dst
 
 
@@ -363,37 +383,48 @@ def dvad_server(seeded_data_dir, e2e_config_path, tmp_path_factory):
 def enable_thinking(dvad_server, live_page):
     """Enable thinking on all e2e models, restore after test.
 
+    Uses the dedicated ``POST /api/config/model-thinking`` endpoint to toggle
+    individual model thinking flags without touching roles or other config.
+
     Original state: e2e-remote=False, e2e-remote-thinker=True.
-    This fixture sets both to True, then restores originals on teardown.
+    Sets both to True, restores on teardown.
     """
     page = live_page
     page.goto(dvad_server)
     page.wait_for_load_state("networkidle")
     csrf = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    headers = {"X-DVAD-Token": csrf, "Content-Type": "application/json"}
 
-    # Only e2e-remote needs to be changed (e2e-remote-thinker is already True)
-    page.request.post(
-        f"{dvad_server}/api/config/model-thinking",
-        data=json.dumps({"model_name": "e2e-remote", "thinking": True}),
-        headers={"X-DVAD-Token": csrf, "Content-Type": "application/json"},
-    )
+    # Read current model list to discover names
+    resp = page.request.get(f"{dvad_server}/api/config")
+    config_data = resp.json()
+    model_names = list(config_data.get("models", {}).keys())
+
+    # Enable thinking on all models
+    for name in model_names:
+        page.request.post(
+            f"{dvad_server}/api/config/model-thinking",
+            data=json.dumps({"model_name": name, "thinking": True}),
+            headers=headers,
+        )
+
     yield
-    # Restore: e2e-remote=False, e2e-remote-thinker=True (original fixture state)
-    try:
-        page.request.post(
-            f"{dvad_server}/api/config/model-thinking",
-            data=json.dumps({"model_name": "e2e-remote", "thinking": False}),
-            headers={"X-DVAD-Token": csrf, "Content-Type": "application/json"},
-            timeout=60_000,
-        )
-        page.request.post(
-            f"{dvad_server}/api/config/model-thinking",
-            data=json.dumps({"model_name": "e2e-remote-thinker", "thinking": True}),
-            headers={"X-DVAD-Token": csrf, "Content-Type": "application/json"},
-            timeout=60_000,
-        )
-    except Exception:
-        pass  # Best-effort; temp config copy protects the fixture file
+
+    # Restore: e2e-remote=False, e2e-remote-thinker=True
+    originals = {"e2e-remote": False, "e2e-remote-thinker": True}
+    for name in model_names:
+        try:
+            page.request.post(
+                f"{dvad_server}/api/config/model-thinking",
+                data=json.dumps({
+                    "model_name": name,
+                    "thinking": originals.get(name, False),
+                }),
+                headers=headers,
+                timeout=60_000,
+            )
+        except Exception:
+            pass  # Best-effort; temp config copy protects the fixture file
 
 
 # ─── Playwright fixtures ────────────────────────────────────────────────────
@@ -438,8 +469,8 @@ def pytest_sessionfinish(session, exitstatus):
     if not _e2e_ran or not _collected_results:
         return
 
-    today = date.today().isoformat()
-    report_path = REPO_ROOT / f"e2e-findings-{today}.md"
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    report_path = REPO_ROOT / f"e2e-findings-{timestamp}.md"
 
     # Gather session stats
     passed = failed = xfailed = 0
@@ -480,7 +511,7 @@ def pytest_sessionfinish(session, exitstatus):
             UNGUARDED_DESTRUCTIVE_ENDPOINTS = []
 
     lines = [
-        f"# E2E Test Findings - {today}",
+        f"# E2E Test Findings - {timestamp}",
         "",
         f"Run: {passed} passed, {xfailed} xfailed, {failed} failed",
         f"Duration: {duration_str}",
@@ -567,7 +598,7 @@ def pytest_sessionfinish(session, exitstatus):
     lines.append("Feed this document into a new session with the instruction:")
     lines.append("")
     lines.append("> Fix the paranoid E2E findings documented in")
-    lines.append(f"> `e2e-findings-{today}.md`. Start with the critical findings.")
+    lines.append(f"> `e2e-findings-{timestamp}.md`. Start with the critical findings.")
     lines.append("> After each fix, convert the corresponding xfail test in")
     lines.append("> `tests/e2e/test_paranoid_loss_annotations.py` to a real assertion,")
     lines.append("> then run the paranoid suite to verify:")

@@ -13,7 +13,7 @@ from devils_advocate.dedup import (
 )
 from devils_advocate.types import CostTracker, ModelConfig, ReviewContext, ReviewPoint
 
-from conftest import make_model_config, make_review_point
+from helpers import make_model_config, make_review_point
 
 
 # ---------------------------------------------------------------------------

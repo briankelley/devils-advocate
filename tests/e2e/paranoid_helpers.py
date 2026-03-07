@@ -69,15 +69,6 @@ WRITE_ENDPOINTS: dict[str, dict[str, Any]] = {
         "empty_payload": {"model_name": "", "timeout": None},
         "valid_payload": {"model_name": "e2e-remote", "timeout": 300},
     },
-    "POST /api/config/model-thinking": {
-        "method": "POST",
-        "path": "/api/config/model-thinking",
-        "content_type": "application/json",
-        "writes_to": "models.yaml (single model thinking toggle)",
-        "destroys": "previous thinking value for the model",
-        "empty_payload": {"model_name": "", "thinking": False},
-        "valid_payload": {"model_name": "e2e-remote", "thinking": True},
-    },
     "POST /api/config/model-max-tokens": {
         "method": "POST",
         "path": "/api/config/model-max-tokens",
@@ -86,6 +77,15 @@ WRITE_ENDPOINTS: dict[str, dict[str, Any]] = {
         "destroys": "previous max_out_configured value for the model",
         "empty_payload": {"model_name": "", "max_out_configured": None},
         "valid_payload": {"model_name": "e2e-remote", "max_out_configured": 4096},
+    },
+    "POST /api/config/model-thinking": {
+        "method": "POST",
+        "path": "/api/config/model-thinking",
+        "content_type": "application/json",
+        "writes_to": "models.yaml (single model thinking flag)",
+        "destroys": "previous thinking value for the model",
+        "empty_payload": {"model_name": "", "thinking": None},
+        "valid_payload": {"model_name": "e2e-remote", "thinking": True},
     },
     "POST /api/config/settings-toggle": {
         "method": "POST",
@@ -199,17 +199,17 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "confirmation_required": False,
         "precondition": "Model must exist in models.yaml",
     },
-    "POST /api/config/model-thinking": {
+    "POST /api/config/model-max-tokens": {
         "on_empty_input": "400 error - model_name required",
-        "on_all_empty": "400 error - empty model_name rejected",
+        "on_all_empty": "400 error - requires clear=true flag to remove key",
         "reversible": True,
         "backup_exists": False,
         "confirmation_required": False,
         "precondition": "Model must exist in models.yaml",
     },
-    "POST /api/config/model-max-tokens": {
-        "on_empty_input": "400 error - model_name required",
-        "on_all_empty": "400 error - requires clear=true flag to remove key",
+    "POST /api/config/model-thinking": {
+        "on_empty_input": "400 error - model_name required, thinking must be boolean",
+        "on_all_empty": "400 error - validation catches empty model_name",
         "reversible": True,
         "backup_exists": False,
         "confirmation_required": False,

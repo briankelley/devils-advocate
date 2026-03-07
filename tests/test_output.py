@@ -23,7 +23,7 @@ from devils_advocate.types import (
     ReviewResult,
 )
 
-from conftest import (
+from helpers import (
     make_author_final,
     make_author_response,
     make_rebuttal,

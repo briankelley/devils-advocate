@@ -10,7 +10,7 @@ from devils_advocate.cost import (
 )
 from devils_advocate.types import CostTracker, ModelConfig
 
-from conftest import make_model_config
+from helpers import make_model_config
 
 
 # ─── TestEstimateTokens ────────────────────────────────────────────────────

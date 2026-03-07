@@ -59,6 +59,16 @@ def _goto_dashboard(page, dvad_server):
     page.wait_for_load_state("networkidle")
 
 
+def _rs(page, role_key):
+    """Select role summary value span by data-role-key."""
+    return page.locator(f'.role-summary-row[data-role-key="{role_key}"] .role-summary-value')
+
+
+def _rsc(page, role_key):
+    """Select role summary CoT span by data-role-key."""
+    return page.locator(f'.role-summary-row[data-role-key="{role_key}"] .role-summary-cot')
+
+
 def _verify_dashboard_roles(page, dvad_server, expected):
     """Navigate to dashboard and verify sidebar role assignments.
 
@@ -199,16 +209,16 @@ def test_role_summary_values(page, dvad_server):
     page.wait_for_load_state("networkidle")
 
     expectations = {
-        "rs-author": "e2e-remote",
-        "rs-reviewer1": "e2e-remote",
-        "rs-reviewer2": "e2e-remote-thinker",
-        "rs-deduplication": "e2e-remote-thinker",
-        "rs-normalization": "e2e-remote-thinker",
-        "rs-revision": "e2e-remote-thinker",
-        "rs-integration_reviewer": "e2e-remote",
+        "author": "e2e-remote",
+        "reviewer1": "e2e-remote",
+        "reviewer2": "e2e-remote-thinker",
+        "dedup": "e2e-remote-thinker",
+        "normalization": "e2e-remote-thinker",
+        "revision": "e2e-remote-thinker",
+        "integration": "e2e-remote",
     }
-    for element_id, expected_text in expectations.items():
-        expect(page.locator(f"#{element_id}")).to_have_text(expected_text)
+    for role_key, expected_text in expectations.items():
+        expect(_rs(page, role_key)).to_have_text(expected_text)
 
 
 def test_role_summary_cot_icons(page, dvad_server):
@@ -216,18 +226,14 @@ def test_role_summary_cot_icons(page, dvad_server):
     page.goto(f"{dvad_server}/config")
     page.wait_for_load_state("networkidle")
 
-    cot_active = ["rsc-reviewer2", "rsc-normalization", "rsc-revision", "rsc-deduplication"]
-    cot_inactive = [
-        "rsc-author",
-        "rsc-reviewer1",
-        "rsc-integration_reviewer",
-    ]
+    cot_active = ["reviewer2", "normalization", "revision", "dedup"]
+    cot_inactive = ["author", "reviewer1", "integration"]
     # Note: e2e-remote has thinking=false, e2e-remote-thinker has thinking=true
 
-    for element_id in cot_active:
-        expect(page.locator(f"#{element_id}")).to_have_class(re.compile(r"cot-active"))
-    for element_id in cot_inactive:
-        expect(page.locator(f"#{element_id}")).not_to_have_class(re.compile(r"cot-active"))
+    for role_key in cot_active:
+        expect(_rsc(page, role_key)).to_have_class(re.compile(r"cot-active"))
+    for role_key in cot_inactive:
+        expect(_rsc(page, role_key)).not_to_have_class(re.compile(r"cot-active"))
 
 
 # ── Interactive role & CoT tests ─────────────────────────────────────────────
@@ -247,7 +253,7 @@ def test_role_toggle_author_radio(page, dvad_server, restore_config):
     author_thinker.click()
     expect(author_thinker).to_have_class(re.compile(r"role-active"))
     expect(author_remote).not_to_have_class(re.compile(r"role-active"))
-    expect(page.locator("#rs-author")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "author")).to_have_text("e2e-remote-thinker")
 
     _save_and_wait(page)
 
@@ -259,7 +265,7 @@ def test_role_toggle_author_radio(page, dvad_server, restore_config):
     # Navigate back to config (forward), verify persistence
     _goto_config(page, dvad_server)
     expect(page.locator('.role-icon[data-role="author"][data-model="e2e-remote-thinker"]')).to_have_class(re.compile(r"role-active"))
-    expect(page.locator("#rs-author")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "author")).to_have_text("e2e-remote-thinker")
 
 
 def test_role_toggle_dedup_radio(page, dvad_server, restore_config):
@@ -273,7 +279,7 @@ def test_role_toggle_dedup_radio(page, dvad_server, restore_config):
     dedup_remote.click()
     expect(dedup_remote).to_have_class(re.compile(r"role-active"))
     expect(dedup_thinker).not_to_have_class(re.compile(r"role-active"))
-    expect(page.locator("#rs-deduplication")).to_have_text("e2e-remote")
+    expect(_rs(page, "dedup")).to_have_text("e2e-remote")
 
     _save_and_wait(page)
 
@@ -292,7 +298,7 @@ def test_role_toggle_normalization_radio(page, dvad_server, restore_config):
     page.locator('.role-icon[data-role="normalization"][data-model="e2e-remote"]').click()
     expect(page.locator('.role-icon[data-role="normalization"][data-model="e2e-remote"]')).to_have_class(re.compile(r"role-active"))
     expect(page.locator('.role-icon[data-role="normalization"][data-model="e2e-remote-thinker"]')).not_to_have_class(re.compile(r"role-active"))
-    expect(page.locator("#rs-normalization")).to_have_text("e2e-remote")
+    expect(_rs(page, "normalization")).to_have_text("e2e-remote")
 
     _save_and_wait(page)
 
@@ -311,7 +317,7 @@ def test_role_toggle_revision_radio(page, dvad_server, restore_config):
     page.locator('.role-icon[data-role="revision"][data-model="e2e-remote"]').click()
     expect(page.locator('.role-icon[data-role="revision"][data-model="e2e-remote"]')).to_have_class(re.compile(r"role-active"))
     expect(page.locator('.role-icon[data-role="revision"][data-model="e2e-remote-thinker"]')).not_to_have_class(re.compile(r"role-active"))
-    expect(page.locator("#rs-revision")).to_have_text("e2e-remote")
+    expect(_rs(page, "revision")).to_have_text("e2e-remote")
 
     _save_and_wait(page)
 
@@ -330,7 +336,7 @@ def test_role_toggle_integration_radio(page, dvad_server, restore_config):
     page.locator('.role-icon[data-role="integration_reviewer"][data-model="e2e-remote-thinker"]').click()
     expect(page.locator('.role-icon[data-role="integration_reviewer"][data-model="e2e-remote-thinker"]')).to_have_class(re.compile(r"role-active"))
     expect(page.locator('.role-icon[data-role="integration_reviewer"][data-model="e2e-remote"]')).not_to_have_class(re.compile(r"role-active"))
-    expect(page.locator("#rs-integration_reviewer")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "integration")).to_have_text("e2e-remote-thinker")
 
     _save_and_wait(page)
 
@@ -354,10 +360,10 @@ def test_role_toggle_reviewer_ceiling(page, dvad_server, restore_config):
     # Unassign e2e-remote as reviewer
     rev_remote.click()
     expect(rev_remote).not_to_have_class(re.compile(r"role-active"))
-    expect(page.locator("#rs-reviewer1")).to_have_text("e2e-remote-thinker")
-    # reviewer2 should show em-dash or unassigned
-    rv2_text = page.locator("#rs-reviewer2").inner_text()
-    assert rv2_text in ("\u2014", "unassigned", "—")
+    expect(_rs(page, "reviewer1")).to_have_text("e2e-remote-thinker")
+    # reviewer2 should show dash or unassigned
+    rv2_text = _rs(page, "reviewer2").inner_text()
+    assert rv2_text in ("-", "unassigned", "\u2014", "—")
 
     _save_and_wait(page)
 
@@ -377,9 +383,9 @@ def test_role_toggle_reviewer_ceiling(page, dvad_server, restore_config):
 
     # Verify 2 reviewers restored on dashboard
     expected2 = [d.copy() for d in _FIXTURE_DASHBOARD]
-    # After re-add, JS sends reviewers in DOM order (remote first, thinker second)
-    expected2[1] = {"label": "Reviewer 1", "model": "e2e-remote", "thinking": False}
-    expected2[2] = {"label": "Reviewer 2", "model": "e2e-remote-thinker", "thinking": True}
+    # After compact, thinker was promoted to reviewer1; re-add puts remote in reviewer2
+    expected2[1] = {"label": "Reviewer 1", "model": "e2e-remote-thinker", "thinking": True}
+    expected2[2] = {"label": "Reviewer 2", "model": "e2e-remote", "thinking": False}
     _verify_dashboard_roles(page, dvad_server, expected2)
 
 
@@ -392,8 +398,8 @@ def test_role_unassign_and_reassign(page, dvad_server, restore_config):
     # Both should be inactive now
     expect(page.locator('.role-icon[data-role="deduplication"][data-model="e2e-remote-thinker"]')).not_to_have_class(re.compile(r"role-active"))
     expect(page.locator('.role-icon[data-role="deduplication"][data-model="e2e-remote"]')).not_to_have_class(re.compile(r"role-active"))
-    dedup_text = page.locator("#rs-deduplication").inner_text()
-    assert dedup_text.lower() in ("unassigned", "—", "\u2014")
+    dedup_text = _rs(page, "dedup").inner_text()
+    assert dedup_text.lower() in ("-", "unassigned", "—", "\u2014")
 
     _save_and_wait(page)
 
@@ -405,7 +411,7 @@ def test_role_unassign_and_reassign(page, dvad_server, restore_config):
     _goto_config(page, dvad_server)
     page.locator('.role-icon[data-role="deduplication"][data-model="e2e-remote-thinker"]').click()
     expect(page.locator('.role-icon[data-role="deduplication"][data-model="e2e-remote-thinker"]')).to_have_class(re.compile(r"role-active"))
-    expect(page.locator("#rs-deduplication")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "dedup")).to_have_text("e2e-remote-thinker")
 
     _save_and_wait(page)
     _verify_dashboard_roles(page, dvad_server, _FIXTURE_DASHBOARD)
@@ -422,9 +428,9 @@ def test_multi_role_reassignment_single_save(page, dvad_server, restore_config):
     # Reassign normalization to remote
     page.locator('.role-icon[data-role="normalization"][data-model="e2e-remote"]').click()
 
-    expect(page.locator("#rs-author")).to_have_text("e2e-remote-thinker")
-    expect(page.locator("#rs-deduplication")).to_have_text("e2e-remote")
-    expect(page.locator("#rs-normalization")).to_have_text("e2e-remote")
+    expect(_rs(page, "author")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "dedup")).to_have_text("e2e-remote")
+    expect(_rs(page, "normalization")).to_have_text("e2e-remote")
 
     _save_and_wait(page)
 
@@ -435,9 +441,9 @@ def test_multi_role_reassignment_single_save(page, dvad_server, restore_config):
     _verify_dashboard_roles(page, dvad_server, expected)
 
     _goto_config(page, dvad_server)
-    expect(page.locator("#rs-author")).to_have_text("e2e-remote-thinker")
-    expect(page.locator("#rs-deduplication")).to_have_text("e2e-remote")
-    expect(page.locator("#rs-normalization")).to_have_text("e2e-remote")
+    expect(_rs(page, "author")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "dedup")).to_have_text("e2e-remote")
+    expect(_rs(page, "normalization")).to_have_text("e2e-remote")
 
 
 def test_multi_model_role_swap(page, dvad_server, restore_config):
@@ -456,11 +462,11 @@ def test_multi_model_role_swap(page, dvad_server, restore_config):
     for role, target_model in swap_targets.items():
         page.locator(f'.role-icon[data-role="{role}"][data-model="{target_model}"]').click()
 
-    expect(page.locator("#rs-author")).to_have_text("e2e-remote-thinker")
-    expect(page.locator("#rs-deduplication")).to_have_text("e2e-remote")
-    expect(page.locator("#rs-normalization")).to_have_text("e2e-remote")
-    expect(page.locator("#rs-revision")).to_have_text("e2e-remote")
-    expect(page.locator("#rs-integration_reviewer")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "author")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "dedup")).to_have_text("e2e-remote")
+    expect(_rs(page, "normalization")).to_have_text("e2e-remote")
+    expect(_rs(page, "revision")).to_have_text("e2e-remote")
+    expect(_rs(page, "integration")).to_have_text("e2e-remote-thinker")
 
     _save_and_wait(page)
 
@@ -473,8 +479,8 @@ def test_multi_model_role_swap(page, dvad_server, restore_config):
     _verify_dashboard_roles(page, dvad_server, expected)
 
     _goto_config(page, dvad_server)
-    expect(page.locator("#rs-author")).to_have_text("e2e-remote-thinker")
-    expect(page.locator("#rs-integration_reviewer")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "author")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "integration")).to_have_text("e2e-remote-thinker")
 
 
 def test_thinking_toggle_persists_across_navigation(page, dvad_server, restore_config):
@@ -485,16 +491,18 @@ def test_thinking_toggle_persists_across_navigation(page, dvad_server, restore_c
     expect(brain_thinker).to_have_class(re.compile(r"thinking-active"))
 
     # Verify CoT active in role summary for thinker-assigned roles
-    for eid in ["rsc-reviewer2", "rsc-deduplication", "rsc-normalization", "rsc-revision"]:
-        expect(page.locator(f"#{eid}")).to_have_class(re.compile(r"cot-active"))
+    for key in ["reviewer2", "dedup", "normalization", "revision"]:
+        expect(_rsc(page, key)).to_have_class(re.compile(r"cot-active"))
 
-    # Click to disable
-    with page.expect_response("**/api/config/model-thinking"):
-        brain_thinker.click()
+    # Click to disable (thinking toggle is client-side only)
+    brain_thinker.click()
 
     expect(brain_thinker).not_to_have_class(re.compile(r"thinking-active"))
-    for eid in ["rsc-reviewer2", "rsc-deduplication", "rsc-normalization", "rsc-revision"]:
-        expect(page.locator(f"#{eid}")).not_to_have_class(re.compile(r"cot-active"))
+    for key in ["reviewer2", "dedup", "normalization", "revision"]:
+        expect(_rsc(page, key)).not_to_have_class(re.compile(r"cot-active"))
+
+    # Save to persist the thinking change
+    _save_and_wait(page)
 
     # Dashboard verification
     expected = [d.copy() for d in _FIXTURE_DASHBOARD]
@@ -506,11 +514,6 @@ def test_thinking_toggle_persists_across_navigation(page, dvad_server, restore_c
     _goto_config(page, dvad_server)
     expect(page.locator('.thinking-icon[data-model="e2e-remote-thinker"]')).not_to_have_class(re.compile(r"thinking-active"))
 
-    # Teardown: re-enable
-    with page.expect_response("**/api/config/model-thinking"):
-        page.locator('.thinking-icon[data-model="e2e-remote-thinker"]').click()
-    expect(page.locator('.thinking-icon[data-model="e2e-remote-thinker"]')).to_have_class(re.compile(r"thinking-active"))
-
 
 def test_thinking_toggle_enable_on_non_thinker(page, dvad_server, restore_config):
     """Enable thinking on e2e-remote (starts with thinking=false)."""
@@ -518,15 +521,17 @@ def test_thinking_toggle_enable_on_non_thinker(page, dvad_server, restore_config
 
     brain_remote = page.locator('.thinking-icon[data-model="e2e-remote"]')
     expect(brain_remote).not_to_have_class(re.compile(r"thinking-active"))
-    expect(brain_remote).to_have_class(re.compile(r"thinking-eligible"))
 
-    with page.expect_response("**/api/config/model-thinking"):
-        brain_remote.click()
+    # Click to enable (thinking toggle is client-side only)
+    brain_remote.click()
 
     expect(brain_remote).to_have_class(re.compile(r"thinking-active"))
     # CoT should now be active for e2e-remote assigned roles
-    for eid in ["rsc-author", "rsc-reviewer1", "rsc-integration_reviewer"]:
-        expect(page.locator(f"#{eid}")).to_have_class(re.compile(r"cot-active"))
+    for key in ["author", "reviewer1", "integration"]:
+        expect(_rsc(page, key)).to_have_class(re.compile(r"cot-active"))
+
+    # Save to persist the thinking change
+    _save_and_wait(page)
 
     # Dashboard
     expected = [d.copy() for d in _FIXTURE_DASHBOARD]
@@ -538,10 +543,6 @@ def test_thinking_toggle_enable_on_non_thinker(page, dvad_server, restore_config
     # Persistence
     _goto_config(page, dvad_server)
     expect(page.locator('.thinking-icon[data-model="e2e-remote"]')).to_have_class(re.compile(r"thinking-active"))
-
-    # Teardown: disable
-    with page.expect_response("**/api/config/model-thinking"):
-        page.locator('.thinking-icon[data-model="e2e-remote"]').click()
 
 
 def test_thinking_toggle_blocked_without_role(page, dvad_server, restore_config):
@@ -559,7 +560,7 @@ def test_thinking_toggle_blocked_without_role(page, dvad_server, restore_config)
     _goto_config(page, dvad_server)
 
     brain_remote = page.locator('.thinking-icon[data-model="e2e-remote"]')
-    expect(brain_remote).not_to_have_class(re.compile(r"thinking-eligible"))
+    expect(brain_remote).to_have_class(re.compile(r"thinking-inert"))
     expect(brain_remote).not_to_have_class(re.compile(r"thinking-active"))
 
     # Click should be a no-op
@@ -573,17 +574,16 @@ def test_thinking_plus_role_change_combined(page, dvad_server, restore_config):
     """Role change + thinking change in sequence, verify both persist."""
     _goto_config(page, dvad_server)
 
-    # Enable thinking on e2e-remote
-    with page.expect_response("**/api/config/model-thinking"):
-        page.locator('.thinking-icon[data-model="e2e-remote"]').click()
+    # Enable thinking on e2e-remote (client-side toggle)
+    page.locator('.thinking-icon[data-model="e2e-remote"]').click()
     expect(page.locator('.thinking-icon[data-model="e2e-remote"]')).to_have_class(re.compile(r"thinking-active"))
 
     # Reassign author and integration to thinker
     page.locator('.role-icon[data-role="author"][data-model="e2e-remote-thinker"]').click()
     page.locator('.role-icon[data-role="integration_reviewer"][data-model="e2e-remote-thinker"]').click()
 
-    expect(page.locator("#rs-author")).to_have_text("e2e-remote-thinker")
-    expect(page.locator("#rs-integration_reviewer")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "author")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "integration")).to_have_text("e2e-remote-thinker")
 
     _save_and_wait(page)
 
@@ -595,7 +595,7 @@ def test_thinking_plus_role_change_combined(page, dvad_server, restore_config):
     _verify_dashboard_roles(page, dvad_server, expected)
 
     _goto_config(page, dvad_server)
-    expect(page.locator("#rs-author")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "author")).to_have_text("e2e-remote-thinker")
     expect(page.locator('.thinking-icon[data-model="e2e-remote"]')).to_have_class(re.compile(r"thinking-active"))
 
 
@@ -605,7 +605,7 @@ def test_dashboard_reflects_unsaved_does_not_leak(page, dvad_server):
 
     # Reassign author but do NOT save
     page.locator('.role-icon[data-role="author"][data-model="e2e-remote-thinker"]').click()
-    expect(page.locator("#rs-author")).to_have_text("e2e-remote-thinker")
+    expect(_rs(page, "author")).to_have_text("e2e-remote-thinker")
 
     # Dashboard should still show original
     _goto_dashboard(page, dvad_server)
@@ -615,7 +615,7 @@ def test_dashboard_reflects_unsaved_does_not_leak(page, dvad_server):
 
     # Navigate back to config — page reloads from disk, original restored
     _goto_config(page, dvad_server)
-    expect(page.locator("#rs-author")).to_have_text("e2e-remote")
+    expect(_rs(page, "author")).to_have_text("e2e-remote")
 
 
 def test_rapid_navigation_cycle(page, dvad_server, restore_config):
@@ -623,14 +623,14 @@ def test_rapid_navigation_cycle(page, dvad_server, restore_config):
     _goto_config(page, dvad_server)
 
     # Record initial state
-    author_text = page.locator("#rs-author").inner_text()
+    author_text = _rs(page, "author").inner_text()
     assert author_text == "e2e-remote"
 
     # Rapid round-trips — state should be stable
     for _ in range(2):
         _goto_dashboard(page, dvad_server)
         _goto_config(page, dvad_server)
-        expect(page.locator("#rs-author")).to_have_text("e2e-remote")
+        expect(_rs(page, "author")).to_have_text("e2e-remote")
 
     # Make a change, save
     page.locator('.role-icon[data-role="author"][data-model="e2e-remote-thinker"]').click()
@@ -642,7 +642,7 @@ def test_rapid_navigation_cycle(page, dvad_server, restore_config):
         rows = page.locator(".dashboard-roles .role-summary-row")
         expect(rows.nth(0).locator(".role-summary-value")).to_have_text("e2e-remote-thinker")
         _goto_config(page, dvad_server)
-        expect(page.locator("#rs-author")).to_have_text("e2e-remote-thinker")
+        expect(_rs(page, "author")).to_have_text("e2e-remote-thinker")
 
 
 def test_full_role_wipe_and_rebuild(page, dvad_server, restore_config):
@@ -696,6 +696,12 @@ def test_full_role_wipe_and_rebuild(page, dvad_server, restore_config):
     ]
     for role, model in fixture_assignments:
         page.locator(f'.role-icon[data-role="{role}"][data-model="{model}"]').click()
+
+    # Re-enable thinking on e2e-remote-thinker (cleared during wipe by orphan cleanup)
+    page.locator('.thinking-icon[data-model="e2e-remote-thinker"]').click()
+    expect(page.locator('.thinking-icon[data-model="e2e-remote-thinker"]')).to_have_class(
+        re.compile(r"thinking-active")
+    )
 
     _save_and_wait(page)
     _verify_dashboard_roles(page, dvad_server, _FIXTURE_DASHBOARD)

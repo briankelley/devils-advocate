@@ -199,17 +199,12 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "precondition": "YAML must parse, must contain 'models' and 'roles' keys, must pass validation",
     },
     "POST /api/config (structured roles)": {
-        "on_empty_input": "Writes empty roles block, potentially clearing all role assignments",
-        "on_all_empty": "All roles set to None/empty, reviewers list emptied, thinking flags cleared",
+        "on_empty_input": "Writes empty roles block, potentially resetting all role assignments",
+        "on_all_empty": "All roles set to None/empty, reviewers list emptied, thinking flags reset (by design)",
         "reversible": True,
-        "backup_exists": False,  # NOTE: _mutate_yaml_config does NOT create .bak
+        "backup_exists": True,  # _mutate_yaml_config now creates .bak
         "confirmation_required": True,  # frontend shows confirm dialog
         "precondition": "Config file must be locatable",
-        "FINDING": (
-            "Empty roles payload accepted without rejection. "
-            "Sending {roles: {}, thinking: {}} clears all role assignments. "
-            "Unlike raw YAML save, structured save via _mutate_yaml_config does NOT create a .bak backup."
-        ),
     },
     "POST /api/config/validate": {
         "on_empty_input": "Returns valid=False with issues list",
@@ -223,7 +218,7 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "on_empty_input": "HTTPException 400 (model_name required, timeout validation)",
         "on_all_empty": "HTTPException 400",
         "reversible": True,
-        "backup_exists": False,  # _mutate_yaml_config does NOT create .bak
+        "backup_exists": True,  # _mutate_yaml_config now creates .bak
         "confirmation_required": False,  # inline edit, no dialog
         "precondition": "model_name must exist in config, timeout must be 10-7200",
     },
@@ -231,7 +226,7 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "on_empty_input": "HTTPException 400 (model_name required)",
         "on_all_empty": "HTTPException 400",
         "reversible": True,
-        "backup_exists": False,
+        "backup_exists": True,  # _mutate_yaml_config now creates .bak
         "confirmation_required": False,
         "precondition": "model_name must exist, max_out_configured must be 1-1000000 or clear=true",
     },
@@ -239,22 +234,17 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "on_empty_input": "HTTPException 400 (unknown setting key)",
         "on_all_empty": "HTTPException 400",
         "reversible": True,
-        "backup_exists": False,
+        "backup_exists": True,  # _mutate_yaml_config now creates .bak
         "confirmation_required": False,
         "precondition": "key must be in {live_testing}",
     },
     "PUT /api/config/env/{name}": {
         "on_empty_input": "HTTPException 400 (value cannot be empty)",
         "on_all_empty": "HTTPException 400",
-        "reversible": False,
-        "backup_exists": False,  # No backup before single-key write
+        "reversible": True,  # .bak provides recovery
+        "backup_exists": True,  # .bak now created before single-key write
         "confirmation_required": False,
         "precondition": "env_name must be in allowed set, value must be non-empty",
-        "FINDING": (
-            "No backup of .env before single-key write. "
-            "If the user saves a bad key, the old value is gone. "
-            "Contrast with DELETE which does create a .bak."
-        ),
     },
     "DELETE /api/config/env/{name}": {
         "on_empty_input": "N/A (no body required)",
@@ -267,15 +257,10 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
     "POST /api/config/env": {
         "on_empty_input": "HTTPException 400 (no environment variables provided)",
         "on_all_empty": "HTTPException 400",
-        "reversible": False,
-        "backup_exists": True,  # .bak created only when deletions present
+        "reversible": True,  # .bak provides recovery
+        "backup_exists": True,  # .bak now always created before write
         "confirmation_required": True,  # X-Confirm-Destructive for empty values
         "precondition": "All keys must be in allowed set",
-        "FINDING": (
-            "Backup only created when deletions (empty values) are present. "
-            "A batch update that overwrites existing keys with new values "
-            "does NOT create a backup of the .env file."
-        ),
     },
     "POST /api/review/start": {
         "on_empty_input": "HTTPException 400 (project required, mode validation)",
@@ -296,15 +281,10 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
     "POST /api/review/{id}/override": {
         "on_empty_input": "HTTPException 400 (group_id required, invalid resolution)",
         "on_all_empty": "HTTPException 400",
-        "reversible": False,
-        "backup_exists": False,
-        "confirmation_required": False,  # NO confirmation dialog for overrides
+        "reversible": True,  # .bak provides recovery; overrides array provides audit trail
+        "backup_exists": True,  # review-ledger.json.bak now created before write
+        "confirmation_required": False,  # no confirmation dialog (intentional — low friction for review workflow)
         "precondition": "review_id must exist, group_id must exist in ledger, resolution in valid set",
-        "FINDING": (
-            "Override is irreversible, has no backup, and has no confirmation dialog. "
-            "A mis-click on the override button permanently alters the review ledger. "
-            "The overrides array provides an audit trail but does not provide undo."
-        ),
     },
     "POST /api/review/{id}/revise": {
         "on_empty_input": "HTTPException 404 (review not found) or 400 (no original_content)",

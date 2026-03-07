@@ -19,7 +19,7 @@ def test_dashboard_mode_cards(page, dvad_server):
     page.goto(dvad_server)
     expect(page.locator(".mode-card")).to_have_count(4)
     # Plan radio is checked by default
-    expect(page.locator('input[type="radio"][name="mode"][value="plan"]')).to_be_checked()
+    expect(page.locator('input[type="radio"][name="mode"][value="spec"]')).to_be_checked()
 
 
 def test_dashboard_mode_selection(page, dvad_server):

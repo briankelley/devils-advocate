@@ -33,15 +33,17 @@ if [[ -z "$TIER" ]]; then
     echo "Usage: ./run-tests <unit|e2elocal|e2eremote> [--no-bail]"
     echo ""
     echo "  unit       Pure unit tests (no LLM, no browser)"
-    echo "  e2elocal   unit + Playwright GUI + local LLM + paranoid audit"
-    echo "  e2eremote  unit + Playwright GUI + remote LLM + paranoid audit"
+    echo "  e2elocal   unit + Playwright GUI + local llama-server LLM + paranoid audit"
+    echo "  e2eremote  unit + Playwright GUI + remote LLM (.134) + paranoid audit"
+    echo "             Same Playwright e2e_live tests as e2elocal, different backend"
     echo ""
     echo "  --no-bail  Continue through stage failures instead of stopping"
     exit 1
 fi
 
 DATE="$(date +%Y-%m-%d)"
-REPORT="test-report-${DATE}.md"
+TIMESTAMP="$(date +%Y-%m-%d-%H%M%S)"
+REPORT="test-report-${TIMESTAMP}.md"
 OVERALL_EXIT=0
 
 # Temp dir for stage outputs
@@ -137,6 +139,10 @@ start_llama() {
     exit 1
 }
 
+strip_ansi() {
+    sed 's/\x1b\[[0-9;]*m//g'
+}
+
 run_stage() {
     local label="$1"
     shift
@@ -155,9 +161,15 @@ run_stage() {
 
 parse_summary() {
     local outfile="$1"
-    grep -E '^[0-9]+ passed' "$outfile" | tail -1 || \
-    grep -E '(passed|failed|error|xfailed)' "$outfile" | tail -1 || \
-    echo "see output above"
+    # Pytest summary line: "===== 5 passed, 2 failed in 1.23s ====="
+    # Strip ANSI, find the line, strip leading/trailing = signs and whitespace
+    local line
+    line=$(strip_ansi < "$outfile" | grep -E '(passed|failed|errors?|skipped).*in [0-9]' | tail -1 | sed 's/^[= ]*//' | sed 's/[= ]*$//')
+    if [[ -n "$line" ]]; then
+        echo "$line"
+    else
+        echo "(no summary captured)"
+    fi
 }
 
 append_section() {
@@ -173,12 +185,21 @@ append_section() {
     echo "$summary" >> "$REPORT"
 
     if [[ "$rc" -ne 0 ]]; then
-        local failures
-        failures=$(sed -n '/^FAILURES/,/^===/p' "$outfile" 2>/dev/null || true)
-        if [[ -n "$failures" ]]; then
+        local detail
+        # Capture FAILURES block
+        detail=$(strip_ansi < "$outfile" | sed -n '/^FAILURES\|^=* FAILURES/,/^===/p' 2>/dev/null || true)
+        # If no FAILURES, capture ERRORS block
+        if [[ -z "$detail" ]]; then
+            detail=$(strip_ansi < "$outfile" | sed -n '/^ERRORS\|^=* ERRORS/,/^===/p' 2>/dev/null || true)
+        fi
+        # If still nothing, capture short test summary info
+        if [[ -z "$detail" ]]; then
+            detail=$(strip_ansi < "$outfile" | sed -n '/^=* short test summary/,/^===/p' 2>/dev/null || true)
+        fi
+        if [[ -n "$detail" ]]; then
             echo "" >> "$REPORT"
             echo '```' >> "$REPORT"
-            echo "$failures" >> "$REPORT"
+            echo "$detail" >> "$REPORT"
             echo '```' >> "$REPORT"
         fi
     fi
@@ -204,7 +225,7 @@ echo "# dvad Test Report - ${DATE}" > "$REPORT"
 
 # ── unit (always runs) ───────────────────────────────────────────────────────
 
-if run_stage "unit" tests/ -m "not e2e and not live and not paranoid" --ignore=tests/e2e; then
+if run_stage "unit" tests/ -m "not e2e and not live and not paranoid"; then
     append_section "Unit Tests" "$STAGE_TMP/unit.txt"
 else
     append_section "Unit Tests" "$STAGE_TMP/unit.txt"
@@ -235,10 +256,13 @@ if [[ "$TIER" == "e2elocal" ]]; then
     fi
 fi
 
-# ── e2eremote: remote/cloud LLM tests ───────────────────────────────────────
+# ── e2eremote: same Playwright e2e_live tests against .134 remote LLM ─────
 
 if [[ "$TIER" == "e2eremote" ]]; then
-    if run_stage "remote" tests/ -m "live"; then
+    export DVAD_LLM_URL="https://38.72.121.134/llm"
+    echo "Using remote LLM: $DVAD_LLM_URL"
+
+    if run_stage "remote" tests/e2e/ -m "e2e_live"; then
         append_section "Remote LLM Tests" "$STAGE_TMP/remote.txt"
     else
         append_section "Remote LLM Tests" "$STAGE_TMP/remote.txt"
@@ -248,26 +272,16 @@ fi
 
 # ── paranoid audit (all e2e tiers) ──────────────────────────────────────────
 
-run_stage "paranoid" tests/e2e/ -m "e2e and paranoid" || true
-paranoid_rc=$(cat "$STAGE_TMP/paranoid.rc")
-
-echo "" >> "$REPORT"
-echo "## Paranoid Audit" >> "$REPORT"
-summary=$(parse_summary "$STAGE_TMP/paranoid.txt")
-echo "$summary" >> "$REPORT"
-
-if [[ -f "e2e-findings-${DATE}.md" ]]; then
-    echo "See: e2e-findings-${DATE}.md" >> "$REPORT"
+if run_stage "paranoid" tests/e2e/ -m "e2e and paranoid"; then
+    append_section "Paranoid Audit" "$STAGE_TMP/paranoid.txt"
+else
+    append_section "Paranoid Audit" "$STAGE_TMP/paranoid.txt"
+    OVERALL_EXIT=1
 fi
 
-if [[ "$paranoid_rc" -ne 0 ]]; then
-    failures=$(sed -n '/^FAILURES/,/^===/p' "$STAGE_TMP/paranoid.txt" 2>/dev/null || true)
-    if [[ -n "$failures" ]]; then
-        echo "" >> "$REPORT"
-        echo '```' >> "$REPORT"
-        echo "$failures" >> "$REPORT"
-        echo '```' >> "$REPORT"
-    fi
+FINDINGS=$(ls -t e2e-findings-${DATE}-*.md 2>/dev/null | head -1)
+if [[ -n "$FINDINGS" ]]; then
+    echo "See: $FINDINGS" >> "$REPORT"
 fi
 
 echo ""

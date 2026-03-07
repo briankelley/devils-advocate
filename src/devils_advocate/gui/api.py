@@ -746,6 +746,28 @@ async def set_model_timeout(request: Request):
     return JSONResponse({"status": "ok", "model_name": model_name, "timeout": timeout})
 
 
+@router.post("/config/model-thinking")
+async def set_model_thinking(request: Request):
+    """Toggle a single model's thinking flag in the config file."""
+    _check_csrf(request)
+    body = await request.json()
+    model_name = body.get("model_name", "")
+    enabled = body.get("thinking")
+
+    if not model_name:
+        raise HTTPException(status_code=400, detail="model_name is required")
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=400, detail="thinking must be a boolean")
+
+    def _apply(data: dict) -> None:
+        if "models" not in data or model_name not in data["models"]:
+            raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found in config")
+        data["models"][model_name]["thinking"] = enabled
+
+    await _mutate_yaml_config(request, _apply)
+    return JSONResponse({"status": "ok", "model_name": model_name, "thinking": enabled})
+
+
 @router.post("/config/model-max-tokens")
 async def set_model_max_tokens(request: Request):
     """Update a single model's max_out_configured value in the config file."""

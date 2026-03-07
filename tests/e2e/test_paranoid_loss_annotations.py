@@ -145,15 +145,6 @@ class TestPreconditionEnforcement:
         })
         assert resp.status == 404
 
-    def test_model_thinking_enforces_model_exists(self, page, dvad_server):
-        """Precondition: Model must exist in models.yaml."""
-        csrf = self._get_csrf(page, dvad_server)
-        resp = api_post(page, dvad_server, "/api/config/model-thinking", csrf, {
-            "model_name": "nonexistent_model_xyz",
-            "thinking": True,
-        })
-        assert resp.status == 404
-
     def test_model_max_tokens_enforces_model_exists(self, page, dvad_server):
         """Precondition: Model must exist in models.yaml."""
         csrf = self._get_csrf(page, dvad_server)

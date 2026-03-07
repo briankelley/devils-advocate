@@ -46,19 +46,8 @@
         <div class="mode-card-meta">
             <div><strong>requires:</strong> spec file(s) in txt or md format</div>
             <div><strong>returns:</strong> revised spec with all suggestions from all reviewers</div>
-            <div class="mode-card-roles">
-                <div class="mode-roles-group">
-                    <span class="mode-roles-label">minimum:</span>
-                    <span class="mode-role">Reviewer 1</span>
-                    <span class="mode-role">Normalization</span>
-                </div>
-                <div class="mode-roles-group">
-                    <span class="mode-roles-label">recommended:</span>
-                    <span class="mode-role">Reviewer 2</span>
-                    <span class="mode-role">Dedup</span>
-                    <span class="mode-role">Revision</span>
-                </div>
-            </div>
+            <div><strong>minimum:</strong> Reviewer 1, Normalization</div>
+            <div><strong>recommended:</strong> Reviewer 2 + Dedup, Revision</div>
         </div>
         <div class="mode-card-tip">Mid-tier models produce comparable results to more expensive flagship models here.</div>
     </label>
@@ -72,20 +61,8 @@
         <div class="mode-card-meta">
             <div><strong>requires:</strong> exactly one code file</div>
             <div><strong>returns:</strong> revised diff patch</div>
-            <div class="mode-card-roles">
-                <div class="mode-roles-group">
-                    <span class="mode-roles-label">minimum:</span>
-                    <span class="mode-role">Author</span>
-                    <span class="mode-role">Reviewer 1</span>
-                    <span class="mode-role">Normalization</span>
-                </div>
-                <div class="mode-roles-group">
-                    <span class="mode-roles-label">recommended:</span>
-                    <span class="mode-role">Reviewer 2</span>
-                    <span class="mode-role">Dedup</span>
-                    <span class="mode-role">Revision</span>
-                </div>
-            </div>
+            <div><strong>minimum:</strong> Author, Reviewer 1, Normalization</div>
+            <div><strong>recommended:</strong> Reviewer 2 + Dedup, Revision</div>
         </div>
         <div class="mode-card-tip">Use deep thinkers to catch subtle bugs/blindspots; otherwise mid-tier models perform well here.</div>
     </label>
@@ -99,17 +76,8 @@
         <div class="mode-card-meta">
             <div><strong>requires:</strong> optional files + project directory</div>
             <div><strong>returns:</strong> remediation plan</div>
-            <div class="mode-card-roles">
-                <div class="mode-roles-group">
-                    <span class="mode-roles-label">minimum:</span>
-                    <span class="mode-role">Integration Reviewer</span>
-                    <span class="mode-role">Normalization</span>
-                </div>
-                <div class="mode-roles-group">
-                    <span class="mode-roles-label">recommended:</span>
-                    <span class="mode-role">Revision</span>
-                </div>
-            </div>
+            <div><strong>minimum:</strong> Integration, Normalization</div>
+            <div><strong>recommended:</strong> Revision</div>
         </div>
         <div class="mode-card-tip">Models with large context windows hold more of your codebase in view and make better cross-system connections. See note on project directory setting below.</div>
     </label>
@@ -123,20 +91,8 @@
         <div class="mode-card-meta">
             <div><strong>requires:</strong> plan file</div>
             <div><strong>returns:</strong> revised plan with incorporated feedback</div>
-            <div class="mode-card-roles">
-                <div class="mode-roles-group">
-                    <span class="mode-roles-label">minimum:</span>
-                    <span class="mode-role">Author</span>
-                    <span class="mode-role">Reviewer 1</span>
-                    <span class="mode-role">Normalization</span>
-                </div>
-                <div class="mode-roles-group">
-                    <span class="mode-roles-label">recommended:</span>
-                    <span class="mode-role">Reviewer 2</span>
-                    <span class="mode-role">Dedup</span>
-                    <span class="mode-role">Revision</span>
-                </div>
-            </div>
+            <div><strong>minimum:</strong> Author, Reviewer 1, Normalization</div>
+            <div><strong>recommended:</strong> Reviewer 2 + Dedup, Revision</div>
         </div>
         <div class="mode-card-tip">SOTA flagship models provide the strongest adversarial feedback here. Different providers for each role and increased timeouts recommended.</div>
     </label>
@@ -146,7 +102,7 @@
 <div class="review-settings">
     <div class="settings-layout">
         <form id="review-form" enctype="multipart/form-data" class="settings-form">
-            <input type="hidden" name="mode" id="review-mode" value="plan">
+            <input type="hidden" name="mode" id="review-mode" value="spec">
 
             <div class="settings-grid">
                 <div class="form-row">

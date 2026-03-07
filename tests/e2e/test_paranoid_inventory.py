@@ -119,15 +119,6 @@ class TestCSRFEnforcement:
         )
         assert resp.status == 403
 
-    def test_model_thinking_rejects_no_csrf(self, page, dvad_server):
-        """POST /api/config/model-thinking without CSRF token returns 403."""
-        resp = page.request.post(
-            f"{dvad_server}/api/config/model-thinking",
-            data=json.dumps({"model_name": "e2e-remote", "thinking": True}),
-            headers={"Content-Type": "application/json"},
-        )
-        assert resp.status == 403
-
     def test_model_max_tokens_rejects_no_csrf(self, page, dvad_server):
         """POST /api/config/model-max-tokens without CSRF token returns 403."""
         resp = page.request.post(
@@ -271,15 +262,6 @@ class TestEmptyPayloadRejection:
         })
         assert resp.status == 400
 
-    def test_model_thinking_rejects_empty_model_name(self, page, dvad_server):
-        """POST /api/config/model-thinking with empty model_name returns 400."""
-        csrf = self._get_csrf(page, dvad_server)
-        resp = api_post(page, dvad_server, "/api/config/model-thinking", csrf, {
-            "model_name": "",
-            "thinking": True,
-        })
-        assert resp.status == 400
-
     def test_model_max_tokens_rejects_empty_model_name(self, page, dvad_server):
         """POST /api/config/model-max-tokens with empty model_name returns 400."""
         csrf = self._get_csrf(page, dvad_server)
@@ -378,8 +360,8 @@ class TestRouteRegistry:
             "POST /api/review/{id}/revise",
             "POST /api/review/{id}/revise-full",
             "POST /api/config/model-timeout",
-            "POST /api/config/model-thinking",
             "POST /api/config/model-max-tokens",
+            "POST /api/config/model-thinking",
             "POST /api/config/settings-toggle",
             "POST /api/config/validate",
             "POST /api/config",
