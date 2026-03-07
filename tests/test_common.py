@@ -13,11 +13,13 @@ import pytest
 import respx
 
 from devils_advocate.orchestrator._common import (
-    PipelineInputs,
-    _apply_governance_or_escalate,
     _call_reviewer,
     _check_cost_guardrail,
     _promote_points_to_groups,
+)
+from devils_advocate.orchestrator._pipeline import (
+    PipelineInputs,
+    _apply_governance_or_escalate,
     _run_adversarial_pipeline,
     _run_round2_exchange,
 )

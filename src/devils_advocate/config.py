@@ -72,7 +72,10 @@ def init_config() -> tuple[str, Path]:
             env_dest.write_text(example_env.read_text())
             os.chmod(env_dest, 0o600)
         except Exception:
-            pass
+            import logging
+            logging.getLogger("devils_advocate").debug(
+                "Could not copy .env.example to %s", env_dest
+            )
 
     return "created", config_file
 
@@ -254,9 +257,6 @@ def validate_config_structure(config: dict) -> list[tuple[str, str]]:
     return issues
 
 
-# Deprecated: use validate_config_structure + validate_review_readiness
-validate_config = validate_config_structure
-
 
 def validate_review_readiness(config: dict, mode: str) -> list[tuple[str, str]]:
     """Check whether config has the roles needed for the given review mode.
@@ -281,50 +281,48 @@ def validate_review_readiness(config: dict, mode: str) -> list[tuple[str, str]]:
     # Normalization falls back to dedup in get_models_by_role
     has_normalization = bool(normalization) or bool(dedup)
 
+    filled: dict[str, bool] = {
+        "author": bool(authors),
+        "reviewers": bool(reviewers),
+        "integration": bool(integ),
+        "normalization": has_normalization,
+        "dedup": bool(dedup),
+        "revision": has_revision,
+    }
+
+    error_templates: dict[str, str] = {
+        "author": f"{mode.title()} mode requires an Author role. Assign a model to the Author role on the Config page.",
+        "reviewers": f"{mode.title()} mode requires at least 1 Reviewer. Assign a model to a Reviewer role on the Config page.",
+        "integration": "Integration mode requires an Integration Reviewer. Assign a model to the Integration Reviewer role on the Config page.",
+        "normalization": f"{mode.title()} mode requires Normalization (falls back to Dedup model). Assign a model to Normalization or Dedup on the Config page.",
+    }
+
     # Author-dedup collision (applies to any mode that uses both)
     if authors and dedup:
         if any(d.name == authors[0].name for d in dedup):
             issues.append(("error", "Deduplication model must NOT be the author. Assign different models to these roles on the Config page."))
 
-    if mode in ("plan", "code"):
-        # Minimum roles
-        if len(authors) < 1:
-            issues.append(("error", f"{mode.title()} mode requires an Author role. Assign a model to the Author role on the Config page."))
-        if len(reviewers) < 1:
-            issues.append(("error", f"{mode.title()} mode requires at least 1 Reviewer. Assign a model to a Reviewer role on the Config page."))
-        if not has_normalization:
-            issues.append(("error", f"{mode.title()} mode requires Normalization (falls back to Dedup model). Assign a model to Normalization or Dedup on the Config page."))
-        # Recommended roles
+    # Required role checks derived from MODE_ROLES
+    seen_keys: set[str] = set()
+    role_keys_in_mode: set[str] = set()
+    for role_def in MODE_ROLES[mode]:
+        key = role_def["key"]
+        role_keys_in_mode.add(key)
+        if role_def["required"] and key not in seen_keys:
+            seen_keys.add(key)
+            if not filled[key]:
+                issues.append(("error", error_templates[key]))
+
+    # Reviewer-count warnings (only for modes that use reviewers)
+    if "reviewers" in role_keys_in_mode:
         if len(reviewers) == 1:
             issues.append(("warn", f"{mode.title()} review with 1 reviewer — adversarial coverage is significantly reduced."))
         if len(reviewers) >= 2 and len(dedup) == 0:
             issues.append(("error", "Dedup role is required when 2 reviewers are assigned. Assign a model to the Dedup role on the Config page."))
-        if not has_revision:
-            issues.append(("warn", f"No Revision model assigned — the pipeline will fall back to the Author model for revision."))
 
-    elif mode == "spec":
-        # Minimum roles
-        if len(reviewers) < 1:
-            issues.append(("error", "Spec mode requires at least 1 Reviewer. Assign a model to a Reviewer role on the Config page."))
-        if not has_normalization:
-            issues.append(("error", "Spec mode requires Normalization (falls back to Dedup model). Assign a model to Normalization or Dedup on the Config page."))
-        # Recommended roles
-        if len(reviewers) == 1:
-            issues.append(("warn", "Spec review with 1 reviewer — adversarial coverage is significantly reduced."))
-        if len(reviewers) >= 2 and len(dedup) == 0:
-            issues.append(("error", "Dedup role is required when 2 reviewers are assigned. Assign a model to the Dedup role on the Config page."))
-        if not has_revision:
-            issues.append(("warn", "No Revision model assigned — the pipeline will fall back to the Author model for revision."))
-
-    elif mode == "integration":
-        # Minimum roles
-        if len(integ) < 1:
-            issues.append(("error", "Integration mode requires an Integration Reviewer. Assign a model to the Integration Reviewer role on the Config page."))
-        if not has_normalization:
-            issues.append(("error", "Integration mode requires Normalization (falls back to Dedup model). Assign a model to Normalization or Dedup on the Config page."))
-        # Recommended roles
-        if not has_revision:
-            issues.append(("warn", "No Revision model assigned — the pipeline will fall back to the Author model for revision."))
+    # Revision warning (only for modes that include a revision role)
+    if "revision" in role_keys_in_mode and not has_revision:
+        issues.append(("warn", "No Revision model assigned — the pipeline will fall back to the Author model for revision."))
 
     return issues
 

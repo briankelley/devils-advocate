@@ -17,7 +17,7 @@ from rich.markdown import Markdown
 from rich.table import Table
 
 from devils_advocate import __version__
-from .config import find_config, init_config, load_config, validate_config, get_models_by_role
+from .config import find_config, init_config, load_config, validate_config_structure, get_models_by_role
 from .orchestrator import run_plan_review, run_code_review, run_integration_review, run_spec_review
 from .revision import run_revision
 from .storage import StorageManager
@@ -100,7 +100,7 @@ def review(mode, input_path, spec_path, project, max_cost, dry_run, config_path,
         console.print(f"[red]Config error:[/red] {e}")
         sys.exit(1)
 
-    issues = validate_config(config)
+    issues = validate_config_structure(config)
     errors = [msg for level, msg in issues if level == "error"]
     warnings = [msg for level, msg in issues if level == "warn"]
 
@@ -340,7 +340,7 @@ def config_cmd(show, do_init, config_path):
     console.print(table)
 
     # Validate
-    issues = validate_config(config)
+    issues = validate_config_structure(config)
     if issues:
         console.print()
         for level, msg in issues:

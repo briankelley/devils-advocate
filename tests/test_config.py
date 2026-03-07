@@ -10,7 +10,6 @@ from devils_advocate.config import (
     find_config,
     get_models_by_role,
     load_config,
-    validate_config,
     validate_config_structure,
     validate_review_readiness,
 )
@@ -190,7 +189,7 @@ class TestLoadConfig:
 
 
 class TestValidateConfig:
-    """Tests for validate_config() constraint checking."""
+    """Tests for validate_config_structure() constraint checking."""
 
     def _load_valid(self, tmp_path, monkeypatch):
         monkeypatch.setenv("TEST_KEY", "fake-key-123")
@@ -232,7 +231,7 @@ class TestValidateConfig:
         cfg_path = _write_yaml(tmp_path / "one_rev.yaml", one_reviewer_yaml)
         config = load_config(path=cfg_path)
         # Structural validation no longer checks reviewer count
-        issues = validate_config(config)
+        issues = validate_config_structure(config)
         errors = [msg for level, msg in issues if level == "error"]
         assert not any("reviewer" in e.lower() for e in errors)
         # Review readiness warns about 1 reviewer
@@ -245,7 +244,7 @@ class TestValidateConfig:
         monkeypatch.delenv("TEST_KEY", raising=False)
         cfg_path = _write_yaml(tmp_path / "models.yaml")
         config = load_config(path=cfg_path)
-        issues = validate_config(config)
+        issues = validate_config_structure(config)
         errors = [msg for level, msg in issues if level == "error"]
         assert any("empty or unset" in e for e in errors)
 
@@ -259,7 +258,7 @@ class TestValidateConfig:
 
     def test_valid_config_no_errors(self, tmp_path, monkeypatch):
         config = self._load_valid(tmp_path, monkeypatch)
-        issues = validate_config(config)
+        issues = validate_config_structure(config)
         errors = [msg for level, msg in issues if level == "error"]
         assert errors == []
 
@@ -298,7 +297,7 @@ class TestValidateConfig:
         cfg_path = _write_yaml(tmp_path / "no_author.yaml", no_author_yaml)
         config = load_config(path=cfg_path)
         # Structural validation no longer checks author count
-        issues = validate_config(config)
+        issues = validate_config_structure(config)
         errors = [msg for level, msg in issues if level == "error"]
         assert not any("author" in e.lower() for e in errors)
         # Review readiness catches missing author
@@ -341,7 +340,7 @@ class TestValidateConfig:
         cfg_path = _write_yaml(tmp_path / "no_dedup.yaml", no_dedup_yaml)
         config = load_config(path=cfg_path)
         # Structural validation no longer checks dedup presence
-        issues = validate_config(config)
+        issues = validate_config_structure(config)
         errors = [msg for level, msg in issues if level == "error"]
         assert not any("dedup" in e.lower() for e in errors)
         # Review readiness catches missing dedup (config has 2 reviewers)
@@ -391,7 +390,7 @@ class TestValidateConfig:
         cfg_path = _write_yaml(tmp_path / "no_integ.yaml", no_integ_yaml)
         config = load_config(path=cfg_path)
         # Structural validation no longer checks integration_reviewer count
-        issues = validate_config(config)
+        issues = validate_config_structure(config)
         errors = [msg for level, msg in issues if level == "error"]
         assert not any("integration_reviewer" in e.lower() for e in errors)
         # Review readiness catches missing integration_reviewer
@@ -435,7 +434,7 @@ class TestValidateConfig:
         cfg_path = _write_yaml(tmp_path / "dedup_author.yaml", dedup_is_author_yaml)
         config = load_config(path=cfg_path)
         # Structural validation now warns (not errors) about author-dedup collision
-        issues = validate_config(config)
+        issues = validate_config_structure(config)
         errors = [msg for level, msg in issues if level == "error"]
         warnings = [msg for level, msg in issues if level == "warn"]
         assert not any("author" in e.lower() and "dedup" in e.lower() for e in errors)
@@ -634,7 +633,7 @@ class TestGetModelsByRole:
         config = load_config(path=cfg_path)
 
         # Validation should produce zero errors
-        issues = validate_config(config)
+        issues = validate_config_structure(config)
         errors = [msg for level, msg in issues if level == "error"]
         assert errors == [], f"Expected no errors, got: {errors}"
 

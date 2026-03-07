@@ -700,7 +700,7 @@ class TestGovernanceHelpers:
     """Test _apply_governance_or_escalate catastrophic parse path."""
 
     def test_catastrophic_parse_escalates_all(self, tmp_path):
-        from devils_advocate.orchestrator._common import _apply_governance_or_escalate
+        from devils_advocate.orchestrator._pipeline import _apply_governance_or_escalate
         from helpers import make_review_group
 
         storage = _isolated_storage(tmp_path)
@@ -724,7 +724,7 @@ class TestGovernanceHelpers:
             assert d.governance_resolution == "escalated"
 
     def test_normal_governance_at_high_coverage(self, tmp_path):
-        from devils_advocate.orchestrator._common import _apply_governance_or_escalate
+        from devils_advocate.orchestrator._pipeline import _apply_governance_or_escalate
         from helpers import make_review_group, make_author_response
 
         storage = _isolated_storage(tmp_path)

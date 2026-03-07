@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from devils_advocate.config import load_config, validate_config
+from devils_advocate.config import load_config, validate_config_structure
 from devils_advocate.storage import StorageManager
 from devils_advocate.types import Resolution, ReviewResult
 
@@ -30,7 +30,7 @@ SAMPLE_PLAN = FIXTURES_DIR / "boardfoot.sample.plan.md"
 def live_config():
     """Load the real models.yaml and validate it.  Skip if misconfigured."""
     config = load_config()
-    issues = validate_config(config)
+    issues = validate_config_structure(config)
     errors = [msg for level, msg in issues if level == "error"]
     if errors:
         pytest.skip(f"Config validation errors: {'; '.join(errors)}")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from pathlib import Path
@@ -147,10 +148,9 @@ class ReviewRunner:
 
             # Save file manifest and input copies
             if file_manifest:
-                import json as _json
                 manifest_path = storage.reviews_dir / review_id / "input_files_manifest.json"
                 manifest_path.parent.mkdir(parents=True, exist_ok=True)
-                StorageManager._atomic_write(manifest_path, _json.dumps(file_manifest, indent=2))
+                StorageManager._atomic_write(manifest_path, json.dumps(file_manifest, indent=2))
 
                 for file_info in file_manifest.get("files", []):
                     if file_info.get("copied"):
@@ -161,9 +161,8 @@ class ReviewRunner:
                             file_info["original_path"] = str(dest)
 
                 # Re-write manifest with updated paths
-                import json as _json2
                 manifest_path = storage.reviews_dir / review_id / "input_files_manifest.json"
-                StorageManager._atomic_write(manifest_path, _json2.dumps(file_manifest, indent=2))
+                StorageManager._atomic_write(manifest_path, json.dumps(file_manifest, indent=2))
 
             # Monkey-patch storage.log to also emit progress events
             original_log = storage.log
@@ -289,50 +288,47 @@ class ReviewRunner:
                 self.emit_event(review_id, make_terminal_event(True))
 
         except asyncio.CancelledError:
-            self.statuses[review_id] = "failed"
-            if review_id in self.active:
-                self.active[review_id]["state"] = "failed"
-            # Release lock — the orchestrator's finally block may not run
-            if storage is not None:
-                storage.release_lock()
-            # Best-effort: save a stub ledger so the review appears in history
-            try:
-                if storage is not None:
-                    from ..orchestrator._common import _save_stub_ledger
-                    _save_stub_ledger(
-                        storage, review_id, mode, project,
-                        str(input_files[0]) if input_files else "unknown",
-                        "failed",
-                    )
-            except Exception:
-                pass
-            self.emit_event(review_id, make_terminal_event(False, "Review cancelled"))
+            self._handle_review_failure(
+                review_id, storage, mode, project, input_files, "Review cancelled",
+            )
             raise
 
         except Exception as exc:
             logger.exception("Review %s failed", review_id)
-            self.statuses[review_id] = "failed"
-            if review_id in self.active:
-                self.active[review_id]["state"] = "failed"
-            # Release lock — the orchestrator's finally block may not run
-            if storage is not None:
-                storage.release_lock()
-            # Best-effort: save a stub ledger so the review appears in history
-            try:
-                if storage is not None:
-                    from ..orchestrator._common import _save_stub_ledger
-                    _save_stub_ledger(
-                        storage, review_id, mode, project,
-                        str(input_files[0]) if input_files else "unknown",
-                        "failed",
-                    )
-            except Exception:
-                pass
-            self.emit_event(review_id, make_terminal_event(False, str(exc)))
+            self._handle_review_failure(
+                review_id, storage, mode, project, input_files, str(exc),
+            )
 
         finally:
             self.current_review_id = None
             self.current_task = None
+
+    def _handle_review_failure(
+        self,
+        review_id: str,
+        storage,
+        mode: str,
+        project: str,
+        input_files: list,
+        message: str,
+    ) -> None:
+        """Common failure cleanup: update status, release lock, save stub, emit event."""
+        self.statuses[review_id] = "failed"
+        if review_id in self.active:
+            self.active[review_id]["state"] = "failed"
+        if storage is not None:
+            storage.release_lock()
+        try:
+            if storage is not None:
+                from ..orchestrator._common import _save_stub_ledger
+                _save_stub_ledger(
+                    storage, review_id, mode, project,
+                    str(input_files[0]) if input_files else "unknown",
+                    "failed",
+                )
+        except Exception:
+            pass
+        self.emit_event(review_id, make_terminal_event(False, message))
 
     def cancel_review(self, review_id: str) -> bool:
         """Cancel a running review. Returns True if cancelled."""

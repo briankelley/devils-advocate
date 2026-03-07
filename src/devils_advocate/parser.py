@@ -87,6 +87,14 @@ def _extract_multiline_field(text: str, field_name: str, next_fields: list) -> s
     return ""
 
 
+def _strip_reasoning_delimiters(raw: str) -> str:
+    """Remove known LLM reasoning/thinking delimiters before parsing."""
+    raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL | re.IGNORECASE)
+    raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL | re.IGNORECASE)
+    raw = re.sub(r'<reasoning>.*?</reasoning>', '', raw, flags=re.DOTALL | re.IGNORECASE)
+    return raw
+
+
 # ─── Shared Grouped Response Core ────────────────────────────────────────────
 
 
@@ -205,10 +213,7 @@ def parse_review_response(
     """
     points = []
 
-    # Strip known reasoning delimiters before parsing
-    raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL | re.IGNORECASE)
-    raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL | re.IGNORECASE)
-    raw = re.sub(r'<reasoning>.*?</reasoning>', '', raw, flags=re.DOTALL | re.IGNORECASE)
+    raw = _strip_reasoning_delimiters(raw)
     raw = re.sub(r'\*\*Thinking:\*\*.*?(?=REVIEW\s+POINT|\Z)', '', raw, flags=re.DOTALL)
 
     # Split into blocks by REVIEW POINT headers
@@ -272,10 +277,7 @@ def parse_spec_response(
     """
     points = []
 
-    # Strip reasoning delimiters
-    raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL | re.IGNORECASE)
-    raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL | re.IGNORECASE)
-    raw = re.sub(r'<reasoning>.*?</reasoning>', '', raw, flags=re.DOTALL | re.IGNORECASE)
+    raw = _strip_reasoning_delimiters(raw)
 
     # Split into blocks by SUGGESTION headers
     blocks = re.split(r'(?=SUGGESTION\s+#?\d+\s*:?)', raw, flags=re.IGNORECASE)

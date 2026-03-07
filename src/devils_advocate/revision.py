@@ -11,13 +11,10 @@ from collections import defaultdict
 
 from .cost import check_context_window, estimate_tokens
 from .prompts import load_template
-from .providers import call_with_retry
+from .providers import REVISION_MAX_OUTPUT_TOKENS, call_with_retry
 from .types import CostTracker, ModelConfig, ReviewGroup
 from .storage import StorageManager
 from .ui import console
-
-# Token limit for revision artifact generation
-REVISION_MAX_OUTPUT_TOKENS = 64000
 
 # Canonical delimiters per mode
 _DELIMITERS = {

@@ -96,7 +96,7 @@ class TestReviewCommand:
         """Validation errors cause exit 1 with error messages printed."""
         mock_config = {"models": {}, "config_path": "/fake"}
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[
+             patch("devils_advocate.cli.validate_config_structure", return_value=[
                  ("error", "No reviewers configured"),
                  ("error", "Missing API keys"),
              ]):
@@ -117,7 +117,7 @@ class TestReviewCommand:
             return None
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[
+             patch("devils_advocate.cli.validate_config_structure", return_value=[
                  ("warn", "Model X has no context_window"),
              ]), \
              patch("devils_advocate.cli.run_plan_review", side_effect=_noop), \
@@ -133,7 +133,7 @@ class TestReviewCommand:
         """Plan mode without --input exits 1."""
         mock_config = {"models": {}, "config_path": "/fake"}
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]):
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]):
             result = runner.invoke(cli, [
                 "review", "--mode", "plan", "--project", "test",
             ])
@@ -144,7 +144,7 @@ class TestReviewCommand:
         """Code mode without --input exits 1."""
         mock_config = {"models": {}, "config_path": "/fake"}
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]):
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]):
             result = runner.invoke(cli, [
                 "review", "--mode", "code", "--project", "test",
             ])
@@ -155,7 +155,7 @@ class TestReviewCommand:
         """Spec mode without --input exits 1."""
         mock_config = {"models": {}, "config_path": "/fake"}
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]):
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]):
             result = runner.invoke(cli, [
                 "review", "--mode", "spec", "--project", "test",
             ])
@@ -167,7 +167,7 @@ class TestReviewCommand:
         mock_config = {"models": {}, "config_path": "/fake"}
         missing = tmp_path / "nonexistent.md"
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]):
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]):
             result = runner.invoke(cli, [
                 "review", "--mode", "plan", "--project", "test",
                 "--input", str(missing),
@@ -189,7 +189,7 @@ class TestReviewCommand:
             captured["dry_run"] = dry_run
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_plan_review", side_effect=fake_plan_review), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -214,7 +214,7 @@ class TestReviewCommand:
             captured["spec_file"] = spec_file
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_code_review", side_effect=fake_code_review), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -237,7 +237,7 @@ class TestReviewCommand:
             captured["spec_file"] = spec_file
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_code_review", side_effect=fake_code_review), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -253,7 +253,7 @@ class TestReviewCommand:
         mock_config = {"models": {}, "config_path": "/fake"}
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]):
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]):
             result = runner.invoke(cli, [
                 "review", "--mode", "code", "--project", "test",
                 "--input", str(inp), "--spec", str(tmp_path / "missing.md"),
@@ -271,7 +271,7 @@ class TestReviewCommand:
             captured.update(kwargs)
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_integration_review", side_effect=fake_integration_review), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -293,7 +293,7 @@ class TestReviewCommand:
             captured["project"] = project
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_spec_review", side_effect=fake_spec_review), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -312,7 +312,7 @@ class TestReviewCommand:
             raise APIError("Rate limit exceeded")
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_plan_review", side_effect=raise_api_error), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -332,7 +332,7 @@ class TestReviewCommand:
             raise CostLimitError("Budget of $1.00 exceeded")
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_plan_review", side_effect=raise_cost_error), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -351,7 +351,7 @@ class TestReviewCommand:
             raise KeyboardInterrupt()
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_plan_review", side_effect=raise_keyboard_interrupt), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -371,7 +371,7 @@ class TestReviewCommand:
             captured["dry_run"] = dry_run
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_plan_review", side_effect=capture_plan), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -391,7 +391,7 @@ class TestReviewCommand:
             captured["max_cost"] = max_cost
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_plan_review", side_effect=capture_plan), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -416,7 +416,7 @@ class TestReviewCommand:
             pass
 
         with patch("devils_advocate.cli.load_config", side_effect=capture_load), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_plan_review", side_effect=noop), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -437,7 +437,7 @@ class TestReviewCommand:
             captured["input_files"] = input_files
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_plan_review", side_effect=fake_plan), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -455,7 +455,7 @@ class TestReviewCommand:
             pass
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]), \
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]), \
              patch("devils_advocate.cli.run_integration_review", side_effect=fake_integration), \
              patch("devils_advocate.cli.StorageManager"):
             result = runner.invoke(cli, [
@@ -675,7 +675,7 @@ class TestConfigCommand:
         }
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[]):
+             patch("devils_advocate.cli.validate_config_structure", return_value=[]):
             result = runner.invoke(cli, ["config", "--show"])
         assert result.exit_code == 0
         # Rich may truncate the name in narrow terminals; check for prefix
@@ -701,7 +701,7 @@ class TestConfigCommand:
         }
 
         with patch("devils_advocate.cli.load_config", return_value=mock_config), \
-             patch("devils_advocate.cli.validate_config", return_value=[
+             patch("devils_advocate.cli.validate_config_structure", return_value=[
                  ("error", "API key missing for test-model"),
                  ("warn", "No context_window set"),
              ]):

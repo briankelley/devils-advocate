@@ -16,7 +16,6 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-import httpx
 from rich.panel import Panel
 
 from ..types import (
@@ -34,7 +33,8 @@ from ..prompts import (
     get_spec_reviewer_system_prompt,
 )
 from ..parser import parse_spec_response
-from ..revision import run_spec_revision, REVISION_MAX_OUTPUT_TOKENS
+from ..providers import REVISION_MAX_OUTPUT_TOKENS
+from ..revision import run_spec_revision
 from ..dedup import deduplicate_points
 from ..output import generate_report, generate_ledger
 from ..storage import StorageManager

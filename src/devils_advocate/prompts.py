@@ -94,8 +94,6 @@ def build_round1_author_prompt(
     """
     if mode == "plan":
         template = "round1-author-plan-instruct.txt"
-    elif mode == "integration":
-        template = "round1-author-code-instruct.txt"
     else:
         template = "round1-author-code-instruct.txt"
     return load_template(

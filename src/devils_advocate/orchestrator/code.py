@@ -7,7 +7,6 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-import httpx
 from rich.panel import Panel
 
 from ..types import (
@@ -25,7 +24,6 @@ from ..storage import StorageManager
 from ..ui import console
 
 from ._common import (
-    PipelineInputs,
     _build_dry_run_estimate_rows,
     _build_role_assignments,
     _call_reviewer,
@@ -34,9 +32,9 @@ from ._common import (
     _group_to_dict,
     _print_dry_run,
     _promote_points_to_groups,
-    _run_adversarial_pipeline,
     _save_stub_ledger,
 )
+from ._pipeline import PipelineInputs, _run_adversarial_pipeline
 
 
 async def run_code_review(

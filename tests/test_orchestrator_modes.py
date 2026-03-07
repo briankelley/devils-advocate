@@ -1051,7 +1051,7 @@ class TestCallInfo:
 
 class TestPipelineInputs:
     def test_all_fields_required(self, tmp_path):
-        from devils_advocate.orchestrator._common import PipelineInputs
+        from devils_advocate.orchestrator._pipeline import PipelineInputs
         from devils_advocate.types import CostTracker
 
         storage = _isolated_storage(tmp_path)
@@ -1090,7 +1090,7 @@ class TestRound2AllAccepted:
     """When the author accepts every group, rebuttals are skipped."""
 
     async def test_all_accepted_skips_rebuttals(self, tmp_path):
-        from devils_advocate.orchestrator._common import _run_round2_exchange
+        from devils_advocate.orchestrator._pipeline import _run_round2_exchange
         from helpers import make_review_group, make_author_response
 
         storage = _isolated_storage(tmp_path)

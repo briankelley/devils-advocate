@@ -112,6 +112,84 @@ async def _mutate_yaml_config(request: Request, mutator: Callable[[dict], None])
         raise HTTPException(status_code=500, detail=f"Failed to update config: {exc}")
 
 
+def _resolve_path_inputs(form, mode: str) -> tuple[list[Path], Path | None]:
+    """Resolve input files and spec from server-side paths."""
+    input_paths_raw = form.get("input_paths", "")
+    try:
+        all_paths = json.loads(input_paths_raw) if input_paths_raw.strip() else []
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid input_paths JSON")
+
+    reference_paths_raw = form.get("reference_paths", "")
+    try:
+        ref_paths = json.loads(reference_paths_raw) if reference_paths_raw and reference_paths_raw.strip() else []
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid reference_paths JSON")
+
+    all_paths = all_paths + ref_paths
+
+    input_files: list[Path] = []
+    for p_str in all_paths:
+        p = Path(p_str)
+        if not p.exists():
+            raise HTTPException(status_code=400, detail=f"File not found: {p_str}")
+        if not p.is_file():
+            raise HTTPException(status_code=400, detail=f"Not a file: {p_str}")
+        input_files.append(p)
+
+    spec_path = None
+    spec_path_raw = form.get("spec_path", "").strip()
+    if spec_path_raw:
+        sp = Path(spec_path_raw)
+        if not sp.exists() or not sp.is_file():
+            raise HTTPException(status_code=400, detail=f"Spec file not found: {spec_path_raw}")
+        spec_path = sp
+
+    return input_files, spec_path
+
+
+async def _resolve_upload_inputs(form, spec_file_upload) -> tuple[list[Path], Path | None, str]:
+    """Resolve input files and spec from browser uploads. Returns (files, spec, tmpdir)."""
+    tmpdir = tempfile.mkdtemp(prefix="dvad-gui-")
+
+    uploaded_files = form.getlist("input_files") + form.getlist("reference_files")
+    input_files: list[Path] = []
+    file_count = 0
+
+    for upload in uploaded_files:
+        if not hasattr(upload, 'filename') or not upload.filename:
+            continue
+        file_count += 1
+        if file_count > MAX_FILES:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            raise HTTPException(status_code=400, detail=f"Too many files (max {MAX_FILES})")
+
+        safe_name = Path(upload.filename).name
+        dest = Path(tmpdir) / safe_name
+        content = await upload.read()
+        if len(content) > MAX_FILE_SIZE:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            raise HTTPException(
+                status_code=400,
+                detail=f"File '{safe_name}' exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit",
+            )
+        dest.write_bytes(content)
+        input_files.append(dest)
+
+    spec_path = None
+    if spec_file_upload and hasattr(spec_file_upload, 'filename') and spec_file_upload.filename:
+        safe_name = Path(spec_file_upload.filename).name
+        spec_dest = Path(tmpdir) / f"_spec_{safe_name}"
+        content = await spec_file_upload.read()
+        if len(content) > MAX_FILE_SIZE:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            raise HTTPException(status_code=400, detail="Spec file too large")
+        spec_dest.write_bytes(content)
+        spec_path = spec_dest
+
+    return input_files, spec_path, tmpdir
+
+
 # ── Review Start ─────────────────────────────────────────────────────────────
 
 @router.post("/review/start")
@@ -144,75 +222,11 @@ async def start_review(request: Request):
     input_paths_raw = form.get("input_paths", "")
     use_path_mode = bool(input_paths_raw and input_paths_raw.strip())
 
-    input_files: list[Path] = []
-    spec_path = None
     tmpdir = None
-
     if use_path_mode:
-        # ── Path-based flow (server-side file picker) ────────────────
-        try:
-            all_paths = json.loads(input_paths_raw) if input_paths_raw.strip() else []
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid input_paths JSON")
-
-        reference_paths_raw = form.get("reference_paths", "")
-        try:
-            ref_paths = json.loads(reference_paths_raw) if reference_paths_raw and reference_paths_raw.strip() else []
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid reference_paths JSON")
-
-        all_paths = all_paths + ref_paths
-
-        for p_str in all_paths:
-            p = Path(p_str)
-            if not p.exists():
-                raise HTTPException(status_code=400, detail=f"File not found: {p_str}")
-            if not p.is_file():
-                raise HTTPException(status_code=400, detail=f"Not a file: {p_str}")
-            input_files.append(p)
-
-        spec_path_raw = form.get("spec_path", "").strip()
-        if spec_path_raw:
-            sp = Path(spec_path_raw)
-            if not sp.exists() or not sp.is_file():
-                raise HTTPException(status_code=400, detail=f"Spec file not found: {spec_path_raw}")
-            spec_path = sp
+        input_files, spec_path = _resolve_path_inputs(form, mode)
     else:
-        # ── Upload-based flow (legacy browser upload) ────────────────
-        tmpdir = tempfile.mkdtemp(prefix="dvad-gui-")
-
-        uploaded_files = form.getlist("input_files") + form.getlist("reference_files")
-        file_count = 0
-
-        for upload in uploaded_files:
-            if not hasattr(upload, 'filename') or not upload.filename:
-                continue
-            file_count += 1
-            if file_count > MAX_FILES:
-                shutil.rmtree(tmpdir, ignore_errors=True)
-                raise HTTPException(status_code=400, detail=f"Too many files (max {MAX_FILES})")
-
-            safe_name = Path(upload.filename).name
-            dest = Path(tmpdir) / safe_name
-            content = await upload.read()
-            if len(content) > MAX_FILE_SIZE:
-                shutil.rmtree(tmpdir, ignore_errors=True)
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"File '{safe_name}' exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit",
-                )
-            dest.write_bytes(content)
-            input_files.append(dest)
-
-        if spec_file_upload and hasattr(spec_file_upload, 'filename') and spec_file_upload.filename:
-            safe_name = Path(spec_file_upload.filename).name
-            spec_dest = Path(tmpdir) / f"_spec_{safe_name}"
-            content = await spec_file_upload.read()
-            if len(content) > MAX_FILE_SIZE:
-                shutil.rmtree(tmpdir, ignore_errors=True)
-                raise HTTPException(status_code=400, detail="Spec file too large")
-            spec_dest.write_bytes(content)
-            spec_path = spec_dest
+        input_files, spec_path, tmpdir = await _resolve_upload_inputs(form, spec_file_upload)
 
     # Mode-aware validation
     if mode in ("plan", "spec") and not input_files:
@@ -415,8 +429,8 @@ async def override_group(request: Request, review_id: str):
         raise HTTPException(status_code=400, detail=str(exc))
 
     # Invalidate cache
-    from .pages import _review_cache
-    _review_cache["data"] = None
+    from .pages import _invalidate_review_cache
+    _invalidate_review_cache()
 
     return JSONResponse({"status": "ok", "group_id": group_id, "resolution": resolution})
 
