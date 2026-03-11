@@ -42,10 +42,11 @@ def _call_info(model: ModelConfig, prompt: str, effective_max: int) -> str:
     """Build the standard parenthetical for 'calling' log lines."""
     sent = estimate_tokens(prompt)
     configured = model.max_out_configured or effective_max
+    stated = model.max_out_stated or effective_max
     thinking_str = "on" if model.thinking else "off"
     return (
         f"sent: {sent}, timeout: {model.timeout}s, "
-        f"max_out: {configured}/{effective_max}, thinking: {thinking_str}"
+        f"max_out: {configured}/{stated}, thinking: {thinking_str}"
     )
 
 

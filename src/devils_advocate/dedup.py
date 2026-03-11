@@ -99,11 +99,12 @@ async def deduplicate_points(
     if log_fn:
         sent = estimate_tokens(prompt)
         configured = model.max_out_configured or MAX_OUTPUT_TOKENS
+        stated = model.max_out_stated or MAX_OUTPUT_TOKENS
         thinking_str = "on" if model.thinking else "off"
         log_fn(
             f"  Deduplication: calling {model.name} "
             f"({len(all_points)} points, sent: {sent}, timeout: {model.timeout}s, "
-            f"max_out: {configured}/{MAX_OUTPUT_TOKENS}, thinking: {thinking_str})"
+            f"max_out: {configured}/{stated}, thinking: {thinking_str})"
         )
 
     text, usage = await call_with_retry(

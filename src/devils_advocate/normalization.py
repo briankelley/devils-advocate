@@ -32,11 +32,12 @@ async def normalize_review_response(
     if log_fn:
         sent = estimate_tokens(prompt)
         configured = model.max_out_configured or MAX_OUTPUT_TOKENS
+        stated = model.max_out_stated or MAX_OUTPUT_TOKENS
         thinking_str = "on" if model.thinking else "off"
         log_fn(
             f"  Normalization: calling {model.name} "
             f"(fallback for {reviewer_name}, sent: {sent}, timeout: {model.timeout}s, "
-            f"max_out: {configured}/{MAX_OUTPUT_TOKENS}, thinking: {thinking_str})"
+            f"max_out: {configured}/{stated}, thinking: {thinking_str})"
         )
 
     try:

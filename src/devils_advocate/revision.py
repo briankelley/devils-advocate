@@ -233,10 +233,11 @@ async def _run_revision_core(
 
     sent = estimate_tokens(prompt)
     configured = revision_model.max_out_configured or effective_max
+    stated = revision_model.max_out_stated or effective_max
     thinking_str = "on" if revision_model.thinking else "off"
     call_info = (
         f"sent: {sent}, timeout: {revision_model.timeout}s, "
-        f"max_out: {configured}/{effective_max}, thinking: {thinking_str}"
+        f"max_out: {configured}/{stated}, thinking: {thinking_str}"
     )
     if finding_count:
         storage.log(
