@@ -28,7 +28,7 @@ def _load_dotenv(config_path: Path) -> None:
         if not line or line.startswith("#"):
             continue
         key, sep, value = line.partition("=")
-        if sep and key not in os.environ:
+        if sep and key.strip() and key not in os.environ:
             os.environ[key] = value
 
 

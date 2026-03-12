@@ -1435,6 +1435,8 @@ class TestInstallCommand:
              patch("devils_advocate.service.write_service_file", return_value=fake_service), \
              patch("devils_advocate.service.systemctl_daemon_reload"), \
              patch("devils_advocate.service.systemctl_enable"), \
+             patch("devils_advocate.service.systemctl_is_active", return_value=False), \
+             patch("devils_advocate.service.systemctl_restart"), \
              patch("devils_advocate.service.systemctl_start"):
             result = runner.invoke(cli, ["install"])
         assert result.exit_code == 0
@@ -1474,6 +1476,8 @@ class TestInstallCommand:
              patch("devils_advocate.service.write_service_file", return_value=fake_service), \
              patch("devils_advocate.service.systemctl_daemon_reload"), \
              patch("devils_advocate.service.systemctl_enable"), \
+             patch("devils_advocate.service.systemctl_is_active", return_value=False), \
+             patch("devils_advocate.service.systemctl_restart"), \
              patch("devils_advocate.service.systemctl_start"):
             result = runner.invoke(cli, ["install", "--force"])
         assert result.exit_code == 0
@@ -1520,6 +1524,8 @@ class TestInstallCommand:
              patch("devils_advocate.service.write_service_file", return_value=fake_service), \
              patch("devils_advocate.service.systemctl_daemon_reload"), \
              patch("devils_advocate.service.systemctl_enable"), \
+             patch("devils_advocate.service.systemctl_is_active", return_value=False), \
+             patch("devils_advocate.service.systemctl_restart"), \
              patch("devils_advocate.service.systemctl_start"):
             result = runner.invoke(cli, ["install", "--port", "9999"])
         assert result.exit_code == 0
@@ -1555,6 +1561,8 @@ class TestInstallCommand:
              patch("devils_advocate.service.write_service_file", return_value=fake_service), \
              patch("devils_advocate.service.systemctl_daemon_reload"), \
              patch("devils_advocate.service.systemctl_enable"), \
+             patch("devils_advocate.service.systemctl_is_active", return_value=False), \
+             patch("devils_advocate.service.systemctl_restart"), \
              patch("devils_advocate.service.systemctl_start"):
             result = runner.invoke(cli, ["install"])
         assert result.exit_code == 0

@@ -179,14 +179,6 @@ class TestCSRFEnforcement:
         )
         assert resp.status == 403
 
-    def test_revise_full_rejects_no_csrf(self, page, dvad_server):
-        """POST /api/review/{id}/revise-full without CSRF token returns 403."""
-        resp = page.request.post(
-            f"{dvad_server}/api/review/{CAPTURED_REVIEW_ID}/revise-full",
-            headers={"Content-Type": "application/json"},
-        )
-        assert resp.status == 403
-
     def test_wrong_csrf_token_rejected(self, page, dvad_server):
         """A wrong CSRF token must be rejected just like a missing one."""
         resp = page.request.post(
@@ -358,7 +350,6 @@ class TestRouteRegistry:
             "POST /api/review/{id}/cancel",
             "POST /api/review/{id}/override",
             "POST /api/review/{id}/revise",
-            "POST /api/review/{id}/revise-full",
             "POST /api/config/model-timeout",
             "POST /api/config/model-max-tokens",
             "POST /api/config/model-thinking",

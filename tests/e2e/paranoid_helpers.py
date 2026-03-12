@@ -150,15 +150,6 @@ WRITE_ENDPOINTS: dict[str, dict[str, Any]] = {
         "empty_payload": {},
         "valid_payload": {},
     },
-    "POST /api/review/{id}/revise-full": {
-        "method": "POST",
-        "path": "/api/review/{id}/revise-full",
-        "content_type": "application/json",
-        "writes_to": "review dir (revised-{filename})",
-        "destroys": "previous revised file if re-running full revision",
-        "empty_payload": {},
-        "valid_payload": {},
-    },
 }
 
 
@@ -270,14 +261,6 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "backup_exists": False,
         "confirmation_required": False,
         "precondition": "Review must exist, original_content.txt must exist",
-    },
-    "POST /api/review/{id}/revise-full": {
-        "on_empty_input": "Attempts full-file revision (no input fields)",
-        "on_all_empty": "Attempts full-file revision",
-        "reversible": True,
-        "backup_exists": False,
-        "confirmation_required": False,
-        "precondition": "Review must exist and be code mode, original_content.txt must exist",
     },
 }
 

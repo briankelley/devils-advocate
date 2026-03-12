@@ -51,7 +51,6 @@ class TestAllEmptyRejectionPolicy:
             # Skip endpoints that don't accept user input (no payload)
             "POST /api/review/{id}/cancel",
             "POST /api/review/{id}/revise",
-            "POST /api/review/{id}/revise-full",
         )
     ])
     def test_data_loss_on_all_empty_has_guard(self, endpoint_key):
@@ -186,28 +185,6 @@ class TestPreconditionEnforcement:
         )
         assert resp.status == 404
 
-    def test_revise_full_enforces_review_exists(self, page, dvad_server):
-        """Precondition: Review must exist."""
-        csrf = self._get_csrf(page, dvad_server)
-        resp = api_post(
-            page, dvad_server,
-            "/api/review/nonexistent_id_xyz/revise-full",
-            csrf,
-            {},
-        )
-        assert resp.status == 404
-
-    def test_revise_full_enforces_code_mode(self, page, dvad_server):
-        """Precondition: Review must be code mode for revise-full."""
-        csrf = self._get_csrf(page, dvad_server)
-        # The captured review is "spec" mode, not "code" mode
-        resp = api_post(
-            page, dvad_server,
-            f"/api/review/{CAPTURED_REVIEW_ID}/revise-full",
-            csrf,
-            {},
-        )
-        assert resp.status == 400
 
 
 # ---------------------------------------------------------------------------

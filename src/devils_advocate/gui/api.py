@@ -894,7 +894,11 @@ async def save_config(request: Request):
         final_content = yaml_content
 
     # Atomic write
-    await asyncio.to_thread(StorageManager._atomic_write, target, final_content)
+    try:
+        await asyncio.to_thread(StorageManager._atomic_write, target, final_content)
+    except (OSError, PermissionError) as exc:
+        logging.exception("Failed to write config file")
+        raise HTTPException(status_code=500, detail=f"Failed to write config file: {exc}")
 
     return JSONResponse({"status": "ok", "path": str(target)})
 
@@ -1196,10 +1200,8 @@ async def save_env_vars(request: Request):
     for key, value in env_updates.items():
         if value.strip():
             to_write[key] = value
-            os.environ[key] = value
         else:
             to_unset.append(key)
-            os.environ.pop(key, None)
 
     try:
         _write_env_file(
@@ -1211,6 +1213,12 @@ async def save_env_vars(request: Request):
     except (OSError, PermissionError):
         logging.exception("Failed to save environment variables")
         raise HTTPException(status_code=500, detail="Failed to write .env file. Check directory permissions.")
+
+    # Update os.environ AFTER file write succeeds to keep env and .env in sync
+    for key, value in to_write.items():
+        os.environ[key] = value
+    for key in to_unset:
+        os.environ.pop(key, None)
 
     return JSONResponse({
         "status": "ok",
@@ -1228,9 +1236,16 @@ async def list_directory(request: Request, dir: str = "~"):
     if dir == "~":
         target = Path.home()
     else:
-        target = Path(dir).resolve()
+        try:
+            target = Path(dir).resolve()
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid path: {exc}")
 
-    if not target.exists():
+    try:
+        exists = target.exists()
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid path: {exc}")
+    if not exists:
         raise HTTPException(status_code=400, detail=f"Path does not exist: {target}")
     if not target.is_dir():
         raise HTTPException(status_code=400, detail=f"Not a directory: {target}")
