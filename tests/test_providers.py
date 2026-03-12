@@ -172,8 +172,8 @@ class TestCallAnthropic:
         assert parsed["model"] == "claude-haiku-test"
         assert parsed["max_tokens"] == 8192
 
-    async def test_thinking_adaptive_for_opus_4_6(self):
-        """Models containing 'opus-4-6' use adaptive thinking."""
+    async def test_thinking_explicit_for_opus_4_6(self):
+        """Models containing 'opus-4-6' use explicit thinking with budget."""
         model = _make_model(model_id="claude-opus-4-6-20260101", thinking=True)
         with respx.mock:
             route = respx.post(ANTHROPIC_API_URL).mock(
@@ -184,12 +184,13 @@ class TestCallAnthropic:
 
         import json
         parsed = json.loads(route.calls.last.request.content)
-        assert parsed["thinking"] == {"type": "adaptive"}
-        # max_tokens should NOT be inflated for adaptive mode
-        assert parsed["max_tokens"] == MAX_OUTPUT_TOKENS
+        assert parsed["thinking"]["type"] == "enabled"
+        assert "budget_tokens" in parsed["thinking"]
+        # max_tokens padded by thinking budget
+        assert parsed["max_tokens"] > MAX_OUTPUT_TOKENS
 
-    async def test_thinking_adaptive_for_sonnet_4_6(self):
-        """Models containing 'sonnet-4-6' use adaptive thinking."""
+    async def test_thinking_explicit_for_sonnet_4_6(self):
+        """Models containing 'sonnet-4-6' use explicit thinking with budget."""
         model = _make_model(model_id="claude-sonnet-4-6-20260101", thinking=True)
         with respx.mock:
             route = respx.post(ANTHROPIC_API_URL).mock(
@@ -200,7 +201,8 @@ class TestCallAnthropic:
 
         import json
         parsed = json.loads(route.calls.last.request.content)
-        assert parsed["thinking"] == {"type": "adaptive"}
+        assert parsed["thinking"]["type"] == "enabled"
+        assert "budget_tokens" in parsed["thinking"]
 
     async def test_thinking_budget_for_non_adaptive_model(self):
         """Non-opus-4-6/sonnet-4-6 models use budget-based thinking."""
@@ -322,6 +324,57 @@ class TestCallAnthropic:
             async with httpx.AsyncClient() as client:
                 with pytest.raises(httpx.HTTPStatusError):
                     await call_anthropic(client, model, "sys", "usr")
+
+    async def test_anthropic_empty_content_warning_logged(self, caplog):
+        """Warns when output_tokens > 0 but visible text is empty (thinking consumed budget)."""
+        model = _make_model()
+        response_body = {
+            "content": [{"type": "thinking", "thinking": "deep thoughts..."}],
+            "usage": {"input_tokens": 500, "output_tokens": 200},
+        }
+        with respx.mock:
+            respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=response_body)
+            )
+            with caplog.at_level(logging.WARNING, logger="devils_advocate"):
+                async with httpx.AsyncClient() as client:
+                    text, usage = await call_anthropic(
+                        client, model, "sys", "usr", max_tokens=4096
+                    )
+
+        assert text == ""
+        assert usage["output_tokens"] == 200
+        assert any("0 visible content" in record.message for record in caplog.records)
+
+    async def test_anthropic_no_warning_when_text_present(self, caplog):
+        """No warning emitted when Anthropic response has non-empty visible text."""
+        model = _make_model()
+        with respx.mock:
+            respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response("Some visible text"))
+            )
+            with caplog.at_level(logging.WARNING, logger="devils_advocate"):
+                async with httpx.AsyncClient() as client:
+                    await call_anthropic(client, model, "sys", "usr")
+
+        assert not any("0 visible content" in record.message for record in caplog.records)
+
+    async def test_anthropic_no_warning_when_zero_output_tokens(self, caplog):
+        """No warning when both text and output_tokens are zero."""
+        model = _make_model()
+        response_body = {
+            "content": [],
+            "usage": {"input_tokens": 100, "output_tokens": 0},
+        }
+        with respx.mock:
+            respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=response_body)
+            )
+            with caplog.at_level(logging.WARNING, logger="devils_advocate"):
+                async with httpx.AsyncClient() as client:
+                    await call_anthropic(client, model, "sys", "usr")
+
+        assert not any("0 visible content" in record.message for record in caplog.records)
 
 
 # ===========================================================================

@@ -999,6 +999,66 @@ class TestReviseCommand:
         assert result.exit_code == 0
         assert "revised-diff.patch" in result.output
 
+    def test_revision_code_mode_generates_valid_diff(self, runner, tmp_path):
+        """CLI revise in code mode generates a valid unified diff via difflib."""
+        original = "def foo():\n    return 1\n"
+        revised = "def foo():\n    return 42\n"
+        mock_config, mock_roles, mock_storage = self._make_revise_mocks(tmp_path, mode="code")
+        self._create_review_dir(tmp_path, original_content=original)
+
+        async def fake_revision(*a, **kw):
+            return revised
+
+        with patch("devils_advocate.cli.load_config", return_value=mock_config), \
+             patch("devils_advocate.cli.get_models_by_role", return_value=mock_roles), \
+             patch("devils_advocate.cli.StorageManager", return_value=mock_storage), \
+             patch("devils_advocate.cli.run_revision", side_effect=fake_revision):
+            result = runner.invoke(cli, [
+                "revise", "--project", "test", "--review", "rev-001",
+                "--project-dir", str(tmp_path),
+            ])
+        assert result.exit_code == 0
+        assert "revised-diff.patch" in result.output
+
+        # Check atomic_write calls: first is the revised file, second is the diff
+        calls = mock_storage._atomic_write.call_args_list
+        assert len(calls) == 2, f"Expected 2 _atomic_write calls, got {len(calls)}"
+
+        # Second call should be the diff patch
+        diff_path_arg = calls[1][0][0]
+        diff_content = calls[1][0][1]
+        assert str(diff_path_arg).endswith("revised-diff.patch")
+
+        # Verify the diff content is valid unified diff format
+        assert "---" in diff_content
+        assert "+++" in diff_content
+        assert "-    return 1" in diff_content
+        assert "+    return 42" in diff_content
+
+    def test_revision_code_mode_no_diff_when_unchanged(self, runner, tmp_path):
+        """CLI revise in code mode skips diff write when revised output equals original."""
+        original = "def foo():\n    return 1\n"
+        mock_config, mock_roles, mock_storage = self._make_revise_mocks(tmp_path, mode="code")
+        self._create_review_dir(tmp_path, original_content=original)
+
+        async def fake_revision(*a, **kw):
+            return original  # Same as original
+
+        with patch("devils_advocate.cli.load_config", return_value=mock_config), \
+             patch("devils_advocate.cli.get_models_by_role", return_value=mock_roles), \
+             patch("devils_advocate.cli.StorageManager", return_value=mock_storage), \
+             patch("devils_advocate.cli.run_revision", side_effect=fake_revision):
+            result = runner.invoke(cli, [
+                "revise", "--project", "test", "--review", "rev-001",
+                "--project-dir", str(tmp_path),
+            ])
+        assert result.exit_code == 0
+
+        # Only one _atomic_write call (the revised file itself), NO diff
+        calls = mock_storage._atomic_write.call_args_list
+        assert len(calls) == 1, f"Expected 1 _atomic_write call (no diff), got {len(calls)}"
+        assert "revised-diff.patch" not in result.output
+
     def test_revision_integration_mode_output_name(self, runner, tmp_path):
         """Integration mode revision outputs remediation-plan.md."""
         mock_config, mock_roles, mock_storage = self._make_revise_mocks(tmp_path, mode="integration")

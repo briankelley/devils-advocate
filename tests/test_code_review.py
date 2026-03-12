@@ -555,3 +555,195 @@ async def test_lock_acquired_and_released(code_config, code_file, tmp_path):
 
     assert result is not None
     assert not lock_path.exists(), ".dvad/.lock should be removed after review completes"
+
+
+# ---------------------------------------------------------------------------
+# Test 11: Pipeline difflib generation in code mode
+# ---------------------------------------------------------------------------
+
+# Revised code response that the extractor can successfully parse.
+# Must use canonical code mode delimiters.
+REVISION_CODE_OUTPUT = """\
+=== REVISED CODE ===
+def login(user, password):
+    query = 'SELECT * FROM users WHERE user = ?'
+    return db.execute(query, (user,))
+=== END REVISED CODE ===
+"""
+
+
+async def test_code_review_generates_diff_patch(code_config, code_file, tmp_path):
+    """When revision returns changed code, revised-diff.patch is written with valid unified diff."""
+    with respx.mock:
+        respx.post("https://api.test.com/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json=_openai_json(REVIEWER_OUTPUT))
+        )
+        respx.post("https://api.test2.com/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json=_openai_json(REVIEWER_OUTPUT))
+        )
+        respx.post("https://api.anthropic.com/v1/messages").mock(
+            side_effect=[
+                httpx.Response(200, json=_anthropic_json(DEDUP_OUTPUT)),
+                httpx.Response(200, json=_anthropic_json(AUTHOR_OUTPUT_TEMPLATE)),
+                httpx.Response(200, json=_anthropic_json(REVISION_CODE_OUTPUT)),
+            ]
+        )
+
+        old_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            result = await run_code_review(
+                config=code_config,
+                input_file=code_file,
+                project="test-project",
+                max_cost=10.0,
+                dry_run=False,
+            )
+        finally:
+            os.chdir(old_cwd)
+
+    assert result is not None
+
+    # Locate the review directory
+    reviews_dir = tmp_path / "dvad-data" / "reviews"
+    review_dirs = list(reviews_dir.glob("*"))
+    assert len(review_dirs) == 1
+    review_dir = review_dirs[0]
+
+    # revised-diff.patch should exist with valid unified diff format
+    diff_path = review_dir / "revised-diff.patch"
+    assert diff_path.exists(), "revised-diff.patch should be created for code mode"
+    diff_content = diff_path.read_text()
+    assert diff_content.startswith("---"), "Diff should start with --- header"
+    assert "+++" in diff_content, "Diff should contain +++ header"
+    # Headers should use a/ and b/ prefixes with the input file label
+    assert "a/" in diff_content
+    assert "b/" in diff_content
+
+    # The revised code file should also exist
+    revised_path = review_dir / f"revised-{code_file.name}"
+    assert revised_path.exists(), "Revised code file should be written"
+
+    # result.revised_output should contain the diff (not the full revised code)
+    assert result.revised_output.startswith("---")
+
+
+async def test_code_review_no_diff_when_unchanged(code_config, tmp_path, monkeypatch):
+    """When revised code equals original, revised-diff.patch should NOT be written.
+
+    Note: _extract_revision_strict strips the extracted content, so the original
+    content must not have a trailing newline to get a true no-change scenario.
+    """
+    monkeypatch.setenv("TEST_KEY", "fake-key")
+    monkeypatch.setenv("DVAD_HOME", str(tmp_path / "dvad-data"))
+
+    # Write a code file with content that matches what the extractor will return
+    # (extractor strips whitespace, so original must match that stripped form)
+    code_file = tmp_path / "app.py"
+    original_code = "def hello():\n    return 'world'"
+    code_file.write_text(original_code)
+
+    # Revision returns the EXACT same code as original (strip-stable)
+    identical_revision = (
+        f"=== REVISED CODE ===\n{original_code}\n=== END REVISED CODE ==="
+    )
+
+    with respx.mock:
+        respx.post("https://api.test.com/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json=_openai_json(REVIEWER_OUTPUT))
+        )
+        respx.post("https://api.test2.com/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json=_openai_json(REVIEWER_OUTPUT))
+        )
+        respx.post("https://api.anthropic.com/v1/messages").mock(
+            side_effect=[
+                httpx.Response(200, json=_anthropic_json(DEDUP_OUTPUT)),
+                httpx.Response(200, json=_anthropic_json(AUTHOR_OUTPUT_TEMPLATE)),
+                httpx.Response(200, json=_anthropic_json(identical_revision)),
+            ]
+        )
+
+        old_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            result = await run_code_review(
+                config=code_config,
+                input_file=code_file,
+                project="test-project",
+                max_cost=10.0,
+                dry_run=False,
+            )
+        finally:
+            os.chdir(old_cwd)
+
+    assert result is not None
+
+    reviews_dir = tmp_path / "dvad-data" / "reviews"
+    review_dirs = list(reviews_dir.glob("*"))
+    assert len(review_dirs) == 1
+    review_dir = review_dirs[0]
+
+    # revised-diff.patch should NOT exist since there are no changes
+    diff_path = review_dir / "revised-diff.patch"
+    assert not diff_path.exists(), "revised-diff.patch should not exist when code is unchanged"
+
+    # When diff is empty, result.revised_output should fall back to the full revised code
+    assert result.revised_output == original_code
+
+
+# ---------------------------------------------------------------------------
+# Test 12: Revised filename uses input file name
+# ---------------------------------------------------------------------------
+
+
+async def test_revised_filename_includes_input_name(code_config, tmp_path, monkeypatch):
+    """The revised artifact should be named revised-{input_file.name}."""
+    monkeypatch.setenv("TEST_KEY", "fake-key")
+    monkeypatch.setenv("DVAD_HOME", str(tmp_path / "dvad-data"))
+
+    # Input file with a specific name
+    code_file = tmp_path / "orchestrator.py"
+    code_file.write_text("def main(): pass\n")
+
+    with respx.mock:
+        respx.post("https://api.test.com/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json=_openai_json(REVIEWER_OUTPUT))
+        )
+        respx.post("https://api.test2.com/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json=_openai_json(REVIEWER_OUTPUT))
+        )
+        respx.post("https://api.anthropic.com/v1/messages").mock(
+            side_effect=[
+                httpx.Response(200, json=_anthropic_json(DEDUP_OUTPUT)),
+                httpx.Response(200, json=_anthropic_json(AUTHOR_OUTPUT_TEMPLATE)),
+                httpx.Response(200, json=_anthropic_json(REVISION_CODE_OUTPUT)),
+            ]
+        )
+
+        old_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            result = await run_code_review(
+                config=code_config,
+                input_file=code_file,
+                project="test-project",
+                max_cost=10.0,
+                dry_run=False,
+            )
+        finally:
+            os.chdir(old_cwd)
+
+    assert result is not None
+
+    reviews_dir = tmp_path / "dvad-data" / "reviews"
+    review_dirs = list(reviews_dir.glob("*"))
+    assert len(review_dirs) == 1
+    review_dir = review_dirs[0]
+
+    # The revised file should follow the pattern revised-{input_file.name}
+    expected_name = f"revised-{code_file.name}"
+    revised_path = review_dir / expected_name
+    assert revised_path.exists(), (
+        f"Expected revised artifact at {expected_name}, "
+        f"found: {[p.name for p in review_dir.iterdir()]}"
+    )

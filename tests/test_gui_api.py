@@ -583,3 +583,126 @@ class TestLogViewer:
             assert resp.status_code == 200
             assert "Line 1" in resp.text
             assert "Line 2" in resp.text
+
+
+# ── Diff Download Endpoint (/api/review/{id}/diff) ──────────────────────────
+
+
+class TestDiffDownload:
+    """Tests for the GET /api/review/{id}/diff endpoint."""
+
+    def test_diff_200_when_patch_exists(self, client):
+        """GET /diff returns 200 and the patch file when revised-diff.patch exists."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            reviews_dir = Path(td) / "reviews"
+            review_dir = reviews_dir / "test_review_abc"
+            review_dir.mkdir(parents=True)
+            patch_content = "--- a/main.py\n+++ b/main.py\n@@ -1 +1 @@\n-old\n+new\n"
+            (review_dir / "revised-diff.patch").write_text(patch_content)
+
+            mock_storage = MagicMock()
+            mock_storage.reviews_dir = reviews_dir
+
+            with patch("devils_advocate.gui.api.get_gui_storage", return_value=mock_storage):
+                resp = client.get("/api/review/test_review_abc/diff")
+
+            assert resp.status_code == 200
+            assert patch_content in resp.text
+            # Verify download filename
+            content_disp = resp.headers.get("content-disposition", "")
+            assert "revised-diff-test_review_abc.patch" in content_disp
+
+    def test_diff_404_when_no_patch(self, client):
+        """GET /diff returns 404 when revised-diff.patch does not exist."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            reviews_dir = Path(td) / "reviews"
+            review_dir = reviews_dir / "test_review_abc"
+            review_dir.mkdir(parents=True)
+            # No revised-diff.patch file
+
+            mock_storage = MagicMock()
+            mock_storage.reviews_dir = reviews_dir
+
+            with patch("devils_advocate.gui.api.get_gui_storage", return_value=mock_storage):
+                resp = client.get("/api/review/test_review_abc/diff")
+
+            assert resp.status_code == 404
+            assert "Diff not found" in resp.json()["detail"]
+
+
+# ── Revised Download Backward Compatibility ─────────────────────────────────
+
+
+class TestRevisedDownloadCompat:
+    """Tests for /api/review/{id}/revised backward compatibility with diff artifacts."""
+
+    def test_revised_prefers_full_file_over_diff(self, client):
+        """When both revised-{name} and revised-diff.patch exist, /revised returns the full file."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            reviews_dir = Path(td) / "reviews"
+            review_dir = reviews_dir / "test_review_code"
+            review_dir.mkdir(parents=True)
+            # Full revised code file
+            (review_dir / "revised-main.py").write_text("def fixed(): pass\n")
+            # Also has the diff
+            (review_dir / "revised-diff.patch").write_text("--- a/main.py\n+++ b/main.py\n")
+
+            mock_storage = MagicMock()
+            mock_storage.reviews_dir = reviews_dir
+
+            with patch("devils_advocate.gui.api.get_gui_storage", return_value=mock_storage):
+                resp = client.get("/api/review/test_review_code/revised")
+
+            assert resp.status_code == 200
+            # Should return the full revised file, not the diff
+            assert "def fixed(): pass" in resp.text
+            content_disp = resp.headers.get("content-disposition", "")
+            assert "revised-main-test_review_code.py" in content_disp
+
+    def test_revised_falls_back_to_diff_for_old_reviews(self, client):
+        """When ONLY revised-diff.patch exists (old review), /revised returns the diff."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            reviews_dir = Path(td) / "reviews"
+            review_dir = reviews_dir / "test_review_old"
+            review_dir.mkdir(parents=True)
+            # Only the diff file (no full revised file)
+            diff_content = "--- a/source.py\n+++ b/source.py\n@@ -1 +1 @@\n-old\n+new\n"
+            (review_dir / "revised-diff.patch").write_text(diff_content)
+
+            mock_storage = MagicMock()
+            mock_storage.reviews_dir = reviews_dir
+
+            with patch("devils_advocate.gui.api.get_gui_storage", return_value=mock_storage):
+                resp = client.get("/api/review/test_review_old/revised")
+
+            assert resp.status_code == 200
+            assert diff_content in resp.text
+            content_disp = resp.headers.get("content-disposition", "")
+            assert "revised-diff-test_review_old.patch" in content_disp
+
+    def test_revised_404_when_no_artifacts(self, client):
+        """When no revised artifacts exist at all, /revised returns 404."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            reviews_dir = Path(td) / "reviews"
+            review_dir = reviews_dir / "test_review_empty"
+            review_dir.mkdir(parents=True)
+            # No revised-* files at all
+
+            mock_storage = MagicMock()
+            mock_storage.reviews_dir = reviews_dir
+
+            with patch("devils_advocate.gui.api.get_gui_storage", return_value=mock_storage):
+                resp = client.get("/api/review/test_review_empty/revised")
+
+            assert resp.status_code == 404
+            assert "Revised artifact not found" in resp.json()["detail"]
