@@ -1,4 +1,10 @@
-<div align="center"><img width="200" height="1462" alt="dvad-color-white" src="https://github.com/user-attachments/assets/6dd501d8-701c-4fd8-8209-9e72c2f86368" /></div>
+<div align="center">
+  <img width="200" height="200" alt="dvad-color-white" src="https://github.com/user-attachments/assets/6dd501d8-701c-4fd8-8209-9e72c2f86368" />
+  <br/>
+  <a href="https://pypi.org/project/devils-advocate/">
+    <img src="https://img.shields.io/pypi/v/devils-advocate" alt="PyPI version" />
+  </a>
+</div>
 
 # Devil's Advocate
 
@@ -88,9 +94,11 @@ Escalated findings are resolved through the GUI's override controls or `dvad ove
 | Mode          | Protocol      | Input                                               | Output                        |
 | ------------- | ------------- | --------------------------------------------------- | ----------------------------- |
 | `plan`        | Adversarial   | Plan file + optional reference files                | `revised-plan.md`             |
-| `code`        | Adversarial   | Exactly one code file, optional spec                | `revised-diff.patch`          |
+| `code`        | Adversarial   | Exactly one code file, optional spec                | `revised-<filename>` + `revised-diff.patch` |
 | `spec`        | Collaborative | Spec file(s)                                        | `revised-spec-suggestions.md` |
 | `integration` | Adversarial   | Input files or `.dvad/manifest.json`, optional spec | `remediation-plan.md`         |
+
+**code** mode produces the complete revised source file as its primary output, with a system-generated unified diff (`revised-diff.patch`) alongside it. The diff is computed mechanically via Python's `difflib`, not by an LLM.
 
 **spec** is non-adversarial - no author, no rebuttals, no governance. Findings are grouped by theme and compiled into a suggestion report. All other modes use the full 2-round adversarial protocol.
 
