@@ -39,6 +39,10 @@ _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     # Cost events (must be first — suppressed from console log)
     (r"§cost role=(\S+) model=(.+?) cost=([\d.]+) total=([\d.]+)(?: in_tokens=(\d+) out_tokens=(\d+) total_tokens=(\d+))?", "cost_update", {}),
 
+    # Integration reviewer (maps to round1 dots — same breadcrumb position)
+    (r"Integration: calling (.+)", "round1_calling", {}),
+    (r"Integration: (.+) responded \(", "round1_responded", {}),
+
     # Round 1
     (r"Round 1: calling author to respond to grouped feedback", "round1_author", {}),
     (r"Round 1: calling (.+)", "round1_calling", {}),

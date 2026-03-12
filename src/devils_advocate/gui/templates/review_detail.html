@@ -104,6 +104,21 @@
     <div class="pipeline-step pending" id="pipe-revision"><span class="step-dot"></span><span class="step-label">Suggestions</span></div>
     {% endif %}
 </div>
+{% elif review_mode == 'integration' %}
+<div class="pipeline-rail">
+    <div class="pipeline-step done" id="pipe-round1"><span class="step-dot"></span><span class="step-label">Integration Review</span></div>
+    <div class="pipeline-step done" id="pipe-author"><span class="step-dot"></span><span class="step-label">Author Response</span></div>
+    <div class="pipeline-step done" id="pipe-round2"><span class="step-dot"></span><span class="step-label">Rebuttals</span></div>
+    <div class="pipeline-step done" id="pipe-governance"><span class="step-dot"></span><span class="step-label">Governance</span></div>
+    {% if escalated|length > 0 or overridden|length > 0 %}
+    <div class="pipeline-step {{ 'done' if has_overrides else 'active' }}" id="pipe-overrides"><span class="step-dot"></span><span class="step-label">Overrides</span></div>
+    {% endif %}
+    {% if has_revised %}
+    <div class="pipeline-step done" id="pipe-revision"><span class="step-dot"></span><span class="step-label">Revision</span></div>
+    {% elif has_original %}
+    <div class="pipeline-step pending" id="pipe-revision"><span class="step-dot"></span><span class="step-label">Revision</span></div>
+    {% endif %}
+</div>
 {% else %}
 <div class="pipeline-rail">
     <div class="pipeline-step done" id="pipe-round1"><span class="step-dot"></span><span class="step-label">Round 1 — Reviewers</span></div>

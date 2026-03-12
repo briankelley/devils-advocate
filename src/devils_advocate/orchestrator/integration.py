@@ -25,6 +25,7 @@ from ..ui import console
 from ._common import (
     _build_dry_run_estimate_rows,
     _build_role_assignments,
+    _call_info,
     _check_cost_guardrail,
     _estimate_total_cost,
     _print_dry_run,
@@ -198,14 +199,23 @@ async def run_integration_review(
                 )
             )
 
+            effective_max = integ_reviewer.max_out_configured or MAX_OUTPUT_TOKENS
+            storage.log(
+                f"Integration: calling {integ_reviewer.name} "
+                f"({_call_info(integ_reviewer, prompt, effective_max)})"
+            )
             text, usage = await call_with_retry(
                 client,
                 integ_reviewer,
                 get_reviewer_system_prompt(),
                 prompt,
-                integ_reviewer.max_out_configured or MAX_OUTPUT_TOKENS,
+                effective_max,
                 log_fn=storage.log,
                 mode="integration",
+            )
+            storage.log(
+                f"Integration: {integ_reviewer.name} responded "
+                f"(recv: {usage['output_tokens']})"
             )
             cost_tracker.add(
                 integ_reviewer.name,
@@ -213,7 +223,7 @@ async def run_integration_review(
                 usage["output_tokens"],
                 integ_reviewer.cost_per_1k_input,
                 integ_reviewer.cost_per_1k_output,
-                role="reviewer_1",
+                role="integration",
             )
             storage.save_intermediate(
                 review_id, "round1", f"{integ_reviewer.name}_raw.txt", text
@@ -264,7 +274,7 @@ async def run_integration_review(
                     cost_tracker=cost_tracker,
                     storage=storage,
                     revision_filename="remediation-plan.md",
-                    reviewer_roles={integ_reviewer.name: "reviewer_1"},
+                    reviewer_roles={integ_reviewer.name: "integration"},
                 ),
             )
 

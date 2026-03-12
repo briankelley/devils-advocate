@@ -484,6 +484,12 @@ const dvad = {
             modeLabel.textContent = detail.mode + ' review';
         }
 
+        // Relabel live breadcrumb for integration mode
+        if (detail.mode === 'integration') {
+            const reviewerLabel = document.getElementById('reviewers-phase-label');
+            if (reviewerLabel) reviewerLabel.textContent = 'INTEGRATION REVIEW';
+        }
+
         // Build cost table from roles
         const table = document.getElementById('live-cost-table');
         if (!table || !detail.roles) return;

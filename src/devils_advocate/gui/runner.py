@@ -193,6 +193,8 @@ class ReviewRunner:
                 role_meta["roles"]["normalization"] = roles["normalization"].name
             if roles.get("revision"):
                 role_meta["roles"]["revision"] = roles["revision"].name
+            if roles.get("integration"):
+                role_meta["roles"]["integration"] = roles["integration"].name
             self.emit_event(review_id, ProgressEvent(
                 event_type="metadata", phase="review_metadata", detail=role_meta,
             ))
