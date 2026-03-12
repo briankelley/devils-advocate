@@ -288,10 +288,10 @@ class TestGenerateReport:
         assert "remediation steps" in report
 
     def test_revised_output_code_label(self):
-        """Code mode (or any other mode) uses 'Unified Diff' label."""
+        """Code mode uses 'Revised Code Diff' label."""
         result = _make_review_result(mode="code", revised_output="diff content")
         report = generate_report(result)
-        assert "## Unified Diff" in report
+        assert "## Revised Code Diff" in report
         assert "diff content" in report
 
     def test_revised_output_absent(self):
@@ -300,7 +300,7 @@ class TestGenerateReport:
         report = generate_report(result)
         assert "## Revised Plan" not in report
         assert "## Remediation Plan" not in report
-        assert "## Unified Diff" not in report
+        assert "## Revised Code Diff" not in report
 
     def test_cost_breakdown_section(self):
         """Cost breakdown table appears with model costs."""

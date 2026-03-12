@@ -272,9 +272,9 @@ class TestExtractRevisionStrict:
 
     def test_code_mode(self):
         from devils_advocate.revision import _extract_revision_strict
-        raw = "=== UNIFIED DIFF ===\n--- a/file\n+++ b/file\n=== END UNIFIED DIFF ==="
+        raw = "=== REVISED CODE ===\ndef hello():\n    pass\n=== END REVISED CODE ==="
         result = _extract_revision_strict(raw, "code")
-        assert "--- a/file" in result
+        assert "def hello()" in result
 
     def test_integration_mode(self):
         from devils_advocate.revision import _extract_revision_strict
@@ -296,7 +296,7 @@ class TestExtractRevisionStrict:
 
     def test_wrong_delimiters_returns_empty(self):
         from devils_advocate.revision import _extract_revision_strict
-        raw = "=== UNIFIED DIFF ===\nContent\n=== END UNIFIED DIFF ==="
+        raw = "=== REVISED CODE ===\nContent\n=== END REVISED CODE ==="
         result = _extract_revision_strict(raw, "plan")  # mode mismatch
         assert result == ""
 

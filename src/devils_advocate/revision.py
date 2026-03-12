@@ -19,7 +19,7 @@ from .ui import console
 # Canonical delimiters per mode
 _DELIMITERS = {
     "plan": ("=== REVISED PLAN ===", "=== END REVISED PLAN ==="),
-    "code": ("=== UNIFIED DIFF ===", "=== END UNIFIED DIFF ==="),
+    "code": ("=== REVISED CODE ===", "=== END REVISED CODE ==="),
     "integration": ("=== REMEDIATION PLAN ===", "=== END REMEDIATION PLAN ==="),
     "spec": ("=== SPEC SUGGESTIONS ===", "=== END SPEC SUGGESTIONS ==="),
 }

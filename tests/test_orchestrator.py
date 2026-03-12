@@ -247,8 +247,8 @@ async def test_successful_plan_review_e2e(plan_config, plan_file, tmp_path):
     assert len(result.author_responses) > 0
     assert len(result.governance_decisions) > 0
     assert result.cost.total_usd > 0
-    # Revised output stays empty -- canonical artifact is the separate file
-    assert result.revised_output == ""
+    # Revised output is now populated by the pipeline for report inclusion
+    assert result.revised_output != ""
 
     # Verify storage artifacts were written (DVAD_HOME points to tmp_path/dvad-data)
     reviews_dir = tmp_path / "dvad-data" / "reviews"

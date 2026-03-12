@@ -500,10 +500,28 @@ def revise(project, review_id, config_path, project_dir, max_cost, input_overrid
     # Output filename per mode
     output_names = {
         "plan": "revised-plan.md",
-        "code": "revised-diff.patch",
         "integration": "remediation-plan.md",
     }
-    output_name = output_names.get(mode, "revised-plan.md")
+    if mode == "code":
+        # Derive filename from manifest or input override
+        orig_name = "source"
+        if input_override:
+            orig_name = Path(input_override).name
+        else:
+            manifest_path = rd / "input_files_manifest.json"
+            if manifest_path.exists():
+                try:
+                    import json as _json
+                    manifest = _json.loads(manifest_path.read_text())
+                    for f in manifest.get("files", []):
+                        if f.get("type") == "code":
+                            orig_name = f["filename"]
+                            break
+                except Exception:
+                    pass
+        output_name = f"revised-{orig_name}"
+    else:
+        output_name = output_names.get(mode, "revised-plan.md")
 
     cost_tracker = CostTracker(max_cost=max_cost)
 
@@ -529,6 +547,19 @@ def revise(project, review_id, config_path, project_dir, max_cost, input_overrid
             storage._atomic_write(rd / output_name, revised)
             console.print(f"[green]Revision complete.[/green]")
             console.print(f"  Output: {rd / output_name}")
+            # For code mode: also generate and save the diff
+            if mode == "code":
+                import difflib
+                diff_lines = difflib.unified_diff(
+                    original_content.splitlines(keepends=True),
+                    revised.splitlines(keepends=True),
+                    fromfile=f"a/{orig_name}",
+                    tofile=f"b/{orig_name}",
+                )
+                diff_text = "".join(diff_lines)
+                if diff_text:
+                    storage._atomic_write(rd / "revised-diff.patch", diff_text)
+                    console.print(f"  Diff:   {rd / 'revised-diff.patch'}")
             console.print(f"  Cost: ${cost_tracker.total_usd:.4f}")
         else:
             console.print("[yellow]No revised artifact produced.[/yellow]")

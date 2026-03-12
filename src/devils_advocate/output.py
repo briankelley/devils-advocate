@@ -99,7 +99,7 @@ def generate_report(result: ReviewResult) -> str:
         elif result.mode == "integration":
             label = "Remediation Plan"
         else:
-            label = "Unified Diff"
+            label = "Revised Code Diff"
         lines.append(f"## {label}")
         lines.append("")
         lines.append("```")

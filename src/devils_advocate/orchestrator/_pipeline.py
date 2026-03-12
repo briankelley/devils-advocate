@@ -581,6 +581,21 @@ async def _run_adversarial_pipeline(
                 console.print(
                     f"  Revised artifact saved ({len(revised_output):,} chars)"
                 )
+                # For code mode: generate a unified diff from original vs revised
+                if mode == "code":
+                    import difflib
+                    diff_lines = difflib.unified_diff(
+                        content.splitlines(keepends=True),
+                        revised_output.splitlines(keepends=True),
+                        fromfile=f"a/{inputs.input_file_label}",
+                        tofile=f"b/{inputs.input_file_label}",
+                    )
+                    diff_text = "".join(diff_lines)
+                    if diff_text:
+                        storage._atomic_write(rd / "revised-diff.patch", diff_text)
+                    result.revised_output = diff_text or revised_output
+                else:
+                    result.revised_output = revised_output
         except Exception as e:
             console.print(
                 f"  [yellow]Warning: Revision failed: {e}[/yellow]"

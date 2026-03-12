@@ -304,7 +304,7 @@ class TestGenerateReport:
         from devils_advocate.output import generate_report
         result = _make_review_result(mode="code", revised_output="--- a/file")
         report = generate_report(result)
-        assert "Unified Diff" in report
+        assert "Revised Code Diff" in report
 
     def test_integration_mode_revised_label(self):
         from devils_advocate.output import generate_report

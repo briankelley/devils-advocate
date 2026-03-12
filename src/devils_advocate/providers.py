@@ -28,7 +28,7 @@ _ANTHROPIC_THINKING_BUDGETS = {
     "plan": 10000,
     "code": 10000,
     "integration": 10000,
-    "revision": 16000,
+    "revision": 8000,
     "dedup": 4096,
     "normalization": 4096,
     "": 8192,
@@ -62,12 +62,9 @@ async def call_anthropic(
 
     # Thinking / reasoning support
     if model.thinking:
-        if "opus-4-6" in model.model_id or "sonnet-4-6" in model.model_id:
-            body["thinking"] = {"type": "adaptive"}
-        else:
-            budget = _ANTHROPIC_THINKING_BUDGETS.get(mode, 8192)
-            body["thinking"] = {"type": "enabled", "budget_tokens": budget}
-            body["max_tokens"] = body["max_tokens"] + budget
+        budget = _ANTHROPIC_THINKING_BUDGETS.get(mode, 8192)
+        body["thinking"] = {"type": "enabled", "budget_tokens": budget}
+        body["max_tokens"] = body["max_tokens"] + budget
 
     resp = await client.post(
         ANTHROPIC_API_URL, json=body, headers=headers, timeout=model.timeout
@@ -79,9 +76,20 @@ async def call_anthropic(
         if block.get("type") == "text":
             text += block.get("text", "")
     usage = data.get("usage", {})
+    output_tokens = usage.get("output_tokens", 0)
+
+    if not text and output_tokens > 0:
+        import logging
+        logging.getLogger("devils_advocate").warning(
+            "%s returned 0 visible content but %d output tokens — "
+            "thinking likely consumed the entire token budget (max_tokens=%d). "
+            "Consider increasing max_out_configured for this model.",
+            model.name, output_tokens, max_tokens,
+        )
+
     return text, {
         "input_tokens": usage.get("input_tokens", 0),
-        "output_tokens": usage.get("output_tokens", 0),
+        "output_tokens": output_tokens,
     }
 
 

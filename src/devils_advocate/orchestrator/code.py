@@ -237,7 +237,7 @@ async def run_code_review(
                     revision_model=revision_model,
                     cost_tracker=cost_tracker,
                     storage=storage,
-                    revision_filename="revised-diff.patch",
+                    revision_filename=f"revised-{input_file.name}",
                     reviewer_roles={
                         r.name: f"reviewer_{i+1}"
                         for i, r in enumerate(active_reviewers)

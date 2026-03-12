@@ -151,9 +151,9 @@ class TestExtractRevisionStrict:
         assert result == "Revised content here"
 
     def test_code_mode_canonical_delimiters(self):
-        raw = "=== UNIFIED DIFF ===\n--- a/file.py\n+++ b/file.py\n=== END UNIFIED DIFF ==="
+        raw = "=== REVISED CODE ===\ndef hello():\n    pass\n=== END REVISED CODE ==="
         result = _extract_revision_strict(raw, "code")
-        assert result == "--- a/file.py\n+++ b/file.py"
+        assert result == "def hello():\n    pass"
 
     def test_integration_mode_canonical_delimiters(self):
         raw = "=== REMEDIATION PLAN ===\nStep 1: Fix X\n=== END REMEDIATION PLAN ==="
@@ -165,7 +165,7 @@ class TestExtractRevisionStrict:
         assert _extract_revision_strict(raw, "plan") == ""
 
     def test_wrong_mode_delimiters_returns_empty(self):
-        raw = "=== UNIFIED DIFF ===\nContent\n=== END UNIFIED DIFF ==="
+        raw = "=== REVISED CODE ===\nContent\n=== END REVISED CODE ==="
         assert _extract_revision_strict(raw, "plan") == ""
 
     def test_no_fallback_to_markdown_headings(self):

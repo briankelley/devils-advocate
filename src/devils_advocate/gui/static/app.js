@@ -661,10 +661,6 @@ const dvad = {
                     cost.textContent = `Cost: $${(data.cost || 0).toFixed(6)}`;
                 }
 
-                // Show patch status for code mode
-                if (data.patch_applied !== undefined) {
-                    this._showPatchStatus(data);
-                }
 
                 // Update download link and keep button available for re-generation
                 const footer = document.querySelector('.footer-actions');
@@ -736,56 +732,6 @@ const dvad = {
     copyRevision() {
         if (this._revisionContent) {
             navigator.clipboard.writeText(this._revisionContent);
-        }
-    },
-
-    _showPatchStatus(data) {
-        const statusEl = document.getElementById('patch-status');
-        const regenBtn = document.getElementById('regen-full-btn');
-        if (!statusEl) return;
-
-        if (data.patch_applied) {
-            statusEl.style.display = '';
-            statusEl.innerHTML = '<span style="color:var(--green)">Patch applied successfully. Full revised file saved.</span>';
-        } else if (data.patch_error) {
-            statusEl.style.display = '';
-            statusEl.innerHTML = '<span style="color:var(--yellow)">Patch could not be applied: ' +
-                data.patch_error.substring(0, 200) + '</span>';
-            if (regenBtn) regenBtn.style.display = '';
-        }
-    },
-
-    async regenFullFile(reviewId) {
-        const btn = document.getElementById('regen-full-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Regenerating...'; }
-
-        try {
-            const resp = await fetch(`/api/review/${reviewId}/revise-full`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-DVAD-Token': this.getToken(),
-                },
-            });
-            const data = await resp.json();
-            if (resp.ok && data.content) {
-                this._revisionContent = data.content;
-                const content = document.getElementById('revision-content');
-                const cost = document.getElementById('revision-cost');
-                const statusEl = document.getElementById('patch-status');
-                if (content) content.textContent = data.content;
-                if (cost) cost.textContent = `Cost: $${(data.cost || 0).toFixed(6)}`;
-                if (statusEl) {
-                    statusEl.innerHTML = '<span style="color:var(--green)">Full file regenerated successfully.</span>';
-                }
-                if (btn) btn.style.display = 'none';
-            } else {
-                alert(data.detail || data.message || 'Regeneration failed');
-                if (btn) { btn.disabled = false; btn.textContent = 'Regenerate as Full File'; }
-            }
-        } catch (err) {
-            alert('Network error: ' + err.message);
-            if (btn) { btn.disabled = false; btn.textContent = 'Regenerate as Full File'; }
         }
     },
 

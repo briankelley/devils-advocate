@@ -210,20 +210,6 @@ class TestPreconditionEnforcement:
         )
         assert resp.status_code == 400
 
-    def test_revise_full_requires_code_mode(
-        self, paranoid_client, csrf_token, temp_review_env,
-    ):
-        """Precondition: revise-full only works for code mode reviews."""
-        _, _, review_id = temp_review_env
-        # Our sample ledger has mode=plan
-        resp = paranoid_client.post(
-            f"/api/review/{review_id}/revise-full",
-            headers={
-                "X-DVAD-Token": csrf_token,
-                "Content-Type": "application/json",
-            },
-        )
-        assert resp.status_code == 400
 
 
 # ── Document all findings ───────────────────────────────────────────────────

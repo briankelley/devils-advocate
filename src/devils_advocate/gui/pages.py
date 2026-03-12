@@ -312,7 +312,7 @@ async def review_detail(request: Request, review_id: str):
 
     # Check for revised artifacts
     revised_artifact_names = [
-        "revised-plan.md", "revised-diff.patch",
+        "revised-plan.md",
         "remediation-plan.md", "revised-spec-suggestions.md",
     ]
     revised_path = None
@@ -321,7 +321,16 @@ async def review_detail(request: Request, review_id: str):
         if candidate.exists():
             revised_path = candidate
             break
+    # Code mode: look for revised-{original_name} (e.g. revised-orchestrator.py)
+    if revised_path is None:
+        for candidate in sorted(review_dir.glob("revised-*")):
+            if candidate.name == "revised-diff.patch":
+                continue
+            if candidate.is_file():
+                revised_path = candidate
+                break
     has_revised = revised_path is not None
+    has_diff = (review_dir / "revised-diff.patch").exists()
     has_original = (review_dir / "original_content.txt").exists()
     has_report = (review_dir / "dvad-report.md").exists()
 
@@ -381,6 +390,7 @@ async def review_detail(request: Request, review_id: str):
         "auto_dismissed": auto_dismissed,
         "overridden": overridden,
         "has_revised": has_revised,
+        "has_diff": has_diff,
         "revision_stale": revision_stale,
         "has_original": has_original,
         "has_report": has_report,

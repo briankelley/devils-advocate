@@ -353,7 +353,10 @@
 <div class="footer-actions">
     {# Always show download if revision exists #}
     {% if has_revised %}
-    <a href="/api/review/{{ review_id }}/revised" class="btn btn-green download-revised-link">Download Current Revision</a>
+    <a href="/api/review/{{ review_id }}/revised" class="btn btn-green download-revised-link">Download Revised File</a>
+    {% endif %}
+    {% if has_diff %}
+    <a href="/api/review/{{ review_id }}/diff" class="btn download-diff-link">Download Diff</a>
     {% endif %}
 
     {# Show generate/regenerate button when original exists #}
@@ -379,9 +382,7 @@
     <h3>Revised Artifact</h3>
     <div class="revision-actions">
         <button class="btn btn-sm" onclick="dvad.copyRevision()">Copy</button>
-        <button class="btn btn-sm btn-accent" id="regen-full-btn" style="display:none" onclick="dvad.regenFullFile('{{ review_id }}')">Regenerate as Full File</button>
     </div>
-    <div id="patch-status" style="display:none; font-size:11px; padding:var(--pad-sm) 0;"></div>
     <pre class="revision-content" id="revision-content"></pre>
     <div class="revision-cost" id="revision-cost"></div>
 </div>

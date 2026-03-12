@@ -493,170 +493,56 @@ async def revise_review(request: Request, review_id: str):
     # Save revised artifact
     output_names = {
         "plan": "revised-plan.md",
-        "code": "revised-diff.patch",
         "integration": "remediation-plan.md",
     }
-    output_name = output_names.get(mode, "revised-plan.md")
-    await asyncio.to_thread(
-        StorageManager._atomic_write, review_dir / output_name, revised
-    )
 
-    # For code mode: attempt to apply the diff to produce the full revised file
-    patch_applied = False
-    patch_error = None
     if mode == "code":
-        import subprocess
-        patch_path = review_dir / output_name
-        # Find the original source file from the manifest
+        # Code mode: revision returns the full revised file.
+        # Derive filename from manifest, generate diff via difflib.
+        orig_name = "source"
         manifest_path = review_dir / "input_files_manifest.json"
-        original_file = None
         if manifest_path.exists():
             try:
                 manifest = json.loads(manifest_path.read_text())
                 for f in manifest.get("files", []):
                     if f.get("type") == "code":
-                        original_file = f.get("original_path")
+                        orig_name = f.get("filename", orig_name)
                         break
             except Exception:
                 pass
 
-        if original_file and Path(original_file).exists():
-            # Try dry-run first
-            try:
-                dry = await asyncio.to_thread(
-                    subprocess.run,
-                    ["patch", "--dry-run", "-i", str(patch_path), str(original_file)],
-                    capture_output=True, text=True, timeout=30,
-                )
-                if dry.returncode == 0:
-                    # Apply for real to a copy
-                    orig_name = Path(original_file).name
-                    revised_file = review_dir / f"revised-{orig_name}"
-                    # Copy original, then apply patch
-                    import shutil as _shutil
-                    await asyncio.to_thread(_shutil.copy2, original_file, str(revised_file))
-                    apply = await asyncio.to_thread(
-                        subprocess.run,
-                        ["patch", "-i", str(patch_path), str(revised_file)],
-                        capture_output=True, text=True, timeout=30,
-                    )
-                    patch_applied = apply.returncode == 0
-                    if not patch_applied:
-                        patch_error = apply.stderr or "patch apply failed"
-                else:
-                    patch_error = dry.stderr or "patch dry-run failed"
-            except Exception as exc:
-                patch_error = str(exc)
+        output_name = f"revised-{orig_name}"
+        await asyncio.to_thread(
+            StorageManager._atomic_write, review_dir / output_name, revised
+        )
 
-    response_data = {
+        # Generate unified diff from original vs revised
+        import difflib
+        diff_lines = difflib.unified_diff(
+            original_content.splitlines(keepends=True),
+            revised.splitlines(keepends=True),
+            fromfile=f"a/{orig_name}",
+            tofile=f"b/{orig_name}",
+        )
+        diff_text = "".join(diff_lines)
+        if diff_text:
+            await asyncio.to_thread(
+                StorageManager._atomic_write,
+                review_dir / "revised-diff.patch", diff_text,
+            )
+    else:
+        output_name = output_names.get(mode, "revised-plan.md")
+        await asyncio.to_thread(
+            StorageManager._atomic_write, review_dir / output_name, revised
+        )
+
+    return JSONResponse({
         "status": "ok",
         "content": revised,
         "filename": output_name,
         "cost": cost_tracker.total_usd,
-    }
-    if mode == "code":
-        response_data["patch_applied"] = patch_applied
-        if patch_error:
-            response_data["patch_error"] = patch_error
-
-    return JSONResponse(response_data)
-
-
-# ── Patch / Full-File Fallback ─────────────────────────────────────────────
-
-@router.post("/review/{review_id}/revise-full")
-async def revise_full_file(request: Request, review_id: str):
-    """Regenerate revision as a full file (LLM fallback when patch fails)."""
-    _check_csrf(request)
-
-    storage = get_gui_storage()
-    ledger = await asyncio.to_thread(storage.load_review, review_id)
-    if ledger is None:
-        raise HTTPException(status_code=404, detail="Review not found")
-
-    mode = ledger.get("mode", "plan")
-    if mode != "code":
-        raise HTTPException(status_code=400, detail="Full-file regeneration is only for code mode")
-
-    review_dir = storage.reviews_dir / review_id
-    oc_path = review_dir / "original_content.txt"
-    if not oc_path.exists():
-        raise HTTPException(status_code=400, detail="original_content.txt not found")
-    original_content = await asyncio.to_thread(oc_path.read_text)
-
-    from ..config import get_models_by_role
-    from ..types import CostTracker
-    from ..revision import build_revision_context
-
-    config = await _load_app_config(request)
-    roles = get_models_by_role(config)
-    revision_model = roles["revision"]
-    cost_tracker = CostTracker()
-
-    revision_context = build_revision_context(ledger)
-    if "=== ACCEPTED FINDINGS" not in revision_context:
-        return JSONResponse({"status": "no_output", "message": "No accepted findings"})
-
-    # Build a prompt that asks for the complete revised file instead of a diff
-    from ..prompts import load_template
-    from ..providers import call_with_retry
-
-    prompt = (
-        "You are revising a source code file based on accepted review findings.\n\n"
-        "ORIGINAL FILE:\n```\n" + original_content + "\n```\n\n"
-        "ACCEPTED FINDINGS:\n" + revision_context + "\n\n"
-        "Produce the COMPLETE revised file incorporating all accepted findings. "
-        "Output ONLY the file content between these delimiters:\n"
-        "=== REVISED FILE ===\n(complete file here)\n=== END REVISED FILE ===\n"
-    )
-
-    from ..http import make_async_client
-    FULL_FILE_MAX_TOKENS = 64000
-    effective_max = FULL_FILE_MAX_TOKENS
-    if revision_model.max_out_configured and revision_model.max_out_configured < effective_max:
-        effective_max = revision_model.max_out_configured
-
-    try:
-        async with make_async_client() as client:
-            raw, usage = await call_with_retry(
-                client, revision_model, "", prompt, effective_max, mode="revision",
-            )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Full-file revision failed: {exc}")
-
-    cost_tracker.add(
-        revision_model.name, usage["input_tokens"], usage["output_tokens"],
-        revision_model.cost_per_1k_input, revision_model.cost_per_1k_output,
-        role="revision",
-    )
-
-    # Extract between delimiters
-    import re as _re
-    m = _re.search(r"=== REVISED FILE ===(.*?)=== END REVISED FILE ===", raw, _re.DOTALL)
-    content = m.group(1).strip() if m else raw
-
-    # Save
-    manifest_path = review_dir / "input_files_manifest.json"
-    orig_name = "source"
-    if manifest_path.exists():
-        try:
-            manifest = json.loads(manifest_path.read_text())
-            for f in manifest.get("files", []):
-                if f.get("type") == "code":
-                    orig_name = Path(f["original_path"]).name
-                    break
-        except Exception:
-            pass
-
-    revised_file = review_dir / f"revised-{orig_name}"
-    await asyncio.to_thread(StorageManager._atomic_write, revised_file, content)
-
-    return JSONResponse({
-        "status": "ok",
-        "content": content,
-        "filename": f"revised-{orig_name}",
-        "cost": cost_tracker.total_usd,
     })
+
 
 
 # ── Log Viewer ────────────────────────────────────────────────────────────
@@ -690,16 +576,38 @@ async def download_report(request: Request, review_id: str):
 
 @router.get("/review/{review_id}/revised")
 async def download_revised(request: Request, review_id: str):
-    """Download the revised artifact."""
+    """Download the revised artifact (full revised file for code mode)."""
     storage = get_gui_storage()
     review_dir = storage.reviews_dir / review_id
-    for name in ["revised-plan.md", "revised-diff.patch", "remediation-plan.md", "revised-spec-suggestions.md"]:
+    # Check well-known names first, then any revised-* file
+    for name in ["revised-plan.md", "remediation-plan.md", "revised-spec-suggestions.md"]:
         path = review_dir / name
         if path.exists():
             stem, ext = name.rsplit(".", 1)
             download_name = f"{stem}-{review_id}.{ext}"
             return FileResponse(path, filename=download_name)
+    # Code mode: prefer revised-{original_name} (e.g. revised-orchestrator.py),
+    # fall back to revised-diff.patch for backward compat with older reviews.
+    diff_path = None
+    for path in sorted(review_dir.glob("revised-*")):
+        if path.name == "revised-diff.patch":
+            diff_path = path
+            continue  # prefer full file over diff
+        if path.is_file():
+            return FileResponse(path, filename=f"{path.stem}-{review_id}{path.suffix}")
+    if diff_path is not None:
+        return FileResponse(diff_path, filename=f"revised-diff-{review_id}.patch")
     raise HTTPException(status_code=404, detail="Revised artifact not found")
+
+
+@router.get("/review/{review_id}/diff")
+async def download_diff(request: Request, review_id: str):
+    """Download the system-generated diff (code mode only)."""
+    storage = get_gui_storage()
+    path = storage.reviews_dir / review_id / "revised-diff.patch"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Diff not found")
+    return FileResponse(path, filename=f"revised-diff-{review_id}.patch")
 
 
 # ── Config ───────────────────────────────────────────────────────────────────

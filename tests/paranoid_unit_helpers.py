@@ -184,15 +184,6 @@ WRITE_ENDPOINTS: dict[str, dict[str, Any]] = {
         "empty_payload": {},
         "valid_payload": {},
     },
-    "POST /api/review/{id}/revise-full": {
-        "method": "POST",
-        "path": "/api/review/{review_id}/revise-full",
-        "writes_to": "revised full-file artifact in review directory",
-        "destroys": "previous revised artifact (overwritten)",
-        "requires_csrf": True,
-        "empty_payload": {},
-        "valid_payload": {},
-    },
 }
 
 
@@ -310,14 +301,6 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "backup_exists": False,
         "confirmation_required": False,
         "precondition": "Review must exist, original_content.txt must exist, config must be valid",
-    },
-    "POST /api/review/{id}/revise-full": {
-        "on_empty_input": "HTTPException 404 (review not found) or 400",
-        "on_all_empty": "HTTPException 404 or 400",
-        "reversible": True,
-        "backup_exists": False,
-        "confirmation_required": False,
-        "precondition": "Review must exist, mode must be 'code', original_content.txt must exist",
     },
 }
 
@@ -578,5 +561,4 @@ MUTATING_ROUTE_PATTERNS: list[tuple[str, str]] = [
     ("POST", "/api/review/{review_id}/cancel"),
     ("POST", "/api/review/{review_id}/override"),
     ("POST", "/api/review/{review_id}/revise"),
-    ("POST", "/api/review/{review_id}/revise-full"),
 ]
