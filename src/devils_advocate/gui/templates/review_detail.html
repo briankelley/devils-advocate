@@ -349,26 +349,39 @@
 </section>
 {% endif %}
 
-{# Footer Actions #}
+{# Footer Actions — revision buttons are state-driven #}
 <div class="footer-actions">
-    {# Always show download if revision exists #}
-    {% if has_revised %}
-    <a href="/api/review/{{ review_id }}/revised" class="btn btn-green download-revised-link">Download Revised File</a>
-    {% endif %}
-    {% if has_diff %}
-    <a href="/api/review/{{ review_id }}/diff" class="btn download-diff-link">Download Diff</a>
-    {% endif %}
 
-    {# Show generate/regenerate button when original exists #}
-    {% if has_original %}
+    {# STATE 0: No revision yet, original available — show Generate #}
+    {% if not has_revised and has_original %}
         {% if escalated|length > 0 %}
         <button class="btn" id="revise-btn" disabled
                 onclick="dvad.startRevision('{{ review_id }}')"
-                title="Resolve at least one escalation to enable">Generate Updated Revision</button>
-        {% elif not has_revised %}
+                title="Resolve all escalations to enable">Generate Revision</button>
+        {% else %}
         <button class="btn btn-accent" id="revise-btn"
                 onclick="dvad.startRevision('{{ review_id }}')">Generate Revision</button>
         {% endif %}
+    {% endif %}
+
+    {# STATE 1: Revision exists and is current #}
+    {% if has_revised and not revision_stale %}
+    <a href="/api/review/{{ review_id }}/revised" class="btn btn-green download-revised-link">Download Revision</a>
+    <button class="btn" onclick="dvad.copyRevision('{{ review_id }}')">Copy Revision</button>
+    {% endif %}
+
+    {# STATE 2: Revision exists but is stale (overrides applied since generation) #}
+    {% if has_revised and revision_stale %}
+    <a class="btn btn-disabled download-revised-link"
+       title="Revision is outdated — regenerate first">Download Revision</a>
+    <button class="btn" disabled title="Revision is outdated — regenerate first">Copy Revision</button>
+    <button class="btn btn-accent" id="revise-btn"
+            onclick="dvad.startRevision('{{ review_id }}')">Regenerate Revision</button>
+    {% endif %}
+
+    {# Diff download (independent of revision state) #}
+    {% if has_diff %}
+    <a href="/api/review/{{ review_id }}/diff" class="btn download-diff-link">Download Diff</a>
     {% endif %}
 
     {% if has_report and ledger.get('result') not in ('dry_run', 'cost_exceeded', 'cost_aborted', 'failed') %}
@@ -377,15 +390,21 @@
     <a href="/api/review/{{ review_id }}" class="btn" target="_blank">Download Ledger (JSON)</a>
 </div>
 
-{# Revision Output Area #}
-<div id="revision-output" class="revision-output" style="display:none">
-    <h3>Revised Artifact</h3>
-    <div class="revision-actions">
-        <button class="btn btn-sm" onclick="dvad.copyRevision()">Copy</button>
-    </div>
-    <pre class="revision-content" id="revision-content"></pre>
-    <div class="revision-cost" id="revision-cost"></div>
-</div>
+{# Instructional blurb — shown when revision exists #}
+{% if has_revised %}
+<p class="revision-guidance">
+    {% if review_mode == 'integration' %}
+    This remediation plan details all accepted findings. Use it as a prompt alongside your source files to implement the changes.
+    {% elif review_mode == 'code' %}
+    The revised file incorporates all accepted findings. Download it or the diff patch to apply changes.
+    {% else %}
+    This revision incorporates all accepted findings. Use it as a prompt alongside your source files to implement the changes.
+    {% endif %}
+    {% if revision_stale %}
+    <strong>Findings have changed since this revision was generated — regenerate before using.</strong>
+    {% endif %}
+</p>
+{% endif %}
 
 {% endif %}
 {% endif %}

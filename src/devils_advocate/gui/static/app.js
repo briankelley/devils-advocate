@@ -2,7 +2,6 @@
 
 const dvad = {
     _sseSource: null,
-    _revisionContent: '',
     _sortState: { col: null, asc: true },
     _picker: {
         targetField: null,
@@ -649,43 +648,13 @@ const dvad = {
 
             const data = await resp.json();
             if (resp.ok && data.content) {
-                this._revisionContent = data.content;
-                const output = document.getElementById('revision-output');
-                const content = document.getElementById('revision-content');
-                const cost = document.getElementById('revision-cost');
-                if (output && content) {
-                    content.textContent = data.content;
-                    output.style.display = '';
-                }
-                if (cost) {
-                    cost.textContent = `Cost: $${(data.cost || 0).toFixed(6)}`;
-                }
-
-
-                // Update download link and keep button available for re-generation
-                const footer = document.querySelector('.footer-actions');
-                const existing = footer && footer.querySelector('.download-revised-link');
-                if (existing) {
-                    existing.textContent = 'Download Current Revision';
-                    existing.className = 'btn btn-green download-revised-link';
-                } else if (footer) {
-                    const link = document.createElement('a');
-                    link.href = `/api/review/${reviewId}/revised`;
-                    link.className = 'btn btn-green download-revised-link';
-                    link.textContent = 'Download Current Revision';
-                    footer.insertBefore(link, footer.firstChild);
-                }
-                // Re-enable button for subsequent regenerations
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = 'Regenerate Updated Revision';
-                    btn.classList.add('btn-accent');
-                }
                 // Mark revision pipeline step as done
                 const revisionStep = document.getElementById('pipe-revision');
                 if (revisionStep) {
                     revisionStep.className = 'pipeline-step done';
                 }
+                // Reload to get clean server-rendered state
+                window.location.reload();
             } else {
                 alert(data.detail || data.message || 'Revision failed');
                 if (btn) {
@@ -729,9 +698,15 @@ const dvad = {
         btn.textContent = 'Hide Log';
     },
 
-    copyRevision() {
-        if (this._revisionContent) {
-            navigator.clipboard.writeText(this._revisionContent);
+    async copyRevision(reviewId) {
+        try {
+            const resp = await fetch(`/api/review/${reviewId}/revised`);
+            if (resp.ok) {
+                const text = await resp.text();
+                await navigator.clipboard.writeText(text);
+            }
+        } catch (err) {
+            // silent fail
         }
     },
 

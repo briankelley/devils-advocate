@@ -105,7 +105,15 @@ async def dashboard(request: Request, page: int = 1, show_test: bool = False):
     reviews = sorted(reviews, key=lambda r: r.get("timestamp", ""), reverse=True)
 
     if not show_test:
-        reviews = [r for r in reviews if "test" not in r.get("project", "").lower()]
+        def _is_test_review(r: dict) -> bool:
+            proj = r.get("project", "").lower()
+            if "test" in proj or "e2e" in proj:
+                return True
+            # Stub reviews with no project and no timestamp are test leftovers
+            if not proj and not r.get("timestamp"):
+                return True
+            return False
+        reviews = [r for r in reviews if not _is_test_review(r)]
 
     per_page = 25
     total = len(reviews)
@@ -231,7 +239,7 @@ def _compute_elapsed_time(log_path: Path) -> str | None:
     return None
 
 
-def _build_role_cost_rows(ledger: dict, normalization_model: str, revision_model: str) -> list[tuple[str, str, float]]:
+def _build_role_cost_rows(ledger: dict, normalization_model: str, revision_model: str, integration_model: str) -> list[tuple[str, str, float]]:
     """Build per-role cost rows for the completed cost table."""
     role_costs = ledger.get("cost", {}).get("role_costs", {})
     role_cost_rows: list[tuple[str, str, float]] = []
@@ -266,8 +274,10 @@ def _build_role_cost_rows(ledger: dict, normalization_model: str, revision_model
             role_cost_rows.append(("dedup", ledger["dedup_model"], role_costs.get("dedup", 0.0)))
         if normalization_model != "\u2014":
             role_cost_rows.append(("normalization", normalization_model, role_costs.get("normalization", 0.0)))
-        if revision_model != "\u2014" and role_costs.get("revision", 0.0) > 0:
+        if revision_model != "\u2014":
             role_cost_rows.append(("revision", revision_model, role_costs.get("revision", 0.0)))
+        if integration_model != "\u2014":
+            role_cost_rows.append(("integration", integration_model, role_costs.get("integration", 0.0)))
 
     return role_cost_rows
 
@@ -369,12 +379,14 @@ async def review_detail(request: Request, review_id: str):
         roles = get_models_by_role(config)
         normalization_model = roles["normalization"].name if roles.get("normalization") else "\u2014"
         revision_model = roles["revision"].name if roles.get("revision") else "\u2014"
+        integration_model = roles["integration"].name if roles.get("integration") else "\u2014"
     except Exception:
         normalization_model = "\u2014"
         revision_model = "\u2014"
+        integration_model = "\u2014"
 
     # Build per-role cost rows for the completed cost table
-    role_cost_rows = _build_role_cost_rows(ledger, normalization_model, revision_model)
+    role_cost_rows = _build_role_cost_rows(ledger, normalization_model, revision_model, integration_model)
     total_cost = ledger.get("cost", {}).get("total_usd", 0.0)
 
     # Cost estimate rows (for dry_run details page)
