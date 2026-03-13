@@ -25,7 +25,7 @@ _DELIMITERS = {
 }
 
 # Resolutions treated as actionable
-_ACTIONABLE_RESOLUTIONS = frozenset({"auto_accepted", "accepted", "overridden"})
+_ACTIONABLE_RESOLUTIONS = frozenset({"auto_accepted", "accepted", "overridden", "partial_accepted"})
 
 
 def build_revision_context(ledger_data: dict) -> str:
@@ -92,6 +92,13 @@ def build_revision_context(ledger_data: dict) -> str:
             block_lines.append(f"    Author rationale: {author_rationale}")
 
         block = "\n".join(block_lines)
+
+        if final_res == "partial_accepted" and author_rationale:
+            block += (
+                "\n    NOTE: This is a PARTIAL acceptance. The author's rationale above "
+                "describes the compromise they committed to. Implement the author's "
+                "compromise position, NOT the full original reviewer recommendation."
+            )
 
         if final_res in _ACTIONABLE_RESOLUTIONS:
             actionable.append(block)
@@ -313,7 +320,7 @@ async def run_revision(
     # Count accepted findings for the log message
     finding_count = sum(
         1 for p in ledger_data.get("points", [])
-        if p.get("governance_resolution") in _ACTIONABLE_RESOLUTIONS
+        if p.get("final_resolution") in _ACTIONABLE_RESOLUTIONS
     )
 
     return await _run_revision_core(

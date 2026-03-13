@@ -464,6 +464,111 @@ class TestOverrideExtended:
         assert "group_id" in resp.json()["detail"]
 
 
+# ── Partial Acceptance Remap ──────────────────────────────────────────────────
+
+
+class TestPartialAcceptanceRemap:
+    """When 'Accept Author' is clicked on a PARTIAL finding, the override
+    endpoint should remap auto_dismissed → partial_accepted."""
+
+    def test_auto_dismissed_remapped_for_partial(self, client, token):
+        """auto_dismissed on a PARTIAL author_resolution → partial_accepted."""
+        ledger = {
+            "points": [{
+                "group_id": "grp_001",
+                "point_id": "pt_001",
+                "author_resolution": "PARTIAL",
+                "final_resolution": "escalated",
+            }],
+        }
+        mock_storage = MagicMock()
+        mock_storage.load_review.return_value = ledger
+        mock_storage.update_point_override.return_value = None
+
+        with patch("devils_advocate.gui.api.get_gui_storage", return_value=mock_storage):
+            resp = client.post(
+                "/api/review/test_review/override",
+                json={"group_id": "grp_001", "resolution": "auto_dismissed"},
+                headers={"X-DVAD-Token": token},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["resolution"] == "partial_accepted"
+        # Storage should have been called with the remapped resolution
+        mock_storage.update_point_override.assert_called_once_with(
+            "test_review", "grp_001", "partial_accepted"
+        )
+
+    def test_auto_dismissed_not_remapped_for_non_partial(self, client, token):
+        """auto_dismissed on a non-PARTIAL finding stays auto_dismissed."""
+        ledger = {
+            "points": [{
+                "group_id": "grp_001",
+                "point_id": "pt_001",
+                "author_resolution": "ACCEPTED",
+                "final_resolution": "escalated",
+            }],
+        }
+        mock_storage = MagicMock()
+        mock_storage.load_review.return_value = ledger
+        mock_storage.update_point_override.return_value = None
+
+        with patch("devils_advocate.gui.api.get_gui_storage", return_value=mock_storage):
+            resp = client.post(
+                "/api/review/test_review/override",
+                json={"group_id": "grp_001", "resolution": "auto_dismissed"},
+                headers={"X-DVAD-Token": token},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["resolution"] == "auto_dismissed"
+        mock_storage.update_point_override.assert_called_once_with(
+            "test_review", "grp_001", "auto_dismissed"
+        )
+
+    def test_overridden_not_affected_by_remap(self, client, token):
+        """Overridden resolution bypasses remap logic entirely."""
+        mock_storage = MagicMock()
+        mock_storage.update_point_override.return_value = None
+
+        with patch("devils_advocate.gui.api.get_gui_storage", return_value=mock_storage):
+            resp = client.post(
+                "/api/review/test_review/override",
+                json={"group_id": "grp_001", "resolution": "overridden"},
+                headers={"X-DVAD-Token": token},
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["resolution"] == "overridden"
+        # load_review should NOT have been called (remap only fires for auto_dismissed)
+        mock_storage.load_review.assert_not_called()
+
+    def test_remap_matches_by_point_id(self, client, token):
+        """Remap works when the ledger point uses point_id instead of group_id."""
+        ledger = {
+            "points": [{
+                "point_id": "grp_001",
+                "author_resolution": "PARTIAL",
+                "final_resolution": "escalated",
+            }],
+        }
+        mock_storage = MagicMock()
+        mock_storage.load_review.return_value = ledger
+        mock_storage.update_point_override.return_value = None
+
+        with patch("devils_advocate.gui.api.get_gui_storage", return_value=mock_storage):
+            resp = client.post(
+                "/api/review/test_review/override",
+                json={"group_id": "grp_001", "resolution": "auto_dismissed"},
+                headers={"X-DVAD-Token": token},
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["resolution"] == "partial_accepted"
+
+
 # ── Filesystem Browser (/api/fs/ls) ──────────────────────────────────────────
 
 

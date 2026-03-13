@@ -89,6 +89,29 @@ class TestBuildRevisionContext:
         ctx = build_revision_context(ledger)
         assert "=== ACCEPTED FINDINGS" in ctx
 
+    def test_partial_accepted_is_actionable(self):
+        ledger = _make_ledger(["partial_accepted"])
+        ctx = build_revision_context(ledger)
+        assert "=== ACCEPTED FINDINGS" in ctx
+        assert "grp_001" in ctx
+
+    def test_partial_accepted_note_present_with_rationale(self):
+        """partial_accepted with author_rationale gets a NOTE block."""
+        ledger = _make_ledger(["partial_accepted"])
+        ledger["points"][0]["author_rationale"] = "I will do Y but not X"
+        ctx = build_revision_context(ledger)
+        assert "NOTE: This is a PARTIAL acceptance" in ctx
+        assert "compromise" in ctx.lower()
+
+    def test_partial_accepted_no_note_without_rationale(self):
+        """partial_accepted without author_rationale gets no NOTE."""
+        ledger = _make_ledger(["partial_accepted"])
+        # No author_rationale key at all
+        ledger["points"][0].pop("author_rationale", None)
+        ctx = build_revision_context(ledger)
+        assert "=== ACCEPTED FINDINGS" in ctx
+        assert "NOTE: This is a PARTIAL" not in ctx
+
     def test_escalated_resolution_is_unresolved(self):
         ledger = _make_ledger(["escalated"])
         ctx = build_revision_context(ledger)

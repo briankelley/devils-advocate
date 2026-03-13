@@ -200,7 +200,7 @@ def _group_points_by_resolution(points: list[dict]) -> tuple[list, list, list, l
 
         if resolution == "escalated":
             escalated.append(group_info)
-        elif resolution == "auto_accepted" or resolution == "accepted":
+        elif resolution in ("auto_accepted", "accepted", "partial_accepted"):
             auto_accepted.append(group_info)
         elif resolution == "auto_dismissed":
             auto_dismissed.append(group_info)

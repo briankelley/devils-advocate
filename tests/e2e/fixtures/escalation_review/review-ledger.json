@@ -1,0 +1,207 @@
+{
+  "review_id": "20260307T013337_5ba2af",
+  "result": "success",
+  "mode": "plan",
+  "input_file": "/home/kelleyb/Desktop/Board Foot Android App/boardfoot.sample.plan.md",
+  "project": "board-foot",
+  "timestamp": "2026-03-07T01:33:37.211570+00:00",
+  "author_model": "claude-haiku-4-5",
+  "reviewer_models": [
+    "gemini-3-flash-preview",
+    "kimi-k2-thinking"
+  ],
+  "dedup_model": "gemini-3-pro-preview",
+  "points": [
+    {
+      "point_id": "board-foot.group_001.07MAR2026.0133.1f6r.point_001",
+      "group_id": "board-foot.group_001.07MAR2026.0133.1f6r",
+      "severity": "high",
+      "category": "architecture",
+      "description": "The plan explicitly opts out of `onSaveInstanceState` or `ViewModel` usage, stating that \"rotation resets totals (acceptable).\" However, the specification's requirement \"No data persistence between app sessions\" refers to persistent storage (like SharedPreferences or Room) surviving an app close/restart. In Android, losing user-entered data on a simple screen rotation (configuration change) is considered a failure in basic state management and leads to a poor user experience.",
+      "recommendation": "Implement `onSaveInstanceState` in `MainActivity` to bundle the `totalBoardFeet` and `totalCost` doubles. Alternatively, use a simple `ViewModel` to retain these values across configuration changes.",
+      "location": "Section 3.11 (MainActivity.kt) and Section 6 (Design Decisions)",
+      "reviewer": "gemini-3-flash-preview",
+      "source_reviewers": [
+        "gemini-3-flash-preview"
+      ],
+      "author_resolution": "ACCEPTED",
+      "author_rationale": "You are correct that the specification's \"no persistence between app sessions\" refers exclusively to persistent storage (SharedPreferences/Room) that survives app close/restart, not configuration changes like screen rotation. Android framework convention requires preserving UI state across configuration changes; losing user-entered running totals on a simple rotation is a material UX failure. I will implement `onSaveInstanceState(Bundle)` in `MainActivity` to bundle and restore both `totalBoardFeet` and `totalCost` doubles in the corresponding `onCreate()` method, and will also preserve the user's current dimension field entries (if any) so a partial entry is not lost mid-session. Section 6 (Design Decisions) will be updated to reflect this change.\n\n---",
+      "rebuttals": [],
+      "author_final_resolution": null,
+      "author_final_rationale": null,
+      "governance_resolution": "auto_accepted",
+      "governance_reason": "Author accepted with substantive rationale, unchallenged",
+      "final_resolution": "auto_accepted",
+      "overrides": []
+    },
+    {
+      "point_id": "board-foot.group_002.07MAR2026.0133.1f6r.point_001",
+      "group_id": "board-foot.group_002.07MAR2026.0133.1f6r",
+      "severity": "medium",
+      "category": "correctness",
+      "description": "The rounding logic `Math.round(x * 100.0) / 100.0` is susceptible to floating-point precision issues common with `Double`. For example, a calculated value that should be exactly `X.XX5` might be represented as `X.XX49999999` in memory, causing it to round down instead of up. Additionally, the plan mentions accumulating rounded values into totals to prevent drift; while this ensures the UI matches, it can lead to significant discrepancy over many entries compared to a precision-first approach.",
+      "recommendation": "Use `BigDecimal` with `setScale(2, RoundingMode.HALF_UP)` for both the calculation and the accumulation to ensure financial and measurement accuracy. For display, use `String.format(\"%.2f\", value)` or `DecimalFormat` to ensure the output always shows two decimal places (e.g., \"5.10\" instead of \"5.1\").",
+      "location": "Section 3.11 (MainActivity.kt \u2014 `calculate()` logic)",
+      "reviewer": "gemini-3-flash-preview",
+      "source_reviewers": [
+        "gemini-3-flash-preview"
+      ],
+      "author_resolution": "ACCEPTED",
+      "author_rationale": "You are correct that `Math.round(x * 100.0) / 100.0` on `Double` can fail for edge cases like `X.XX5` represented as `X.XX499...` in binary floating-point, causing incorrect rounding. The specification explicitly mandates \"rounded to two decimal places\" for both board footage and cost, and the plan accumulates these values into running totals; `BigDecimal` with `setScale(2, RoundingMode.HALF_UP)` is the industry standard for financial and measurement calculations and will reliably satisfy this requirement. I will refactor `MainActivity.kt` to use `BigDecimal` for all price, board footage, and total calculations, and will use `String.format(\"%.2f\", ...)` or `DecimalFormat` for display to ensure consistent formatting (e.g., \"5.10\" not \"5.1\").\n\n---",
+      "rebuttals": [],
+      "author_final_resolution": null,
+      "author_final_rationale": null,
+      "governance_resolution": "auto_accepted",
+      "governance_reason": "Author accepted with substantive rationale, unchallenged",
+      "final_resolution": "auto_accepted",
+      "overrides": []
+    },
+    {
+      "point_id": "board-foot.group_002.07MAR2026.0133.1f6r.point_002",
+      "group_id": "board-foot.group_002.07MAR2026.0133.1f6r",
+      "severity": "info",
+      "category": "documentation",
+      "description": "The plan uses `Math.round()` which is a Java-centric approach.",
+      "recommendation": "In a Kotlin 2.0.21 project, use the Kotlin standard library extension `kotlin.math.round` or `BigDecimal` as suggested in",
+      "location": "",
+      "reviewer": "gemini-3-flash-preview",
+      "source_reviewers": [
+        "gemini-3-flash-preview"
+      ],
+      "author_resolution": "ACCEPTED",
+      "author_rationale": "You are correct that `Math.round(x * 100.0) / 100.0` on `Double` can fail for edge cases like `X.XX5` represented as `X.XX499...` in binary floating-point, causing incorrect rounding. The specification explicitly mandates \"rounded to two decimal places\" for both board footage and cost, and the plan accumulates these values into running totals; `BigDecimal` with `setScale(2, RoundingMode.HALF_UP)` is the industry standard for financial and measurement calculations and will reliably satisfy this requirement. I will refactor `MainActivity.kt` to use `BigDecimal` for all price, board footage, and total calculations, and will use `String.format(\"%.2f\", ...)` or `DecimalFormat` for display to ensure consistent formatting (e.g., \"5.10\" not \"5.1\").\n\n---",
+      "rebuttals": [],
+      "author_final_resolution": null,
+      "author_final_rationale": null,
+      "governance_resolution": "auto_accepted",
+      "governance_reason": "Author accepted with substantive rationale, unchallenged",
+      "final_resolution": "auto_accepted",
+      "overrides": []
+    },
+    {
+      "point_id": "board-foot.group_003.07MAR2026.0133.1f6r.point_001",
+      "group_id": "board-foot.group_003.07MAR2026.0133.1f6r",
+      "severity": "medium",
+      "category": "architecture",
+      "description": "The plan suggests parsing inputs manually in `calculate()` and mentions \"if null or 0.0 -> toast.\" If using `String.toDouble()`, the app will crash if a user enters invalid text (like a single decimal point). If using `toDoubleOrNull()`, the \"0.0\" check might be too restrictive for dimensions (e.g., a user might accidentally type \"0\" for a field).",
+      "recommendation": "Use `editable.toString().toDoubleOrNull()` to safely handle empty or malformed inputs. Ensure the validation logic clearly distinguishes between a null/empty input (triggering the toast) and a valid numeric zero.",
+      "location": "Section 3.11 (MainActivity.kt \u2014 `calculate()`)",
+      "reviewer": "gemini-3-flash-preview",
+      "source_reviewers": [
+        "gemini-3-flash-preview"
+      ],
+      "author_resolution": "ACCEPTED",
+      "author_rationale": "The plan states \"if null or 0.0 \u2192 toast\" but does not specify the parsing method; using `String.toDouble()` directly would crash on malformed input (e.g., a dangling decimal point), whereas `String.toDoubleOrNull()` is the safe Kotlin standard library idiom that returns `null` for invalid text. The validation logic will distinguish clearly: `null` or empty inputs trigger the toast, while a valid numeric `0.0` (including explicit user entry of \"0\") also triggers the toast, whereas an unintentional accidental zero is caught before processing. I will update `MainActivity.kt`'s `calculate()` method to use `editable.toString().toDoubleOrNull()` for all numeric field parsing, with explicit null checks before the zero-value check.\n\n---",
+      "rebuttals": [],
+      "author_final_resolution": null,
+      "author_final_rationale": null,
+      "governance_resolution": "auto_accepted",
+      "governance_reason": "Author accepted with substantive rationale, unchallenged",
+      "final_resolution": "auto_accepted",
+      "overrides": []
+    },
+    {
+      "point_id": "board-foot.group_004.07MAR2026.0133.1f6r.point_001",
+      "group_id": "board-foot.group_004.07MAR2026.0133.1f6r",
+      "severity": "medium",
+      "category": "maintainability",
+      "description": "Putting all app logic, including calculation formulas and view orchestration, inside `MainActivity.kt` violates the Single Responsibility Principle. While the app is small, mixing the mathematical formula for board footage with UI logic makes it harder to test and maintain.",
+      "recommendation": "Extract the board foot calculation logic into a separate internal function or a standalone Kotlin object (e.g., `BoardFootMath.calculate(l, w, t)`). This allows for unit testing the formula independently of the Android framework.",
+      "location": "Section 3.11 (MainActivity.kt)",
+      "reviewer": "gemini-3-flash-preview",
+      "source_reviewers": [
+        "gemini-3-flash-preview"
+      ],
+      "author_resolution": "PARTIAL",
+      "author_rationale": "**ACCEPTED portion:** The board foot calculation formula `(L \u00d7 W \u00d7 T) / 144.0` will be extracted into a standalone internal Kotlin object `BoardFootMath` (a simple companion-object function or utility class) in a separate file `BoardFootMath.kt`, allowing unit testing of the formula independently of the Android framework. This is a trivial refactor that improves maintainability and testability without architectural overhead. **REJECTED portion:** I will NOT extract all UI orchestration logic from `MainActivity` into separate classes; the Activity's responsibilities are to manage views, respond to clicks, and coordinate the UI, which is its intended design role. The concern that mixing \"mathematical formula with UI logic\" hinders testing is addressed by extracting only the formula itself; the remaining Activity code (view updates, toast messages, field clearing) is inherently UI-bound and does not require a separate testable layer for an app of this scope.\n\n---",
+      "rebuttals": [
+        {
+          "group_id": "board-foot.group_004.07MAR2026.0133.1f6r",
+          "reviewer": "gemini-3-flash-preview",
+          "verdict": "CONCUR",
+          "rationale": "The author correctly identifies that the mathematical formula is the critical business logic requiring isolation for unit testing. For an app of this minimal scope, keeping view-binding and basic UI orchestration within the Activity is a pragmatic choice that avoids over-engineering while satisfying the core concern of testability."
+        }
+      ],
+      "author_final_resolution": null,
+      "author_final_rationale": null,
+      "governance_resolution": "escalated",
+      "governance_reason": "Partial acceptance \u2014 escalated to human for review (not yet incorporated into revision)",
+      "final_resolution": "escalated",
+      "overrides": []
+    },
+    {
+      "point_id": "board-foot.group_005.07MAR2026.0133.1f6r.point_001",
+      "group_id": "board-foot.group_005.07MAR2026.0133.1f6r",
+      "severity": "medium",
+      "category": "architecture",
+      "description": "The layout uses a horizontal `LinearLayout` for three `TextInputLayout` widgets (\"Length\", \"Width\", \"Thickness\"). Standard Material 3 `TextInputLayout` components have significant internal padding and minimum widths. On standard-sized mobile devices in portrait orientation, three columns of `TextInputLayout` with hints including units (e.g., \"Length (in)\") will likely result in heavily truncated hint text or a horizontal overflow.",
+      "recommendation": "Use a `GridLayout` or a `ConstraintLayout` to manage the dimension inputs. Consider shorter hints (e.g., \"L (in)\", \"W (in)\", \"T (in)\") or placing the units in a suffix/prefix label to ensure readability on smaller screens.",
+      "location": "Section 3.10 (activity_main.xml \u2014 Dimensions row)",
+      "reviewer": "gemini-3-flash-preview",
+      "source_reviewers": [
+        "gemini-3-flash-preview"
+      ],
+      "author_resolution": "PARTIAL",
+      "author_rationale": "**ACCEPTED portion:** Your concern is valid\u2014Material 3 `TextInputLayout` has significant internal padding and minimum widths, and three equal-weight columns in portrait orientation will cause text truncation or overflow of hints like \"Length (in)\", \"Width (in)\", \"Thickness (in)\" on standard mobile devices. **",
+      "rebuttals": [
+        {
+          "group_id": "board-foot.group_005.07MAR2026.0133.1f6r",
+          "reviewer": "gemini-3-flash-preview",
+          "verdict": "CHALLENGE",
+          "rationale": "The author's response is incomplete and appears to have been truncated mid-sentence. While the author acknowledges the validity of the layout concern, they fail to provide a specific plan or technical solution to address the predicted UI overflow, rendering the \"PARTIAL\" resolution unsubstantiated."
+        }
+      ],
+      "author_final_resolution": "PARTIAL",
+      "author_final_rationale": "",
+      "governance_resolution": "escalated",
+      "governance_reason": "Partial acceptance \u2014 escalated to human for review (not yet incorporated into revision)",
+      "final_resolution": "escalated",
+      "overrides": []
+    },
+    {
+      "point_id": "board-foot.group_006.07MAR2026.0133.1f6r.point_001",
+      "group_id": "board-foot.group_006.07MAR2026.0133.1f6r",
+      "severity": "high",
+      "category": "other",
+      "description": "The provided raw review response block was empty, containing no text to process or extract.",
+      "recommendation": "Please ensure the raw review response text is pasted between the `=== RAW REVIEW RESPONSE ===` and `=== END RAW REVIEW RESPONSE ===` delimiters in the prompt.",
+      "location": "Input Prompt / Raw Review Response Block",
+      "reviewer": "kimi-k2-thinking",
+      "source_reviewers": [
+        "kimi-k2-thinking"
+      ],
+      "author_resolution": "REJECTED",
+      "author_rationale": "**Technical reason:** This group's feedback is a meta-process issue concerning the input prompt format, not a substantive issue with the plan's content or architecture. **Concrete scenario:** The reviewer notes that the \"raw review response block was empty\"\u2014meaning the input stream to the reviewer was malformed, not that the plan itself contains an error. This is outside the scope of plan authorship and cannot be resolved by modifying the plan. **Reference:** The governance rules specify that responses must address the plan's content and implementation. A request to \"ensure the raw review response text is pasted between delimiters\" is a request to resubmit the prompt, not to change the plan. No action is required.\n\n---\n\n**Summary of Changes:**\n- \u2705 Section 3.11: Add `onSaveInstanceState()` and `onCreate()` restoration logic\n- \u2705 Section 3.11: Refactor calculations to use `BigDecimal` with `RoundingMode.HALF_UP`\n- \u2705 Section 3.11: Update parsing to use `toDoubleOrNull()` with explicit null checks\n- \u2705 Section 2 & 3: Create new `BoardFootMath.kt` file with extraction of board foot calculation\n- \u2705 Section 3.10: Shorten dimension hints to \"L\", \"W\", \"T\" and add a unit label, OR restructure to ConstraintLayout\n- \u2705 Section 6: Update Design Decisions to reflect state preservation and layout approach",
+      "rebuttals": [],
+      "author_final_resolution": null,
+      "author_final_rationale": null,
+      "governance_resolution": "auto_dismissed",
+      "governance_reason": "Single reviewer, author objects, unchallenged \u2014 auto-dismissed",
+      "final_resolution": "auto_dismissed",
+      "overrides": []
+    }
+  ],
+  "summary": {
+    "total_points": 7,
+    "total_groups": 6,
+    "auto_accepted": 3,
+    "escalated": 2,
+    "auto_dismissed": 1
+  },
+  "cost": {
+    "total_usd": 0.057946,
+    "breakdown": {
+      "gemini-3-flash-preview": 0.007578,
+      "kimi-k2-thinking": 0.014385,
+      "gemini-3-pro-preview": 0.00854,
+      "claude-haiku-4-5": 0.027444
+    },
+    "role_costs": {
+      "reviewer_1": 0.007578,
+      "reviewer_2": 0.014385,
+      "normalization": 0.00172,
+      "dedup": 0.00682,
+      "author": 0.027444
+    }
+  }
+}

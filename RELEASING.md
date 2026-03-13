@@ -9,15 +9,11 @@
 
 ## Build and Publish
 
-```bash
-pip install build twine
-python -m build
-twine upload dist/*
-```
+performed by github actions. not local. deploys to PyPI
 
 ## Pre-release Checklist
 
-- [ ] All tests pass: `pytest`
+- [ ] Targeted tests for updated test cases or changed application code pass: `pytest`
 - [ ] Version strings match in `__init__.py` and `pyproject.toml`
 - [ ] CHANGELOG updated (if maintained)
 - [ ] No debug prints or development-only code

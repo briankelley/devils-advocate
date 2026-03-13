@@ -225,6 +225,41 @@ class TestRevisionStaleDetection:
         assert revision_stale is False
 
 
+class TestPartialAcceptedGrouping:
+    """partial_accepted should go into the auto_accepted bucket, not escalated."""
+
+    def test_partial_accepted_in_auto_accepted_bucket(self):
+        """Simulate the grouping logic from pages.py — partial_accepted belongs with accepted."""
+        resolution = "partial_accepted"
+        result_bucket = None
+        if resolution == "escalated":
+            result_bucket = "escalated"
+        elif resolution in ("auto_accepted", "accepted", "partial_accepted"):
+            result_bucket = "auto_accepted"
+        elif resolution == "auto_dismissed":
+            result_bucket = "auto_dismissed"
+        elif resolution == "overridden":
+            result_bucket = "overridden"
+        else:
+            result_bucket = "escalated"
+        assert result_bucket == "auto_accepted"
+
+    def test_auto_accepted_still_works(self):
+        """Regression: auto_accepted still routes to auto_accepted bucket."""
+        resolution = "auto_accepted"
+        if resolution == "escalated":
+            bucket = "escalated"
+        elif resolution in ("auto_accepted", "accepted", "partial_accepted"):
+            bucket = "auto_accepted"
+        elif resolution == "auto_dismissed":
+            bucket = "auto_dismissed"
+        elif resolution == "overridden":
+            bucket = "overridden"
+        else:
+            bucket = "escalated"
+        assert bucket == "auto_accepted"
+
+
 class TestConfigPage:
     def test_config_page_returns_200(self, client):
         resp = client.get("/config")

@@ -40,6 +40,7 @@ class Resolution(enum.Enum):
     AUTO_DISMISSED = "auto_dismissed"
     ESCALATED = "escalated"
     OVERRIDDEN = "overridden"
+    PARTIAL_ACCEPTED = "partial_accepted"
     PENDING = "pending"
 
 

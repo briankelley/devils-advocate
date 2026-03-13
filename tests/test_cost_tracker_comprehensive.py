@@ -620,7 +620,7 @@ class TestResolutionEnum:
 
         expected = {
             "accepted", "rejected", "partial", "auto_accepted",
-            "auto_dismissed", "escalated", "overridden", "pending",
+            "auto_dismissed", "escalated", "overridden", "partial_accepted", "pending",
         }
         actual = {r.value for r in Resolution}
         assert actual == expected

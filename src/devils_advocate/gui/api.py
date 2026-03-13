@@ -421,6 +421,18 @@ async def override_group(request: Request, review_id: str):
         raise HTTPException(status_code=400, detail="group_id is required")
 
     storage = get_gui_storage()
+
+    # Mechanical remap: "Accept Author" on a PARTIAL → partial_accepted
+    # so the author's compromise flows into the revision.
+    if resolution == "auto_dismissed":
+        ledger = await asyncio.to_thread(storage.load_review, review_id)
+        if ledger is not None:
+            for p in ledger.get("points", []):
+                if p.get("group_id") == group_id or p.get("point_id") == group_id:
+                    if (p.get("author_resolution") or "").upper() == "PARTIAL":
+                        resolution = "partial_accepted"
+                    break
+
     try:
         await asyncio.to_thread(
             storage.update_point_override, review_id, group_id, resolution

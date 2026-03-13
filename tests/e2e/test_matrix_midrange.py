@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.e2e, pytest.mark.e2e_live]
 
 FIXTURES = Path(__file__).parent / "fixtures"
 FAILURES_DIR = Path(__file__).parent / "failures"
-_FIXTURE_YAML = (Path(__file__).parent / "fixtures" / "models.yaml").read_text()
+_FIXTURE_YAML_PATH = Path(__file__).parent / "fixtures" / "models.yaml"
 
 # Import helpers from test_matrix (same directory, pytest adds to sys.path)
 from test_matrix import (
@@ -138,15 +138,21 @@ def capture_on_failure(request, live_page):
 
 
 @pytest.fixture
-def restore_config(live_page, dvad_server):
-    """Auto-restore fixture config after each test that mutates config."""
+def restore_config(live_page, dvad_server, e2e_config_path):
+    """Auto-restore fixture config after each test that mutates config.
+
+    Reads from e2e_config_path (which may have been rewritten for remote
+    LLM targets) rather than the raw fixture file.
+    """
+    config_src = Path(e2e_config_path) if e2e_config_path else _FIXTURE_YAML_PATH
     yield
+    yaml_text = config_src.read_text()
     live_page.goto(f"{dvad_server}/config")
     live_page.wait_for_load_state("networkidle")
     csrf = live_page.locator('meta[name="csrf-token"]').get_attribute("content")
     live_page.request.post(
         f"{dvad_server}/api/config",
-        data=json.dumps({"yaml": _FIXTURE_YAML}),
+        data=json.dumps({"yaml": yaml_text}),
         headers={"X-DVAD-Token": csrf, "Content-Type": "application/json"},
     )
 

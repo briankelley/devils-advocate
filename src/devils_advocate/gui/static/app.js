@@ -360,8 +360,9 @@ const dvad = {
                     const label = {
                         'overridden': 'Accepted (Reviewer)',
                         'auto_dismissed': 'Accepted (Author)',
+                        'partial_accepted': 'Accepted (Author — Partial)',
                         'escalated': 'Kept Open'
-                    }[resolution] || resolution;
+                    }[data.resolution] || data.resolution;
                     actions.innerHTML = `<span class="dim">Resolution: ${label}</span>`;
                 }
                 this._checkAnyOverrideResolved();
