@@ -9,12 +9,16 @@ import socket
 import subprocess
 import sys
 import time
+from collections import namedtuple
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
 import httpx
 import pytest
+
+# Per-module isolated server environment
+E2EServer = namedtuple("E2EServer", ["url", "config_path", "data_dir"])
 
 FIXTURES = Path(__file__).parent / "fixtures"
 BASELINES = Path(__file__).parent / "baselines"
@@ -318,6 +322,168 @@ def _wait_for_ready(url: str, timeout: float = 15):
     raise TimeoutError(f"Server at {url} did not become ready within {timeout}s")
 
 
+# ─── Per-module server factory helpers ────────────────────────────────────────
+
+
+def _make_e2e_config(tmp_dir: Path) -> Path | None:
+    """Copy fixtures/models.yaml to tmp_dir, rewrite URLs for remote LLM if set."""
+    src = FIXTURES / "models.yaml"
+    if not src.exists():
+        return None
+    dst = tmp_dir / "models.yaml"
+    shutil.copy2(src, dst)
+
+    llm_url = os.environ.get("DVAD_LLM_URL")
+    if llm_url and llm_url != LOCAL_LLM_URL:
+        import yaml
+        with open(dst) as f:
+            config = yaml.safe_load(f)
+        remote_base = llm_url.rstrip("/")
+        if not remote_base.endswith("/v1"):
+            remote_base += "/v1"
+        for model in config.get("models", {}).values():
+            model["api_base"] = remote_base
+        with open(dst, "w") as f:
+            yaml.dump(config, f, default_flow_style=False)
+
+    return dst
+
+
+def _make_e2e_data_dir(tmp_dir: Path) -> Path:
+    """Create an empty data directory with reviews/ and logs/ subdirs."""
+    data_dir = tmp_dir / "dvad_data"
+    (data_dir / "reviews").mkdir(parents=True)
+    (data_dir / "logs").mkdir()
+    return data_dir
+
+
+def _make_e2e_server(
+    config_path: Path | None,
+    data_dir: Path,
+    log_dir: Path,
+    label: str,
+) -> tuple[str, subprocess.Popen, object]:
+    """Start a uvicorn dvad server. Returns (url, proc, log_fh)."""
+    port = _find_free_port()
+    env = {**os.environ}
+    env["DVAD_HOME"] = str(data_dir)
+    env["DVAD_SSL_VERIFY"] = "0"
+    env.setdefault("E2E_LOCAL_KEY", "e2e-dummy-key")
+    if config_path:
+        env["DVAD_E2E_CONFIG"] = str(config_path)
+
+    server_log = log_dir / f"{label}.log"
+    server_log_fh = open(server_log, "w")
+    proc = subprocess.Popen(
+        [
+            sys.executable, "-m", "uvicorn",
+            "devils_advocate.gui:create_app_from_env",
+            "--factory",
+            "--host", "127.0.0.1",
+            "--port", str(port),
+            "--log-level", "warning",
+        ],
+        env=env,
+        stdout=server_log_fh,
+        stderr=subprocess.STDOUT,
+    )
+
+    base_url = f"http://127.0.0.1:{port}"
+    try:
+        _wait_for_ready(base_url)
+    except TimeoutError:
+        proc.terminate()
+        proc.wait(timeout=5)
+        server_log_fh.close()
+        log_content = server_log.read_text()[-4000:]
+        raise RuntimeError(
+            f"dvad server '{label}' failed to start.\nlog: {log_content}"
+        )
+
+    return base_url, proc, server_log_fh
+
+
+def _stop_server(proc: subprocess.Popen, log_fh) -> None:
+    """Gracefully terminate a server process, force-kill if needed."""
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+    log_fh.close()
+
+
+# ─── Per-module isolated server fixtures ─────────────────────────────────────
+
+
+@pytest.fixture(scope="session")
+def matrix_env(tmp_path_factory):
+    """Isolated server for test_matrix.py Phases 2-4 (e2e_live tests)."""
+    url = os.environ.get("DVAD_E2E_URL")
+    if url:
+        yield E2EServer(url=url, config_path=None, data_dir=None)
+        return
+    tmp = tmp_path_factory.mktemp("matrix")
+    config = _make_e2e_config(tmp)
+    data_dir = _make_e2e_data_dir(tmp)
+    log_dir = tmp_path_factory.mktemp("matrix_logs")
+    url, proc, log_fh = _make_e2e_server(config, data_dir, log_dir, "matrix")
+    yield E2EServer(url=url, config_path=config, data_dir=data_dir)
+    _stop_server(proc, log_fh)
+
+
+@pytest.fixture(scope="session")
+def midrange_env(tmp_path_factory):
+    """Isolated server for test_matrix_midrange.py."""
+    url = os.environ.get("DVAD_E2E_URL")
+    if url:
+        yield E2EServer(url=url, config_path=None, data_dir=None)
+        return
+    tmp = tmp_path_factory.mktemp("midrange")
+    config = _make_e2e_config(tmp)
+    data_dir = _make_e2e_data_dir(tmp)
+    log_dir = tmp_path_factory.mktemp("midrange_logs")
+    url, proc, log_fh = _make_e2e_server(config, data_dir, log_dir, "midrange")
+    yield E2EServer(url=url, config_path=config, data_dir=data_dir)
+    _stop_server(proc, log_fh)
+
+
+@pytest.fixture(scope="session")
+def maxout_env(tmp_path_factory):
+    """Isolated server for test_max_out_enforcement.py."""
+    url = os.environ.get("DVAD_E2E_URL")
+    if url:
+        yield E2EServer(url=url, config_path=None, data_dir=None)
+        return
+    tmp = tmp_path_factory.mktemp("maxout")
+    config = _make_e2e_config(tmp)
+    data_dir = _make_e2e_data_dir(tmp)
+    log_dir = tmp_path_factory.mktemp("maxout_logs")
+    url, proc, log_fh = _make_e2e_server(config, data_dir, log_dir, "maxout")
+    yield E2EServer(url=url, config_path=config, data_dir=data_dir)
+    _stop_server(proc, log_fh)
+
+
+@pytest.fixture(scope="session")
+def review_flow_env(tmp_path_factory):
+    """Isolated server for test_review_flow.py."""
+    url = os.environ.get("DVAD_E2E_URL")
+    if url:
+        yield E2EServer(url=url, config_path=None, data_dir=None)
+        return
+    tmp = tmp_path_factory.mktemp("review_flow")
+    config = _make_e2e_config(tmp)
+    data_dir = _make_e2e_data_dir(tmp)
+    log_dir = tmp_path_factory.mktemp("review_flow_logs")
+    url, proc, log_fh = _make_e2e_server(config, data_dir, log_dir, "review_flow")
+    yield E2EServer(url=url, config_path=config, data_dir=data_dir)
+    _stop_server(proc, log_fh)
+
+
+# ─── Shared server (GUI-stage tests: dashboard, config, visual regression) ───
+
+
 @pytest.fixture(scope="session")
 def dvad_server(seeded_data_dir, e2e_config_path, tmp_path_factory):
     """Start a dvad GUI server for E2E tests, or connect to an external one."""
@@ -374,57 +540,6 @@ def dvad_server(seeded_data_dir, e2e_config_path, tmp_path_factory):
         proc.kill()
         proc.wait()
     server_log_fh.close()
-
-
-# ─── Thinking config toggle ─────────────────────────────────────────────────
-
-
-@pytest.fixture
-def enable_thinking(dvad_server, live_page):
-    """Enable thinking on all e2e models, restore after test.
-
-    Uses the dedicated ``POST /api/config/model-thinking`` endpoint to toggle
-    individual model thinking flags without touching roles or other config.
-
-    Original state: e2e-remote=False, e2e-remote-thinker=True.
-    Sets both to True, restores on teardown.
-    """
-    page = live_page
-    page.goto(dvad_server)
-    page.wait_for_load_state("networkidle")
-    csrf = page.locator('meta[name="csrf-token"]').get_attribute("content")
-    headers = {"X-DVAD-Token": csrf, "Content-Type": "application/json"}
-
-    # Read current model list to discover names
-    resp = page.request.get(f"{dvad_server}/api/config")
-    config_data = resp.json()
-    model_names = list(config_data.get("models", {}).keys())
-
-    # Enable thinking on all models
-    for name in model_names:
-        page.request.post(
-            f"{dvad_server}/api/config/model-thinking",
-            data=json.dumps({"model_name": name, "thinking": True}),
-            headers=headers,
-        )
-
-    yield
-
-    # Restore: e2e-remote=False, e2e-remote-thinker=True
-    originals = {"e2e-remote": False, "e2e-remote-thinker": True}
-    for name in model_names:
-        try:
-            page.request.post(
-                f"{dvad_server}/api/config/model-thinking",
-                data=json.dumps({
-                    "model_name": name,
-                    "thinking": originals.get(name, False),
-                }),
-                headers=headers,
-                timeout=60_000,
-            )
-        except Exception:
-            pass  # Best-effort; temp config copy protects the fixture file
 
 
 # ─── Playwright fixtures ────────────────────────────────────────────────────

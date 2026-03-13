@@ -506,6 +506,58 @@ class TestFormToInterstitial:
         )
 
 
+# ─── Thinking config toggle (local to test_matrix, wired to matrix_env) ──────
+
+
+@pytest.fixture
+def enable_thinking(matrix_env, live_page):
+    """Enable thinking on all e2e models, restore after test.
+
+    Uses the dedicated ``POST /api/config/model-thinking`` endpoint to toggle
+    individual model thinking flags without touching roles or other config.
+
+    Original state: e2e-remote=False, e2e-remote-thinker=True.
+    Sets both to True, restores on teardown.
+    """
+    dvad_server = matrix_env.url
+    page = live_page
+    page.goto(dvad_server)
+    page.wait_for_load_state("networkidle")
+    csrf = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    headers = {"X-DVAD-Token": csrf, "Content-Type": "application/json"}
+
+    # Read current model list to discover names
+    resp = page.request.get(f"{dvad_server}/api/config")
+    config_data = resp.json()
+    model_names = list(config_data.get("models", {}).keys())
+
+    # Enable thinking on all models
+    for name in model_names:
+        page.request.post(
+            f"{dvad_server}/api/config/model-thinking",
+            data=json.dumps({"model_name": name, "thinking": True}),
+            headers=headers,
+        )
+
+    yield
+
+    # Restore: e2e-remote=False, e2e-remote-thinker=True
+    originals = {"e2e-remote": False, "e2e-remote-thinker": True}
+    for name in model_names:
+        try:
+            page.request.post(
+                f"{dvad_server}/api/config/model-thinking",
+                data=json.dumps({
+                    "model_name": name,
+                    "thinking": originals.get(name, False),
+                }),
+                headers=headers,
+                timeout=60_000,
+            )
+        except Exception:
+            pass  # Best-effort; temp config copy protects the fixture file
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # PHASE 2: CLI Command Execution Spot-Check
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -520,8 +572,9 @@ class TestCLICommandExecution:
     def _require_remote(self, local_llm):
         """Ensure LLM is available."""
 
-    def test_plan_command_executes(self, live_page, dvad_server, tmp_path, e2e_config_path):
+    def test_plan_command_executes(self, live_page, matrix_env, tmp_path):
         """Scrape a plan review CLI command and run it via subprocess."""
+        dvad_server = matrix_env.url
         page = live_page
         input_file = _create_input_file(tmp_path, "plan")
 
@@ -535,8 +588,8 @@ class TestCLICommandExecution:
         parts = shlex.split(cmd)
 
         # Add --config pointing to e2e config
-        if e2e_config_path:
-            parts.extend(["--config", str(e2e_config_path)])
+        if matrix_env.config_path:
+            parts.extend(["--config", str(matrix_env.config_path)])
 
         result = subprocess.run(
             parts, capture_output=True, text=True, timeout=300,
@@ -549,8 +602,9 @@ class TestCLICommandExecution:
             f"stderr: {result.stderr[-2000:]}"
         )
 
-    def test_dry_run_command_executes(self, live_page, dvad_server, tmp_path, e2e_config_path):
+    def test_dry_run_command_executes(self, live_page, matrix_env, tmp_path):
         """Scrape a dry-run CLI command and verify it exits cleanly."""
+        dvad_server = matrix_env.url
         page = live_page
         input_file = _create_input_file(tmp_path, "plan")
 
@@ -563,8 +617,8 @@ class TestCLICommandExecution:
         cmd = get_interstitial_command(page)
         parts = shlex.split(cmd)
 
-        if e2e_config_path:
-            parts.extend(["--config", str(e2e_config_path)])
+        if matrix_env.config_path:
+            parts.extend(["--config", str(matrix_env.config_path)])
 
         result = subprocess.run(
             parts, capture_output=True, text=True, timeout=60,
@@ -576,8 +630,9 @@ class TestCLICommandExecution:
             f"stderr: {result.stderr[-2000:]}"
         )
 
-    def test_spec_command_executes(self, live_page, dvad_server, tmp_path, e2e_config_path):
+    def test_spec_command_executes(self, live_page, matrix_env, tmp_path):
         """Scrape a spec review CLI command and run it."""
+        dvad_server = matrix_env.url
         page = live_page
         input_file = _create_input_file(tmp_path, "spec")
 
@@ -590,8 +645,8 @@ class TestCLICommandExecution:
         cmd = get_interstitial_command(page)
         parts = shlex.split(cmd)
 
-        if e2e_config_path:
-            parts.extend(["--config", str(e2e_config_path)])
+        if matrix_env.config_path:
+            parts.extend(["--config", str(matrix_env.config_path)])
 
         result = subprocess.run(
             parts, capture_output=True, text=True, timeout=300,
@@ -630,8 +685,9 @@ class TestLiveReviewMatrix:
     @pytest.mark.parametrize("mode", MODES)
     @pytest.mark.parametrize("dry_run", DRY_RUN_VALUES, ids=["run", "dry"])
     @pytest.mark.parametrize("max_cost", [None, "0.001"], ids=["no-limit", "tiny-limit"])
-    def test_review_no_thinking(self, live_page, dvad_server, tmp_path, mode, dry_run, max_cost):
+    def test_review_no_thinking(self, live_page, matrix_env, tmp_path, mode, dry_run, max_cost):
         """Review with thinking=off for each mode x dry_run x max_cost."""
+        dvad_server = matrix_env.url
         page = live_page
         input_file = _create_input_file(tmp_path, mode)
         project_dir = _create_project_dir(tmp_path) if mode == "integration" else tmp_path
@@ -655,9 +711,10 @@ class TestLiveReviewMatrix:
     @pytest.mark.parametrize("dry_run", DRY_RUN_VALUES, ids=["run", "dry"])
     @pytest.mark.parametrize("max_cost", [None, "0.001"], ids=["no-limit", "tiny-limit"])
     def test_review_with_thinking(
-        self, live_page, dvad_server, tmp_path, mode, dry_run, max_cost, enable_thinking,
+        self, live_page, matrix_env, tmp_path, mode, dry_run, max_cost, enable_thinking,
     ):
         """Review with thinking=on for each mode x dry_run x max_cost."""
+        dvad_server = matrix_env.url
         page = live_page
         input_file = _create_input_file(tmp_path, mode)
         project_dir = _create_project_dir(tmp_path) if mode == "integration" else tmp_path
@@ -676,8 +733,9 @@ class TestLiveReviewMatrix:
         expected = self._expected_result(dry_run, max_cost)
         assert_review_result(page, expected_result=expected, mode=mode, actual_result=actual)
 
-    def test_dry_run_with_max_cost(self, live_page, dvad_server, tmp_path):
+    def test_dry_run_with_max_cost(self, live_page, matrix_env, tmp_path):
         """Explicit test: dry_run=True + max_cost=0.001 — unknown interaction."""
+        dvad_server = matrix_env.url
         page = live_page
         input_file = _create_input_file(tmp_path, "plan")
 
@@ -685,6 +743,7 @@ class TestLiveReviewMatrix:
             page, dvad_server,
             mode="plan", project="e2e-dryrun-maxcost",
             input_files=[input_file],
+            project_dir=tmp_path,
             max_cost="0.001", dry_run=True,
         )
 
@@ -713,8 +772,9 @@ class TestInputVariations:
     def _require_remote(self, local_llm):
         """Ensure LLM is available."""
 
-    def test_plan_multi_file(self, live_page, dvad_server, tmp_path):
+    def test_plan_multi_file(self, live_page, matrix_env, tmp_path):
         """Plan review with multiple input files."""
+        dvad_server = matrix_env.url
         page = live_page
         plan1 = tmp_path / "plan1.md"
         plan2 = tmp_path / "plan2.md"
@@ -731,8 +791,9 @@ class TestInputVariations:
         actual = wait_for_review_complete(page, dvad_server, review_id)
         assert_review_result(page, expected_result="success", mode="plan", actual_result=actual)
 
-    def test_plan_with_spec_file(self, live_page, dvad_server, tmp_path):
+    def test_plan_with_spec_file(self, live_page, matrix_env, tmp_path):
         """Plan review with an additional spec file."""
+        dvad_server = matrix_env.url
         page = live_page
         plan = _create_input_file(tmp_path, "plan")
         spec = tmp_path / "spec.md"
@@ -748,8 +809,9 @@ class TestInputVariations:
         actual = wait_for_review_complete(page, dvad_server, review_id)
         assert_review_result(page, expected_result="success", mode="plan", actual_result=actual)
 
-    def test_plan_with_reference_files(self, live_page, dvad_server, tmp_path):
+    def test_plan_with_reference_files(self, live_page, matrix_env, tmp_path):
         """Plan review with reference files for cross-checking."""
+        dvad_server = matrix_env.url
         page = live_page
         plan = _create_input_file(tmp_path, "plan")
         ref = tmp_path / "reference.md"
@@ -766,8 +828,9 @@ class TestInputVariations:
         actual = wait_for_review_complete(page, dvad_server, review_id)
         assert_review_result(page, expected_result="success", mode="plan", actual_result=actual)
 
-    def test_code_with_spec(self, live_page, dvad_server, tmp_path):
+    def test_code_with_spec(self, live_page, matrix_env, tmp_path):
         """Code review with spec file."""
+        dvad_server = matrix_env.url
         page = live_page
         code = _create_input_file(tmp_path, "code")
         spec = tmp_path / "spec.md"
@@ -783,8 +846,9 @@ class TestInputVariations:
         actual = wait_for_review_complete(page, dvad_server, review_id)
         assert_review_result(page, expected_result="success", mode="code", actual_result=actual)
 
-    def test_integration_with_project_dir(self, live_page, dvad_server, tmp_path):
+    def test_integration_with_project_dir(self, live_page, matrix_env, tmp_path):
         """Integration review using project-dir manifest discovery."""
+        dvad_server = matrix_env.url
         page = live_page
         project_dir = _create_project_dir(tmp_path)
 
@@ -800,8 +864,9 @@ class TestInputVariations:
         body = page.locator("body").inner_text()
         assert "e2e-integ-dir" in body
 
-    def test_integration_with_files_and_project_dir(self, live_page, dvad_server, tmp_path):
+    def test_integration_with_files_and_project_dir(self, live_page, matrix_env, tmp_path):
         """Integration review with both explicit files and project-dir."""
+        dvad_server = matrix_env.url
         page = live_page
         input_file = _create_input_file(tmp_path, "integration")
         project_dir = _create_project_dir(tmp_path)
@@ -818,8 +883,9 @@ class TestInputVariations:
         body = page.locator("body").inner_text()
         assert "e2e-integ-both" in body
 
-    def test_integration_no_inputs_no_dir(self, live_page, dvad_server, tmp_path):
+    def test_integration_no_inputs_no_dir(self, live_page, matrix_env, tmp_path):
         """Integration review with no files and no project-dir — should handle gracefully."""
+        dvad_server = matrix_env.url
         page = live_page
 
         # This might return 400 or might run with empty content — find out

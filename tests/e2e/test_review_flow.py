@@ -17,7 +17,8 @@ pytestmark = [pytest.mark.e2e, pytest.mark.e2e_live]
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def _start_review(page, dvad_server: str, project: str, input_file) -> str:
+def _start_review(page, dvad_server: str, project: str, input_file,
+                  *, project_dir=None) -> str:
     """Start a review, waiting for any prior review to finish first.
 
     Returns the review_id.
@@ -26,15 +27,19 @@ def _start_review(page, dvad_server: str, project: str, input_file) -> str:
     page.wait_for_load_state("networkidle")
     csrf = page.locator('meta[name="csrf-token"]').get_attribute("content")
 
+    multipart = {
+        "mode": "plan",
+        "project": project,
+        "input_paths": json.dumps([str(input_file)]),
+    }
+    if project_dir:
+        multipart["project_dir"] = str(project_dir)
+
     deadline = time.monotonic() + 300
     while time.monotonic() < deadline:
         resp = page.request.post(
             f"{dvad_server}/api/review/start",
-            multipart={
-                "mode": "plan",
-                "project": project,
-                "input_paths": json.dumps([str(input_file)]),
-            },
+            multipart=multipart,
             headers={"X-DVAD-Token": csrf},
         )
         if resp.status == 200:
@@ -70,12 +75,13 @@ def _create_test_input(tmp_path: Path) -> Path:
     return test_file
 
 
-def test_initiate_review(live_page, dvad_server, tmp_path):
+def test_initiate_review(live_page, review_flow_env, tmp_path):
     """Submit a new review via the dashboard form and verify redirect to progress page."""
+    dvad_server = review_flow_env.url
     page = live_page
     test_file = _create_test_input(tmp_path)
 
-    review_id = _start_review(page, dvad_server, "e2e-test-run", test_file)
+    review_id = _start_review(page, dvad_server, "e2e-test-run", test_file, project_dir=tmp_path)
     assert review_id
 
     # Navigate to the progress page
@@ -83,12 +89,13 @@ def test_initiate_review(live_page, dvad_server, tmp_path):
     expect(page.locator(".running-header")).to_be_visible(timeout=5000)
 
 
-def test_sse_populates_log(live_page, dvad_server, tmp_path):
+def test_sse_populates_log(live_page, review_flow_env, tmp_path):
     """SSE events appear in the log panel during a review."""
+    dvad_server = review_flow_env.url
     page = live_page
     test_file = _create_test_input(tmp_path)
 
-    review_id = _start_review(page, dvad_server, "e2e-sse-test", test_file)
+    review_id = _start_review(page, dvad_server, "e2e-sse-test", test_file, project_dir=tmp_path)
 
     # Navigate to progress page
     page.goto(f"{dvad_server}/review/{review_id}")
@@ -104,12 +111,13 @@ def test_sse_populates_log(live_page, dvad_server, tmp_path):
     assert len(log_text) > 10
 
 
-def test_review_completes(live_page, dvad_server, tmp_path):
+def test_review_completes(live_page, review_flow_env, tmp_path):
     """A review runs to completion and transitions to the results view."""
+    dvad_server = review_flow_env.url
     page = live_page
     test_file = _create_test_input(tmp_path)
 
-    review_id = _start_review(page, dvad_server, "e2e-complete-test", test_file)
+    review_id = _start_review(page, dvad_server, "e2e-complete-test", test_file, project_dir=tmp_path)
 
     # Poll API for completion (more reliable than SSE-driven DOM transitions)
     deadline = time.monotonic() + 600

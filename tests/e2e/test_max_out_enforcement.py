@@ -37,22 +37,27 @@ def _create_test_plan(tmp_path: Path) -> Path:
     return f
 
 
-def _start_review_and_wait(page, dvad_server, project, input_file, *, timeout=300):
+def _start_review_and_wait(page, dvad_server, project, input_file, *,
+                           project_dir=None, timeout=300):
     """Start a review and wait for completion. Returns the review ledger."""
     page.goto(dvad_server)
     page.wait_for_load_state("networkidle")
     csrf = page.locator('meta[name="csrf-token"]').get_attribute("content")
+
+    multipart = {
+        "mode": "plan",
+        "project": project,
+        "input_paths": json.dumps([str(input_file)]),
+    }
+    if project_dir:
+        multipart["project_dir"] = str(project_dir)
 
     deadline = time.monotonic() + timeout
     review_id = None
     while time.monotonic() < deadline:
         resp = page.request.post(
             f"{dvad_server}/api/review/start",
-            multipart={
-                "mode": "plan",
-                "project": project,
-                "input_paths": json.dumps([str(input_file)]),
-            },
+            multipart=multipart,
             headers={"X-DVAD-Token": csrf},
         )
         if resp.status == 200:
@@ -114,13 +119,15 @@ def _restore_max_out(page, dvad_server, model_name, original_value):
         pass
 
 
-def test_sane_limit_respected(live_page, dvad_server, tmp_path):
+def test_sane_limit_respected(live_page, maxout_env, tmp_path):
     """With max_out_configured=4096, output tokens should not exceed the limit."""
+    dvad_server = maxout_env.url
     page = live_page
     input_file = _create_test_plan(tmp_path)
 
     ledger = _start_review_and_wait(
-        page, dvad_server, "e2e-max-out-sane", input_file
+        page, dvad_server, "e2e-max-out-sane", input_file,
+        project_dir=tmp_path,
     )
 
     # Check that the review completed
@@ -136,8 +143,9 @@ def test_sane_limit_respected(live_page, dvad_server, tmp_path):
     assert ledger.get("result") == "success" or ledger.get("points") is not None
 
 
-def test_tiny_limit_graceful(live_page, dvad_server, tmp_path):
+def test_tiny_limit_graceful(live_page, maxout_env, tmp_path):
     """With max_out_configured=1500, review should handle truncated output gracefully."""
+    dvad_server = maxout_env.url
     page = live_page
     input_file = _create_test_plan(tmp_path)
 
@@ -147,7 +155,8 @@ def test_tiny_limit_graceful(live_page, dvad_server, tmp_path):
 
     try:
         ledger = _start_review_and_wait(
-            page, dvad_server, "e2e-max-out-tiny", input_file
+            page, dvad_server, "e2e-max-out-tiny", input_file,
+            project_dir=tmp_path,
         )
 
         # Review should still complete (not crash)
@@ -164,13 +173,15 @@ def test_tiny_limit_graceful(live_page, dvad_server, tmp_path):
         _restore_max_out(page, dvad_server, "e2e-remote-thinker", 4096)
 
 
-def test_revision_raw_always_saved(live_page, dvad_server, tmp_path, seeded_data_dir):
+def test_revision_raw_always_saved(live_page, maxout_env, tmp_path):
     """revision_raw.txt should be populated regardless of extraction success."""
+    dvad_server = maxout_env.url
     page = live_page
     input_file = _create_test_plan(tmp_path)
 
     ledger = _start_review_and_wait(
-        page, dvad_server, "e2e-max-out-raw", input_file
+        page, dvad_server, "e2e-max-out-raw", input_file,
+        project_dir=tmp_path,
     )
 
     if ledger.get("result") != "success":
@@ -181,7 +192,7 @@ def test_revision_raw_always_saved(live_page, dvad_server, tmp_path, seeded_data
         pytest.skip("No review_id in ledger")
 
     # Check for revision_raw.txt in the review directory
-    reviews_dir = seeded_data_dir / "reviews" / review_id
+    reviews_dir = maxout_env.data_dir / "reviews" / review_id
     if not reviews_dir.exists():
         pytest.skip("Review directory not found")
 

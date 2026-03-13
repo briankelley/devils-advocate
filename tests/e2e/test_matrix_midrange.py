@@ -138,21 +138,22 @@ def capture_on_failure(request, live_page):
 
 
 @pytest.fixture
-def restore_config(live_page, dvad_server, e2e_config_path):
+def restore_config(live_page, midrange_env):
     """Auto-restore fixture config after each test that mutates config.
 
-    Reads from e2e_config_path (which may have been rewritten for remote
-    LLM targets) rather than the raw fixture file.
+    Snapshots config content BEFORE the test runs so the restore uses the
+    original state, not the test-modified state.
     """
-    config_src = Path(e2e_config_path) if e2e_config_path else _FIXTURE_YAML_PATH
+    config_src = Path(midrange_env.config_path) if midrange_env.config_path else _FIXTURE_YAML_PATH
+    original_yaml = config_src.read_text()
+    dvad_server = midrange_env.url
     yield
-    yaml_text = config_src.read_text()
     live_page.goto(f"{dvad_server}/config")
     live_page.wait_for_load_state("networkidle")
     csrf = live_page.locator('meta[name="csrf-token"]').get_attribute("content")
     live_page.request.post(
         f"{dvad_server}/api/config",
-        data=json.dumps({"yaml": yaml_text}),
+        data=json.dumps({"yaml": original_yaml}),
         headers={"X-DVAD-Token": csrf, "Content-Type": "application/json"},
     )
 
@@ -195,7 +196,8 @@ def _start_and_wait(page, dvad_server, *, mode, project, input_files,
     return result, data
 
 
-def _try_start_review(page, dvad_server, *, mode, project, input_files):
+def _try_start_review(page, dvad_server, *, mode, project, input_files,
+                      project_dir=None):
     """Try to start a review; return (status_code, review_id_or_detail).
 
     Used for tests that may fail at validation (400) or succeed (200).
@@ -210,6 +212,8 @@ def _try_start_review(page, dvad_server, *, mode, project, input_files):
         "project": project,
         "input_paths": json.dumps([str(f) for f in input_files]),
     }
+    if project_dir:
+        multipart["project_dir"] = str(project_dir)
 
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
@@ -323,8 +327,9 @@ def assert_ledger_deep(
 class TestDeepLedger:
     """Full config reviews with comprehensive ledger verification."""
 
-    def test_e1_plan_deep_ledger(self, live_page, dvad_server, tmp_path):
+    def test_e1_plan_deep_ledger(self, live_page, midrange_env, tmp_path):
         """Plan review -- verify every ledger field the existing matrix ignores."""
+        dvad_server = midrange_env.url
         input_file = _create_input_file(tmp_path, "plan")
         _, data = _start_and_wait(
             live_page, dvad_server,
@@ -347,13 +352,14 @@ class TestDeepLedger:
         assert data["cost"]["total_usd"] > 0
         assert set(data["reviewer_models"]) == {R, T}
 
-    def test_e2_spec_deep_ledger(self, live_page, dvad_server, tmp_path):
+    def test_e2_spec_deep_ledger(self, live_page, midrange_env, tmp_path):
         """Spec review -- verify spec-specific ledger fields."""
+        dvad_server = midrange_env.url
         input_file = _create_input_file(tmp_path, "spec")
         _, data = _start_and_wait(
             live_page, dvad_server,
             mode="spec", project="midrange-e2",
-            input_files=[input_file],
+            input_files=[input_file], project_dir=tmp_path,
         )
         assert_ledger_deep(
             data,
@@ -385,8 +391,9 @@ class TestDeepLedger:
 class TestInputQuality:
     """Input quality edge cases -- trivial, empty, content type mismatch."""
 
-    def test_d1_trivial_input(self, live_page, dvad_server, tmp_path):
+    def test_d1_trivial_input(self, live_page, midrange_env, tmp_path):
         """Single sentence -- pipeline should complete, LLM may invent feedback."""
+        dvad_server = midrange_env.url
         trivial = tmp_path / "trivial.txt"
         trivial.write_text("The quick brown fox jumps over the lazy dog.")
         _, data = _start_and_wait(
@@ -398,15 +405,16 @@ class TestInputQuality:
         assert "review_id" in data
         assert "cost" in data
 
-    def test_d2_empty_input(self, live_page, dvad_server, tmp_path):
+    def test_d2_empty_input(self, live_page, midrange_env, tmp_path):
         """Zero-byte file -- API may reject or pipeline may complete with 0 points."""
+        dvad_server = midrange_env.url
         empty = tmp_path / "empty.txt"
         empty.write_text("")
 
         status, detail_or_id = _try_start_review(
             live_page, dvad_server,
             mode="plan", project="midrange-d2",
-            input_files=[empty],
+            input_files=[empty], project_dir=tmp_path,
         )
         if status == 400:
             # API rejected empty input -- acceptable
@@ -417,8 +425,9 @@ class TestInputQuality:
         data = _fetch_ledger(live_page, dvad_server, review_id)
         assert data.get("result") in ("success", "completed", "complete", "failed")
 
-    def test_d3_code_as_plan(self, live_page, dvad_server, tmp_path):
+    def test_d3_code_as_plan(self, live_page, midrange_env, tmp_path):
         """Code file submitted as plan review -- pipeline doesn't validate content type."""
+        dvad_server = midrange_env.url
         code_file = tmp_path / "test-code.py"
         shutil.copy2(FIXTURES / "test-code.py", code_file)
         _, data = _start_and_wait(
@@ -428,8 +437,9 @@ class TestInputQuality:
         )
         assert_ledger_deep(data, min_points=1)
 
-    def test_d4_plan_as_code(self, live_page, dvad_server, tmp_path):
+    def test_d4_plan_as_code(self, live_page, midrange_env, tmp_path):
         """Plan file submitted as code review -- pipeline should still produce output."""
+        dvad_server = midrange_env.url
         plan_file = tmp_path / "test-plan.md"
         shutil.copy2(FIXTURES / "test-plan.md", plan_file)
         _, data = _start_and_wait(
@@ -449,9 +459,10 @@ class TestConfigVariationPlan:
     """Config variation tests -- plan mode (A1-A6, A8) and code spot-check (A7)."""
 
     def test_a1_plan_2rev_no_revision(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """2 reviewers, no explicit revision -- falls back to author."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_A1)
         input_file = _create_input_file(tmp_path, "plan")
         _, data = _start_and_wait(
@@ -464,9 +475,10 @@ class TestConfigVariationPlan:
         )
 
     def test_a2_plan_2rev_no_normalization(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """2 reviewers, no explicit normalization -- falls back to dedup."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_A2)
         input_file = _create_input_file(tmp_path, "plan")
         _, data = _start_and_wait(
@@ -479,9 +491,10 @@ class TestConfigVariationPlan:
         )
 
     def test_a3_plan_2rev_both_fallbacks(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """2 reviewers, no revision AND no normalization -- both fallbacks active."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_A3)
         input_file = _create_input_file(tmp_path, "plan")
         _, data = _start_and_wait(
@@ -492,9 +505,10 @@ class TestConfigVariationPlan:
         assert_ledger_deep(data, min_points=1)
 
     def test_a4_plan_1rev_with_dedup(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """1 reviewer + dedup assigned -- single-source dedup."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_A4)
         input_file = _create_input_file(tmp_path, "plan")
         _, data = _start_and_wait(
@@ -507,9 +521,10 @@ class TestConfigVariationPlan:
         )
 
     def test_a5_plan_1rev_dedup_both_fallbacks(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """1 reviewer + dedup, both fallbacks -- minimal viable plan config."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_A5)
         input_file = _create_input_file(tmp_path, "plan")
         _, data = _start_and_wait(
@@ -522,7 +537,7 @@ class TestConfigVariationPlan:
         )
 
     def test_a6_plan_1rev_no_dedup(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """1 reviewer, no dedup, explicit norm + revision.
 
@@ -530,13 +545,14 @@ class TestConfigVariationPlan:
         Validation may reject at review-start, or pipeline may crash.
         Either outcome is recorded -- this test adapts to both.
         """
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_A6)
         input_file = _create_input_file(tmp_path, "plan")
 
         status, detail_or_id = _try_start_review(
             live_page, dvad_server,
             mode="plan", project="midrange-a6",
-            input_files=[input_file],
+            input_files=[input_file], project_dir=tmp_path,
         )
         if status == 400:
             # Validation caught missing dedup -- expected
@@ -555,9 +571,10 @@ class TestConfigVariationPlan:
             )
 
     def test_a7_code_1rev_both_fallbacks(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """Code mode spot-check with 1 reviewer + dedup + both fallbacks."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_A5)
         input_file = _create_input_file(tmp_path, "code")
         _, data = _start_and_wait(
@@ -570,9 +587,10 @@ class TestConfigVariationPlan:
         )
 
     def test_a8_plan_dryrun_sparse(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """Plan dry_run with sparse config -- verify dry_run still works."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_A5)
         input_file = _create_input_file(tmp_path, "plan")
         _, data = _start_and_wait(
@@ -594,19 +612,20 @@ class TestConfigVariationSpec:
     """Config variation tests -- spec mode (B1-B4)."""
 
     def test_b1_spec_no_author_no_revision(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """Spec: 1 reviewer + dedup + norm, no author/revision/integration.
 
         Revision falls back to author=None. Does spec crash at revision step?
         """
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_B1)
         input_file = _create_input_file(tmp_path, "spec")
 
         status, detail_or_id = _try_start_review(
             live_page, dvad_server,
             mode="spec", project="midrange-b1",
-            input_files=[input_file],
+            input_files=[input_file], project_dir=tmp_path,
         )
         if status == 400:
             # Validation rejected -- record why
@@ -624,15 +643,16 @@ class TestConfigVariationSpec:
             )
 
     def test_b2_spec_2rev_no_revision(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """Spec: 2 reviewers, no revision -- falls back to author."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_B2)
         input_file = _create_input_file(tmp_path, "spec")
         _, data = _start_and_wait(
             live_page, dvad_server,
             mode="spec", project="midrange-b2",
-            input_files=[input_file],
+            input_files=[input_file], project_dir=tmp_path,
         )
         assert_ledger_deep(
             data, min_points=1,
@@ -642,15 +662,16 @@ class TestConfigVariationSpec:
         )
 
     def test_b3_spec_1rev_no_norm(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """Spec: 1 reviewer + dedup, no norm -- falls back to dedup."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_B3)
         input_file = _create_input_file(tmp_path, "spec")
         _, data = _start_and_wait(
             live_page, dvad_server,
             mode="spec", project="midrange-b3",
-            input_files=[input_file],
+            input_files=[input_file], project_dir=tmp_path,
         )
         assert_ledger_deep(
             data, min_points=1,
@@ -659,19 +680,20 @@ class TestConfigVariationSpec:
         )
 
     def test_b4_spec_1rev_no_dedup(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """Spec: 1 reviewer, no dedup, explicit norm + revision.
 
         Same potential crash as A6 -- dedup_model=None in spec pipeline.
         """
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_B4)
         input_file = _create_input_file(tmp_path, "spec")
 
         status, detail_or_id = _try_start_review(
             live_page, dvad_server,
             mode="spec", project="midrange-b4",
-            input_files=[input_file],
+            input_files=[input_file], project_dir=tmp_path,
         )
         if status == 400:
             return
@@ -698,9 +720,10 @@ class TestConfigVariationIntegration:
     """Config variation tests -- integration mode (C1-C3)."""
 
     def test_c1_integration_no_revision(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """Integration: no explicit revision -- falls back to author."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_C1)
         input_file = _create_input_file(tmp_path, "integration")
         project_dir = _create_project_dir(tmp_path)
@@ -712,9 +735,10 @@ class TestConfigVariationIntegration:
         assert_ledger_deep(data, mode="integration")
 
     def test_c2_integration_no_norm(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """Integration: no explicit normalization -- falls back to dedup."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_C2)
         input_file = _create_input_file(tmp_path, "integration")
         project_dir = _create_project_dir(tmp_path)
@@ -726,9 +750,10 @@ class TestConfigVariationIntegration:
         assert_ledger_deep(data, mode="integration")
 
     def test_c3_integration_minimal(
-        self, live_page, dvad_server, tmp_path, restore_config,
+        self, live_page, midrange_env, tmp_path, restore_config,
     ):
         """Integration: minimal -- integration + dedup only, both fallbacks."""
+        dvad_server = midrange_env.url
         _apply_config(live_page, dvad_server, CONFIG_C3)
         input_file = _create_input_file(tmp_path, "integration")
         project_dir = _create_project_dir(tmp_path)
