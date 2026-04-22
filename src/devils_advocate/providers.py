@@ -66,8 +66,13 @@ async def call_anthropic(
     # Thinking / reasoning support
     if model.thinking:
         budget = _ANTHROPIC_THINKING_BUDGETS.get(mode, 8192)
-        body["thinking"] = {"type": "enabled", "budget_tokens": budget}
-        body["max_tokens"] = body["max_tokens"] + budget
+        if "-4-7" in model.model_id:
+            # 4-7+ models use adaptive thinking (no budget_tokens)
+            body["thinking"] = {"type": "adaptive"}
+            body["max_tokens"] = body["max_tokens"] + budget
+        else:
+            body["thinking"] = {"type": "enabled", "budget_tokens": budget}
+            body["max_tokens"] = body["max_tokens"] + budget
 
     resp = await client.post(
         ANTHROPIC_API_URL, json=body, headers=headers, timeout=model.timeout
