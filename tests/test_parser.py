@@ -924,3 +924,50 @@ RATIONALE: The error handling approach still leaves a race condition.
         assert responses[0].verdict == "CONCUR"
         assert responses[1].group_id == "grp_002"
         assert responses[1].verdict == "CHALLENGE"
+
+
+class TestRegexAnchoringFixes:
+    """Verify that mid-line occurrences of header patterns do NOT cause false splits."""
+
+    def test_midline_review_point_no_false_split(self):
+        """A mid-line mention of 'REVIEW POINT' in a description should not create
+        a third spurious split. The regex anchoring ensures only start-of-line headers split."""
+        raw = """REVIEW POINT 1:
+SEVERITY: high
+CATEGORY: correctness
+DESCRIPTION: The function has a bug related to the issue in point two.
+RECOMMENDATION: Fix the bug.
+LOCATION: main.py
+
+REVIEW POINT 2:
+SEVERITY: medium
+CATEGORY: maintainability
+DESCRIPTION: Code is hard to read.
+RECOMMENDATION: Refactor.
+LOCATION: utils.py
+"""
+        points = parse_review_response(raw, "test-reviewer")
+        # Should get exactly 2 points, not 3 from a spurious mid-line split
+        assert len(points) == 2
+        assert points[0].severity == "high"
+        assert points[1].severity == "medium"
+
+    def test_midline_suggestion_no_false_split(self):
+        """A mid-line mention of 'SUGGESTION' should not create a spurious third split."""
+        raw = """SUGGESTION 1:
+THEME: features
+TITLE: Add dark mode
+DESCRIPTION: Users want dark mode to improve UX across the board.
+CONTEXT: UI settings
+
+SUGGESTION 2:
+THEME: ux
+TITLE: Add high contrast
+DESCRIPTION: Accessibility improvement.
+CONTEXT: Accessibility
+"""
+        points = parse_spec_response(raw, "test-reviewer")
+        # Should get exactly 2 suggestions
+        assert len(points) == 2
+        assert points[0].category == "features"
+        assert points[1].category == "ux"

@@ -15,7 +15,7 @@ COMBINED_CATEGORY: The most representative category
 Rules:
 - Two points address the same concern if they identify the same root issue, even if worded differently
 - Do NOT merge points that happen to be in the same category but address different specific issues
-- Preserve ALL points — every input point must appear in exactly one group
+- Preserve ALL points - every input point must appear in exactly one group
 - Reference points by their POINT number (e.g. POINT 1, POINT 5)
 
 === REVIEW POINTS ===

@@ -1,7 +1,7 @@
-# Devil's Advocate — models.yaml reference configuration
+# Devil's Advocate - models.yaml reference configuration
 #
 # This file contains every provider and model tested with dvad.
-# You do NOT need all of these — configure only the models you have API keys for.
+# You do NOT need all of these - configure only the models you have API keys for.
 # At minimum you need: 1 author, 2 reviewers, 1 dedup model.
 #
 # API keys are resolved from environment variables only.
@@ -22,78 +22,126 @@
 
 models:
 
-  # ── Anthropic ────────────────────────────────────────────────────────
+  # -- Local / Open-Weight -----------------------------------------------
+
+  gemma-4-local:
+    provider: local
+    model_id: gemma-4-E2B-it-UD-Q6_K_XL
+    api_key_env: ''
+    api_base: http://localhost:8080/v1
+    thinking: false
+    context_window: 32768
+    cost_per_1k_input: 0
+    cost_per_1k_output: 0
+    timeout: 120
+    max_out_stated: 32768
+    max_out_configured: 16384
+
+  # -- Anthropic ---------------------------------------------------------
+
+  claude-opus-4-7:
+    provider: anthropic
+    model_id: claude-opus-4-7
+    api_key_env: ANTHROPIC_API_KEY
+    context_window: 1000000
+    cost_per_1k_input: 0.005
+    cost_per_1k_output: 0.025
+    timeout: 900
+    thinking: true
+    max_out_stated: 128000
+    max_out_configured: 16384
 
   claude-opus-4-6:
     provider: anthropic
     model_id: claude-opus-4-6
     api_key_env: ANTHROPIC_API_KEY
-    context_window: 200000
-    max_out_stated: 128000
-    max_out_configured: 16384
+    context_window: 1000000
     cost_per_1k_input: 0.005
     cost_per_1k_output: 0.025
     timeout: 900
-
-
-  claude-opus-4-5:
-    provider: anthropic
-    model_id: claude-opus-4-5
-    api_key_env: ANTHROPIC_API_KEY
-    context_window: 200000
+    thinking: true
     max_out_stated: 128000
     max_out_configured: 16384
-    cost_per_1k_input: 0.005
-    cost_per_1k_output: 0.025
-    timeout: 900
 
   claude-sonnet-4-6:
     provider: anthropic
     model_id: claude-sonnet-4-6
     api_key_env: ANTHROPIC_API_KEY
-    context_window: 200000
-    max_out_stated: 64000
-    max_out_configured: 16384
+    context_window: 1000000
     cost_per_1k_input: 0.003
     cost_per_1k_output: 0.015
     timeout: 900
+    thinking: false
+    max_out_stated: 64000
+    max_out_configured: 16384
 
   claude-sonnet-4-5:
     provider: anthropic
     model_id: claude-sonnet-4-5-20250929
     api_key_env: ANTHROPIC_API_KEY
-    context_window: 200000
-    max_out_stated: 64000
-    max_out_configured: 16384
+    context_window: 1000000
     cost_per_1k_input: 0.003
     cost_per_1k_output: 0.015
     timeout: 900
+    thinking: false
+    max_out_stated: 64000
+    max_out_configured: 16384
 
   claude-haiku-4-5:
     provider: anthropic
     model_id: claude-haiku-4-5-20251001
     api_key_env: ANTHROPIC_API_KEY
-    context_window: 200000
+    context_window: 1000000
+    cost_per_1k_input: 0.001
+    cost_per_1k_output: 0.005
+    timeout: 120
+    thinking: false
     max_out_stated: 64000
     max_out_configured: 16384
-    cost_per_1k_input: 0.0008
-    cost_per_1k_output: 0.004
-    timeout: 900
 
-  # ── OpenAI ───────────────────────────────────────────────────────────
+  # -- OpenAI ------------------------------------------------------------
 
-  gpt-5.2-pro:
+  gpt-5.4:
     provider: openai
-    model_id: gpt-5.2-pro
+    model_id: gpt-5.4
+    api_key_env: OPENAI_API_KEY
+    api_base: https://api.openai.com/v1
+    use_completion_tokens: true
+    context_window: 1050000
+    cost_per_1k_input: 0.0025
+    cost_per_1k_output: 0.015
+    timeout: 900
+    thinking: true
+    max_out_stated: 128000
+    max_out_configured: 16384
+
+  gpt-5.4-mini:
+    provider: openai
+    model_id: gpt-5.4-mini
     api_key_env: OPENAI_API_KEY
     api_base: https://api.openai.com/v1
     use_completion_tokens: true
     context_window: 400000
-    max_out_stated: 32768
+    cost_per_1k_input: 0.00075
+    cost_per_1k_output: 0.0045
+    timeout: 120
+    thinking: false
+    max_out_stated: 128000
     max_out_configured: 16384
-    cost_per_1k_input: 0.00175
-    cost_per_1k_output: 0.014
-    timeout: 900
+
+  gpt-5.4-nano:
+    provider: openai
+    model_id: gpt-5.4-nano
+    api_key_env: OPENAI_API_KEY
+    api_base: https://api.openai.com/v1
+    use_completion_tokens: true
+    context_window: 400000
+    cost_per_1k_input: 0.0002
+    cost_per_1k_output: 0.00125
+    timeout: 60
+    thinking: false
+    max_out_stated: 128000
+    max_out_configured: 16384
 
   gpt-5.2:
     provider: openai
@@ -101,51 +149,13 @@ models:
     api_key_env: OPENAI_API_KEY
     api_base: https://api.openai.com/v1
     use_completion_tokens: true
-    context_window: 128000
-    max_out_stated: 16384
-    max_out_configured: 16384
-    cost_per_1k_input: 0.005
-    cost_per_1k_output: 0.015
+    context_window: 400000
+    cost_per_1k_input: 0.00175
+    cost_per_1k_output: 0.014
     timeout: 900
-
-  gpt-5.2-codex:
-    provider: openai
-    model_id: gpt-5.2-codex
-    api_key_env: OPENAI_API_KEY
-    api_base: https://api.openai.com/v1
-    use_completion_tokens: true
-    context_window: 400000
-    max_out_stated: 32768
+    thinking: false
+    max_out_stated: 128000
     max_out_configured: 16384
-    cost_per_1k_input: 0.00175
-    cost_per_1k_output: 0.014
-    timeout: 180
-
-  gpt-5.3-codex:
-    provider: openai
-    model_id: gpt-5.3-codex
-    api_key_env: OPENAI_API_KEY
-    api_base: https://api.openai.com/v1
-    use_completion_tokens: true
-    context_window: 400000
-    max_out_stated: 32768
-    max_out_configured: 16384
-    cost_per_1k_input: 0.00175
-    cost_per_1k_output: 0.014
-    timeout: 180
-
-  gpt-5.3-codex-spark:
-    provider: openai
-    model_id: gpt-5.3-codex-spark
-    api_key_env: OPENAI_API_KEY
-    api_base: https://api.openai.com/v1
-    use_completion_tokens: true
-    context_window: 128000
-    max_out_stated: 16384
-    max_out_configured: 16384
-    cost_per_1k_input: 0.00175
-    cost_per_1k_output: 0.014
-    timeout: 60
 
   gpt-5.1:
     provider: openai
@@ -153,55 +163,69 @@ models:
     api_key_env: OPENAI_API_KEY
     api_base: https://api.openai.com/v1
     use_completion_tokens: true
-    context_window: 272000
-    max_out_stated: 32768
-    max_out_configured: 16384
+    context_window: 400000
     cost_per_1k_input: 0.00125
     cost_per_1k_output: 0.01
     timeout: 120
+    thinking: false
+    max_out_stated: 128000
+    max_out_configured: 16384
 
-  # ── xAI (Grok) ──────────────────────────────────────────────────────
+  # -- xAI (Grok) -------------------------------------------------------
 
-  grok-4-0709:
+  grok-4.20-0309-reasoning:
     provider: openai
-    model_id: grok-4-0709
+    model_id: grok-4.20-0309-reasoning
     api_key_env: XAI_API_KEY
     api_base: https://api.x.ai/v1
-
-    context_window: 256000
+    thinking: true
+    context_window: 2000000
+    cost_per_1k_input: 0.002
+    cost_per_1k_output: 0.006
+    timeout: 900
     max_out_stated: 131072
     max_out_configured: 16384
-    cost_per_1k_input: 0.003
-    cost_per_1k_output: 0.015
+
+  grok-4.20-0309-non-reasoning:
+    provider: openai
+    model_id: grok-4.20-0309-non-reasoning
+    api_key_env: XAI_API_KEY
+    api_base: https://api.x.ai/v1
+    thinking: false
+    context_window: 2000000
+    cost_per_1k_input: 0.002
+    cost_per_1k_output: 0.006
     timeout: 900
+    max_out_stated: 131072
+    max_out_configured: 16384
 
   grok-4-1-fast-reasoning:
     provider: openai
     model_id: grok-4-1-fast-reasoning
     api_key_env: XAI_API_KEY
     api_base: https://api.x.ai/v1
-
+    thinking: false
     context_window: 2000000
-    max_out_stated: 131072
-    max_out_configured: 16384
-    cost_per_1k_input: 0.003
-    cost_per_1k_output: 0.015
+    cost_per_1k_input: 0.0002
+    cost_per_1k_output: 0.0005
     timeout: 900
+    max_out_stated: 30000
+    max_out_configured: 16384
 
-  grok-code-fast-1:
+  grok-4-1-fast-non-reasoning:
     provider: openai
-    model_id: grok-code-fast-1
+    model_id: grok-4-1-fast-non-reasoning
     api_key_env: XAI_API_KEY
     api_base: https://api.x.ai/v1
-
-    context_window: 256000
-    max_out_stated: 131072
-    max_out_configured: 16384
+    thinking: false
+    context_window: 2000000
     cost_per_1k_input: 0.0002
-    cost_per_1k_output: 0.0015
+    cost_per_1k_output: 0.0005
     timeout: 900
+    max_out_stated: 30000
+    max_out_configured: 16384
 
-  # ── Google (Gemini via OpenAI-compatible endpoint) ───────────────────
+  # -- Google (Gemini via OpenAI-compatible endpoint) --------------------
 
   gemini-3.1-pro-preview:
     provider: openai
@@ -209,12 +233,12 @@ models:
     api_key_env: GOOGLE_API_KEY
     api_base: https://generativelanguage.googleapis.com/v1beta/openai
     context_window: 1048576
-    max_out_stated: 65536
-    max_out_configured: 16384
     cost_per_1k_input: 0.002
     cost_per_1k_output: 0.012
     timeout: 900
-
+    thinking: true
+    max_out_stated: 65536
+    max_out_configured: 16384
 
   gemini-3-pro-preview:
     provider: openai
@@ -222,11 +246,12 @@ models:
     api_key_env: GOOGLE_API_KEY
     api_base: https://generativelanguage.googleapis.com/v1beta/openai
     context_window: 1048576
-    max_out_stated: 65536
-    max_out_configured: 16384
     cost_per_1k_input: 0.002
     cost_per_1k_output: 0.012
     timeout: 900
+    thinking: false
+    max_out_stated: 65536
+    max_out_configured: 16384
 
   gemini-3-flash-preview:
     provider: openai
@@ -234,11 +259,12 @@ models:
     api_key_env: GOOGLE_API_KEY
     api_base: https://generativelanguage.googleapis.com/v1beta/openai
     context_window: 1048576
-    max_out_stated: 65536
-    max_out_configured: 16384
     cost_per_1k_input: 0.0005
     cost_per_1k_output: 0.003
     timeout: 900
+    thinking: false
+    max_out_stated: 65536
+    max_out_configured: 16384
 
   gemini-2.5-pro:
     provider: openai
@@ -246,13 +272,40 @@ models:
     api_key_env: GOOGLE_API_KEY
     api_base: https://generativelanguage.googleapis.com/v1beta/openai
     context_window: 1048576
-    max_out_stated: 65536
-    max_out_configured: 16384
     cost_per_1k_input: 0.00125
     cost_per_1k_output: 0.01
     timeout: 900
+    thinking: false
+    max_out_stated: 65536
+    max_out_configured: 16384
 
-  # ── DeepSeek ─────────────────────────────────────────────────────────
+  gemini-2.5-flash:
+    provider: openai
+    model_id: gemini-2.5-flash
+    api_key_env: GOOGLE_API_KEY
+    api_base: https://generativelanguage.googleapis.com/v1beta/openai
+    context_window: 1048576
+    cost_per_1k_input: 0.0003
+    cost_per_1k_output: 0.0025
+    timeout: 300
+    thinking: false
+    max_out_stated: 65536
+    max_out_configured: 16384
+
+  gemini-2.5-flash-lite:
+    provider: openai
+    model_id: gemini-2.5-flash-lite
+    api_key_env: GOOGLE_API_KEY
+    api_base: https://generativelanguage.googleapis.com/v1beta/openai
+    context_window: 1048576
+    cost_per_1k_input: 0.0001
+    cost_per_1k_output: 0.0004
+    timeout: 120
+    thinking: false
+    max_out_stated: 65536
+    max_out_configured: 16384
+
+  # -- DeepSeek ----------------------------------------------------------
 
   deepseek-chat:
     provider: openai
@@ -260,100 +313,219 @@ models:
     api_key_env: DEEPSEEK_API_KEY
     api_base: https://api.deepseek.com
     context_window: 128000
-    max_out_stated: 8192
-    max_out_configured: 8192
     cost_per_1k_input: 0.00028
     cost_per_1k_output: 0.00042
     timeout: 900
+    thinking: false
+    max_out_stated: 8000
+    max_out_configured: 8000
 
   deepseek-reasoner:
     provider: openai
     model_id: deepseek-reasoner
     api_key_env: DEEPSEEK_API_KEY
     api_base: https://api.deepseek.com
-
+    thinking: true
     context_window: 128000
-    max_out_stated: 8192
-    max_out_configured: 8192
     cost_per_1k_input: 0.00028
     cost_per_1k_output: 0.00042
     timeout: 900
+    max_out_stated: 64000
+    max_out_configured: 16384
 
-  # ── Moonshot (Kimi) ──────────────────────────────────────────────────
+  # -- Moonshot (Kimi) ---------------------------------------------------
 
   kimi-k2.5:
     provider: openai
     model_id: kimi-k2.5
     api_key_env: MOONSHOT_API_KEY
     api_base: https://api.moonshot.ai/v1
-
+    thinking: true
     context_window: 262144
-    max_out_stated: 32768
-    max_out_configured: 16384
     cost_per_1k_input: 0.0006
     cost_per_1k_output: 0.003
     timeout: 900
+    max_out_stated: 65535
+    max_out_configured: 16384
 
   kimi-k2-thinking:
     provider: openai
     model_id: kimi-k2-thinking
     api_key_env: MOONSHOT_API_KEY
     api_base: https://api.moonshot.ai/v1
-
+    thinking: false
     context_window: 262144
-    max_out_stated: 32768
-    max_out_configured: 16384
     cost_per_1k_input: 0.0006
     cost_per_1k_output: 0.0025
     timeout: 900
+    max_out_stated: 65535
+    max_out_configured: 16384
 
   kimi-k2-thinking-turbo:
     provider: openai
     model_id: kimi-k2-thinking-turbo
     api_key_env: MOONSHOT_API_KEY
     api_base: https://api.moonshot.ai/v1
-
+    thinking: true
     context_window: 262144
-    max_out_stated: 32768
-    max_out_configured: 16384
     cost_per_1k_input: 0.00115
     cost_per_1k_output: 0.008
     timeout: 900
+    max_out_stated: 65535
+    max_out_configured: 16384
 
-  # ── MiniMax ──────────────────────────────────────────────────────────
+  kimi-k2-0905-preview:
+    provider: openai
+    model_id: kimi-k2-0905-preview
+    api_key_env: MOONSHOT_API_KEY
+    api_base: https://api.moonshot.ai/v1
+    thinking: false
+    context_window: 262144
+    cost_per_1k_input: 0.0006
+    cost_per_1k_output: 0.0025
+    timeout: 900
+    max_out_stated: 65535
+    max_out_configured: 16384
+
+  # -- MiniMax -----------------------------------------------------------
+
+  minimax-m2.7:
+    provider: minimax
+    model_id: MiniMax-M2.7
+    api_key_env: MINIMAX_API_KEY
+    api_base: https://api.minimax.io
+    thinking: false
+    context_window: 204800
+    cost_per_1k_input: 0.0003
+    cost_per_1k_output: 0.0012
+    timeout: 900
+    max_out_stated: 65536
+    max_out_configured: 16384
+
+  minimax-m2.7-fast:
+    provider: minimax
+    model_id: M2.7-highspeed
+    api_key_env: MINIMAX_API_KEY
+    api_base: https://api.minimax.io
+    thinking: false
+    context_window: 204800
+    cost_per_1k_input: 0.0006
+    cost_per_1k_output: 0.0024
+    timeout: 300
+    max_out_stated: 65536
+    max_out_configured: 16384
 
   minimax-m2.5:
     provider: minimax
     model_id: MiniMax-M2.5
     api_key_env: MINIMAX_API_KEY
     api_base: https://api.minimax.io
-
-    context_window: 200000
-    max_out_stated: 16384
-    max_out_configured: 16384
+    thinking: false
+    context_window: 204800
     cost_per_1k_input: 0.0003
     cost_per_1k_output: 0.0012
     timeout: 900
+    max_out_stated: 65536
+    max_out_configured: 16384
 
   minimax-m2.5-fast:
     provider: minimax
     model_id: MiniMax-M2.5-highspeed
     api_key_env: MINIMAX_API_KEY
     api_base: https://api.minimax.io
-
-    context_window: 200000
-    max_out_stated: 16384
-    max_out_configured: 16384
+    thinking: false
+    context_window: 204800
     cost_per_1k_input: 0.0006
     cost_per_1k_output: 0.0024
     timeout: 300
+    max_out_stated: 65536
+    max_out_configured: 16384
 
-# ── Role Assignments ──────────────────────────────────────────────────
+  # -- Z.ai (GLM) -------------------------------------------------------
+
+  glm-5.1:
+    provider: openai
+    model_id: glm-5.1
+    api_key_env: ZAI_API_KEY
+    api_base: https://api.z.ai/api/paas/v4
+    thinking: false
+    context_window: 200000
+    cost_per_1k_input: 0.0014
+    cost_per_1k_output: 0.0044
+    timeout: 900
+    max_out_stated: 128000
+    max_out_configured: 16384
+
+  glm-5-turbo:
+    provider: openai
+    model_id: glm-5-turbo
+    api_key_env: ZAI_API_KEY
+    api_base: https://api.z.ai/api/paas/v4
+    thinking: false
+    context_window: 200000
+    cost_per_1k_input: 0.0012
+    cost_per_1k_output: 0.004
+    timeout: 300
+    max_out_stated: 128000
+    max_out_configured: 16384
+
+  glm-4.7:
+    provider: openai
+    model_id: glm-4.7
+    api_key_env: ZAI_API_KEY
+    api_base: https://api.z.ai/api/paas/v4
+    thinking: false
+    context_window: 200000
+    cost_per_1k_input: 0.0006
+    cost_per_1k_output: 0.0022
+    timeout: 900
+    max_out_stated: 128000
+    max_out_configured: 16384
+
+  glm-4.7-flashx:
+    provider: openai
+    model_id: glm-4.7-flashx
+    api_key_env: ZAI_API_KEY
+    api_base: https://api.z.ai/api/paas/v4
+    thinking: false
+    context_window: 200000
+    cost_per_1k_input: 7.0e-05
+    cost_per_1k_output: 0.0004
+    timeout: 120
+    max_out_stated: 128000
+    max_out_configured: 16384
+
+  glm-4.5-air:
+    provider: openai
+    model_id: glm-4.5-air
+    api_key_env: ZAI_API_KEY
+    api_base: https://api.z.ai/api/paas/v4
+    thinking: false
+    context_window: 128000
+    cost_per_1k_input: 0.0002
+    cost_per_1k_output: 0.0011
+    timeout: 120
+    max_out_stated: 96000
+    max_out_configured: 16384
+
+  glm-4.7-flash:
+    provider: openai
+    model_id: glm-4.7-flash
+    api_key_env: ZAI_API_KEY
+    api_base: https://api.z.ai/api/paas/v4
+    thinking: false
+    context_window: 200000
+    cost_per_1k_input: 0.0
+    cost_per_1k_output: 0.0
+    timeout: 120
+    max_out_stated: 128000
+    max_out_configured: 16384
+
+# -- Role Assignments --------------------------------------------------
 # Assign models from above to pipeline roles.
 # You only need models you have API keys for.
 
 roles:
-  # Assign models from the list above to each role.
   # Configure these in the GUI at http://localhost:8411/config
   #
   # Required: author, reviewers (at least 2), deduplication
@@ -365,3 +537,6 @@ roles:
   normalization:
   revision:
   integration_reviewer:
+
+settings:
+  live_testing: false

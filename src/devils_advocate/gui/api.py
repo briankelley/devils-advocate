@@ -1239,6 +1239,163 @@ async def save_env_vars(request: Request):
     })
 
 
+# ── Key Validation ───────────────────────────────────────────────────────
+
+
+def _build_api_domain_allowlist(config) -> frozenset[str]:
+    """Build SSRF allowlist dynamically from configured model api_base URLs."""
+    from urllib.parse import urlparse
+    domains = set()
+    all_models = config.get("all_models", config.get("models", {}))
+    for m in all_models.values():
+        api_base = getattr(m, "api_base", "") or ""
+        if api_base:
+            host = urlparse(api_base).hostname
+            if host:
+                domains.add(host.lower())
+    # Anthropic uses hardcoded URL, no api_base in config
+    domains.add("api.anthropic.com")
+    return frozenset(domains)
+
+
+async def _validate_single_key(
+    env_name: str, key_value: str, provider: str, api_base: str,
+    allowed_domains: frozenset[str],
+) -> dict:
+    """Validate a single API key against its provider. Returns status dict."""
+    import httpx
+
+    if not key_value or not key_value.strip():
+        return {"status": "error", "message": "No key configured"}
+
+    # Anthropic uses a hardcoded URL -- no api_base needed
+    if provider != "anthropic":
+        if not api_base:
+            return {"status": "error", "message": "No api_base configured"}
+        from urllib.parse import urlparse
+        host = (urlparse(api_base).hostname or "").lower()
+        if host not in allowed_domains:
+            return {"status": "error", "message": f"Unknown API domain: {api_base}"}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if provider == "anthropic":
+                resp = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": key_value,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": "claude-haiku-4-5-20251001",
+                        "max_tokens": 1,
+                        "messages": [{"role": "user", "content": "hi"}],
+                    },
+                )
+                if resp.status_code == 401:
+                    return {"status": "invalid", "message": "Authentication failed"}
+                return {"status": "valid", "message": "Key is valid"}
+            else:
+                # OpenAI-compatible: try /models first, fall back to minimal chat completion
+                url = f"{api_base.rstrip('/')}/v1/models"
+                if "v1/models" in api_base or api_base.endswith("/v1"):
+                    url = f"{api_base.rstrip('/')}/models"
+                headers = {"Authorization": f"Bearer {key_value}"}
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 401:
+                    return {"status": "invalid", "message": "Authentication failed"}
+                if resp.status_code == 200:
+                    return {"status": "valid", "message": "Key is valid"}
+
+                # /models not available -- try minimal chat completion
+                chat_url = f"{api_base.rstrip('/')}/v1/chat/completions"
+                if api_base.rstrip("/").endswith("/v1"):
+                    chat_url = f"{api_base.rstrip('/')}/chat/completions"
+                resp = await client.post(
+                    chat_url,
+                    headers={**headers, "content-type": "application/json"},
+                    json={
+                        "model": "no-op",
+                        "max_tokens": 1,
+                        "messages": [{"role": "user", "content": "hi"}],
+                    },
+                )
+                if resp.status_code == 401:
+                    return {"status": "invalid", "message": "Authentication failed"}
+                if resp.status_code in (200, 400, 404, 422):
+                    return {"status": "valid", "message": "Key is valid"}
+                return {"status": "error", "message": f"Unexpected status: {resp.status_code}"}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
+@router.post("/config/validate-keys")
+async def validate_keys(request: Request):
+    """Validate API keys against their provider endpoints."""
+    _check_csrf(request)
+
+    config = await _load_app_config(request)
+    all_models = config.get("all_models", config.get("models", {}))
+    allowed_domains = _build_api_domain_allowlist(config)
+
+    # Build unique env_name -> (provider, api_base) mapping
+    env_info: dict[str, tuple[str, str]] = {}
+    for m in all_models.values():
+        env_name = getattr(m, "api_key_env", "") or ""
+        if env_name and env_name not in env_info:
+            provider = getattr(m, "provider", "openai")
+            api_base = getattr(m, "api_base", "") or ""
+            env_info[env_name] = (provider, api_base)
+
+    # Validate each key in parallel
+    tasks = []
+    env_names = []
+    for env_name, (provider, api_base) in env_info.items():
+        key_value = os.environ.get(env_name, "")
+        env_names.append(env_name)
+        tasks.append(_validate_single_key(env_name, key_value, provider, api_base, allowed_domains))
+
+    results_list = await asyncio.gather(*tasks)
+    results = dict(zip(env_names, results_list))
+
+    return JSONResponse({"results": results})
+
+
+@router.post("/config/env/clear-all")
+async def clear_all_keys(request: Request):
+    """Clear all API keys from .env and os.environ."""
+    _check_csrf(request)
+
+    if request.headers.get("X-Confirm-Destructive") != "true":
+        raise HTTPException(
+            status_code=400,
+            detail="Destructive operation requires X-Confirm-Destructive header",
+        )
+
+    config = await _load_app_config(request)
+    allowed_env_names = _get_allowed_env_names(config)
+
+    env_file_path = _get_env_file_path(request)
+    existing_lines, file_kv = _read_env_file(env_file_path)
+
+    keys_to_remove = {k for k in allowed_env_names if k in file_kv}
+
+    if not keys_to_remove:
+        return JSONResponse({"status": "ok", "cleared": 0})
+
+    # Backup .env before irreversible deletion
+    if env_file_path.is_file():
+        backup = env_file_path.with_suffix(".bak")
+        shutil.copy2(str(env_file_path), str(backup))
+
+    _write_env_file(env_file_path, existing_lines, remove_keys=keys_to_remove)
+    for key in keys_to_remove:
+        os.environ.pop(key, None)
+
+    return JSONResponse({"status": "ok", "cleared": len(keys_to_remove)})
+
+
 # ── Filesystem Browser ───────────────────────────────────────────────────
 
 

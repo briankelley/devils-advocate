@@ -17,10 +17,10 @@ SUGGESTIONS: SUGGESTION 1, SUGGESTION 3, ...
 Rules:
 - Two suggestions address the same idea if they describe the same feature or
   enhancement, even if worded differently or approaching from different angles
-- Do NOT merge suggestions just because they share a theme — they must describe
+- Do NOT merge suggestions just because they share a theme - they must describe
   the same specific idea
-- Preserve ALL suggestions — every input suggestion must appear in exactly one group
-- Single-source suggestions are fine — they just get CONSENSUS: 1 of M
+- Preserve ALL suggestions - every input suggestion must appear in exactly one group
+- Single-source suggestions are fine - they just get CONSENSUS: 1 of M
 - Reference suggestions by their SUGGESTION number (e.g. SUGGESTION 1, SUGGESTION 5)
 
 === SUGGESTIONS ===

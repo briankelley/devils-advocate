@@ -21,6 +21,8 @@ MAX_OUTPUT_TOKENS = 16384
 AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS = 32000
 REVISION_MAX_OUTPUT_TOKENS = 64000
 DEFAULT_MAX_RETRIES = 3
+_529_MAX_RETRIES = 3
+_529_BUDGET_SECONDS = 30.0
 
 # Mode-dependent thinking budgets for Anthropic extended thinking
 _ANTHROPIC_THINKING_BUDGETS = {
@@ -48,10 +50,11 @@ async def call_anthropic(
 ) -> tuple:
     """Call the Anthropic Messages API. Returns (response_text, usage_dict)."""
     headers = {
-        "x-api-key": model.api_key,
         "anthropic-version": ANTHROPIC_VERSION,
         "content-type": "application/json",
     }
+    if model.api_key:
+        headers["x-api-key"] = model.api_key
     body = {
         "model": model.model_id,
         "max_tokens": max_tokens,
@@ -103,10 +106,9 @@ async def call_openai_compatible(
 ) -> tuple:
     """Call an OpenAI-compatible chat completions API. Returns (response_text, usage_dict)."""
     url = f"{model.api_base.rstrip('/')}/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {model.api_key}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
+    if model.api_key:
+        headers["Authorization"] = f"Bearer {model.api_key}"
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -280,6 +282,8 @@ async def call_model(
         return await call_anthropic(client, model, system_prompt, user_prompt, max_tokens, mode)
     elif model.provider == "minimax":
         return await call_minimax(client, model, system_prompt, user_prompt, max_tokens, mode)
+    elif model.provider == "local":
+        return await call_openai_compatible(client, model, system_prompt, user_prompt, max_tokens, mode)
     elif model.use_responses_api:
         return await call_openai_responses(client, model, system_prompt, user_prompt, max_tokens, mode)
     else:
@@ -300,7 +304,11 @@ async def call_with_retry(
     mode: str = "",
 ) -> tuple:
     """Wrap call_model with exponential backoff + jitter, respects Retry-After."""
+    import time as _time
+
     last_exc = None
+    elapsed_529 = 0.0
+    attempts_529 = 0
     for attempt in range(max_retries + 1):
         try:
             return await call_model(client, model, system_prompt, user_prompt, max_tokens, mode)
@@ -308,10 +316,24 @@ async def call_with_retry(
             last_exc = e
             status = e.response.status_code
             if status == 529:
-                raise APIError(
-                    f"{model.name}: API overloaded (529). "
-                    f"All models must be available for a valid review run. Aborting."
-                ) from e
+                attempts_529 += 1
+                retry_after = float(e.response.headers.get("retry-after", 0))
+                wait = max(retry_after, (4 ** (attempt + 1) / 4) + random.random())
+                remaining = _529_BUDGET_SECONDS - elapsed_529
+                if wait > remaining or attempts_529 > _529_MAX_RETRIES:
+                    raise APIError(
+                        f"{model.name}: API overloaded (529) - exhausted "
+                        f"{elapsed_529:.0f}s retry budget after {attempts_529} attempt(s)"
+                    ) from e
+                if log_fn:
+                    log_fn(
+                        f"  {model.name}: API overloaded (529) - waiting "
+                        f"{wait:.1f}s ({remaining - wait:.0f}s budget remaining)"
+                    )
+                t0 = _time.monotonic()
+                await asyncio.sleep(wait)
+                elapsed_529 += _time.monotonic() - t0
+                continue
             elif status == 429:
                 retry_after = float(e.response.headers.get("retry-after", 0))
                 wait = max(retry_after, (2 ** attempt) + random.random())
@@ -319,7 +341,7 @@ async def call_with_retry(
                 wait = (2 ** attempt) + random.random()
             else:
                 raise APIError(
-                    f"{model.name}: HTTP {status} — {e.response.text[:200]}"
+                    f"{model.name}: HTTP {status} - {e.response.text[:200]}"
                 ) from e
             if log_fn:
                 log_fn(

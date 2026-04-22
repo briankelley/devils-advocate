@@ -151,6 +151,17 @@ class TestValidateConfigStructure:
         errors = [msg for level, msg in issues if level == "error"]
         assert errors == []
 
+    def test_empty_api_key_env_passes_validation(self):
+        """A model with api_key_env='' should not trigger a missing-key error."""
+        from devils_advocate.config import validate_config_structure
+        m = make_model_config(name="local-model", api_key_env="")
+        m.roles = {"author"}
+        cfg = _config_with_models({"local-model": m})
+        issues = validate_config_structure(cfg)
+        errors = [msg for level, msg in issues if level == "error"]
+        # Should not complain about missing key for a model with no api_key_env
+        assert not any("empty or unset" in msg for msg in errors)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 2. validate_review_readiness

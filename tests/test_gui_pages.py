@@ -265,3 +265,69 @@ class TestConfigPage:
         resp = client.get("/config")
         assert resp.status_code == 200
         assert "Configuration" in resp.text or "config" in resp.text.lower()
+
+
+class TestCostTierComputation:
+    """Tests for _compute_cost_tiers()."""
+
+    def test_quintile_normal(self):
+        from devils_advocate.gui.pages import _compute_cost_tiers
+        from helpers import make_model_config
+
+        models = {}
+        for i, price in enumerate([0.001, 0.002, 0.005, 0.010, 0.025]):
+            m = make_model_config(name=f"m{i}", cost_per_1k_input=price, cost_per_1k_output=price)
+            models[f"m{i}"] = m
+
+        tiers = _compute_cost_tiers(models)
+        assert len(tiers) == 5
+        # Cheapest should be tier 1, most expensive tier 5
+        assert tiers["m0"] <= tiers["m4"]
+        assert all(1 <= t <= 5 for t in tiers.values())
+
+    def test_all_same_price(self):
+        from devils_advocate.gui.pages import _compute_cost_tiers
+        from helpers import make_model_config
+
+        models = {}
+        for i in range(5):
+            m = make_model_config(name=f"m{i}", cost_per_1k_input=0.005, cost_per_1k_output=0.005)
+            models[f"m{i}"] = m
+
+        tiers = _compute_cost_tiers(models)
+        # All non-zero, so all get tiers 1-5 (index-based quintile bucketing)
+        assert all(1 <= t <= 5 for t in tiers.values())
+        assert 0 not in tiers.values()
+
+    def test_zero_cost_model(self):
+        from devils_advocate.gui.pages import _compute_cost_tiers
+        from helpers import make_model_config
+
+        m_free = make_model_config(name="free", cost_per_1k_input=0, cost_per_1k_output=0)
+        m_paid = make_model_config(name="paid", cost_per_1k_input=0.005, cost_per_1k_output=0.025)
+        models = {"free": m_free, "paid": m_paid}
+
+        tiers = _compute_cost_tiers(models)
+        assert tiers["free"] == 0  # FREE tier
+        assert tiers["paid"] >= 1
+
+
+class TestVendorInferenceNew:
+    """Tests for Z.ai and Local vendor inference."""
+
+    def test_zai_vendor(self):
+        from devils_advocate.gui.pages import _infer_vendor
+        from helpers import make_model_config
+
+        m = make_model_config(name="glm-5.1")
+        m.api_base = "https://api.z.ai/api/paas/v4"
+        m.provider = "openai"
+        assert _infer_vendor(m) == "Z.ai"
+
+    def test_local_vendor(self):
+        from devils_advocate.gui.pages import _infer_vendor
+        from helpers import make_model_config
+
+        m = make_model_config(name="gemma-4-local")
+        m.provider = "local"
+        assert _infer_vendor(m) == "Local"

@@ -5,7 +5,7 @@ You have been given:
 2. A set of grouped suggestions from multiple domain experts
 
 Your task: produce a structured, themed suggestion document that the spec author
-can use to enhance their specification. This is NOT a revised spec — it is a
+can use to enhance their specification. This is NOT a revised spec - it is a
 companion document of ideas.
 
 Format the output as follows:

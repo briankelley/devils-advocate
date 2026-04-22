@@ -217,3 +217,27 @@ class TestCostEventClassification:
         ev = classify_log_message("§cost role=author model=claude-sonnet cost=0.010 total=0.010")
         assert ev.message == ""
         assert ev.event_type == "cost"
+
+
+class TestProviderRetryPatterns:
+    """Tests for provider retry log line classification."""
+
+    def test_529_overloaded_pattern(self):
+        ev = classify_log_message("  claude-opus-4-6: API overloaded (529) - waiting 4.2s (25.8s budget remaining)")
+        assert ev.phase == "provider_retry"
+        assert ev.event_type == "phase"
+
+    def test_http_retry_pattern(self):
+        ev = classify_log_message("  kimi-k2-thinking: HTTP 429, retry 1/3 in 1.4s")
+        assert ev.phase == "provider_retry"
+        assert ev.event_type == "phase"
+
+    def test_timeout_connect_error_pattern(self):
+        ev = classify_log_message("  deepseek-chat: TimeoutException, retry 2/3 in 4.3s")
+        assert ev.phase == "provider_retry"
+        assert ev.event_type == "phase"
+
+    def test_connect_error_pattern(self):
+        ev = classify_log_message("  gemma-4-local: ConnectError, retry 1/3 in 1.0s")
+        assert ev.phase == "provider_retry"
+        assert ev.event_type == "phase"

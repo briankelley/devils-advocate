@@ -3,7 +3,7 @@ Review the following {mode_label} thoroughly. For each issue you identify, use t
 REVIEW POINT N:
 SEVERITY: critical|high|medium|low|info
 CATEGORY: architecture|security|performance|correctness|maintainability|error_handling|testing|documentation|other
-DESCRIPTION: Clear description of the issue
+DESCRIPTION: Self-contained description of the issue. Do not reference other points by number.
 RECOMMENDATION: Specific, actionable recommendation to address it
 LOCATION: Section, file path, function name, or line reference (if applicable)
 

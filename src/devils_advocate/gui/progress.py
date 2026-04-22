@@ -88,6 +88,11 @@ _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
     (r"Revision: extraction failed", "revision_extraction_failed", {}),
     (r"Revision failed \(non-fatal\): (.+)", "revision_failed", {}),
 
+    # Provider retry
+    (r"(.+?): API overloaded \(529\) - waiting (.+)", "provider_retry", {}),
+    (r"(.+?): HTTP (\d+), retry (.+)", "provider_retry", {}),
+    (r"(.+?): (?:TimeoutException|ConnectError), retry (.+)", "provider_retry", {}),
+
     # Start
     (r"Starting (\w+) review for project '(.+)'", "review_start", {}),
 ]

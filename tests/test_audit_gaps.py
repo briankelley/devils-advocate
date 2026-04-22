@@ -692,3 +692,65 @@ class TestCostTrackerLogEvent:
         assert "reviewer" in tracker.role_costs
         assert "author" in tracker.role_costs
         assert tracker.role_costs["reviewer"] > tracker.role_costs["author"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Validate Keys SSRF Allowlist
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestValidateKeysAllowlist:
+    """Tests for the dynamic SSRF allowlist built from config."""
+
+    def test_allowlist_built_from_config(self):
+        from devils_advocate.gui.api import _build_api_domain_allowlist
+        from helpers import make_model_config
+
+        m1 = make_model_config(name="m1")
+        m1.api_base = "https://api.openai.com/v1"
+        m2 = make_model_config(name="m2")
+        m2.api_base = "https://api.custom-llm.example.com/v1"
+        config = {"all_models": {"m1": m1, "m2": m2}}
+
+        allowlist = _build_api_domain_allowlist(config)
+        assert "api.openai.com" in allowlist
+        assert "api.custom-llm.example.com" in allowlist
+        # Anthropic always included even without a model entry
+        assert "api.anthropic.com" in allowlist
+
+    def test_unlisted_domain_not_in_allowlist(self):
+        from devils_advocate.gui.api import _build_api_domain_allowlist
+        from helpers import make_model_config
+
+        m1 = make_model_config(name="m1")
+        m1.api_base = "https://api.openai.com/v1"
+        config = {"all_models": {"m1": m1}}
+
+        allowlist = _build_api_domain_allowlist(config)
+        assert "evil.example.com" not in allowlist
+
+    def test_local_model_base_in_allowlist(self):
+        from devils_advocate.gui.api import _build_api_domain_allowlist
+        from helpers import make_model_config
+
+        m1 = make_model_config(name="local")
+        m1.api_base = "http://192.168.1.100:8080/v1"
+        config = {"all_models": {"local": m1}}
+
+        allowlist = _build_api_domain_allowlist(config)
+        assert "192.168.1.100" in allowlist
+
+
+class TestRoleConflictValidationData:
+    """Test that author==dedup produces a warning in config validation."""
+
+    def test_author_dedup_collision_flagged(self):
+        from devils_advocate.config import validate_config_structure
+        from helpers import make_model_config
+
+        m = make_model_config(name="dual-role", api_key_env="AUTH_KEY")
+        m.roles = {"author"}
+        m.deduplication = True
+        cfg = {"models": {"dual-role": m}, "all_models": {"dual-role": m}}
+        issues = validate_config_structure(cfg)
+        assert any("Deduplication model should NOT" in msg for _, msg in issues)

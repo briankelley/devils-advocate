@@ -27,6 +27,8 @@ const dvad = {
         'DeepSeek': 'compass',
         'Moonshot': 'moon',
         'MiniMax': 'box',
+        'Z.ai': 'database',
+        'Local': 'cpu',
     },
 
     // ── Table row click navigation ───────────────────────────────────
@@ -262,13 +264,18 @@ const dvad = {
             headers: {'X-DVAD-Token': token},
             body: this._formData,
         })
-        .then(r => r.json().then(data => ({ok: r.ok, data})))
-        .then(({ok, data}) => {
+        .then(r => r.json().then(data => ({ok: r.ok, status: r.status, data})))
+        .then(({ok, status, data}) => {
             if (ok && data.review_id) {
                 window.location.href = '/review/' + data.review_id;
             } else {
+                let msg = data.detail || 'Failed to start review';
+                if (status === 503) {
+                    const retry = parseInt(data.detail?.match(/(\d+) seconds/)?.[1] || '30', 10);
+                    msg = 'Server busy - please try again in ' + retry + ' seconds.';
+                }
                 if (errorDiv) {
-                    errorDiv.textContent = data.detail || 'Failed to start review';
+                    errorDiv.textContent = msg;
                     errorDiv.style.display = '';
                 }
                 if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Run Review'; }
@@ -1044,6 +1051,7 @@ const dvad = {
             if (resp.ok) {
                 // Re-render this row as "present"
                 this._refreshEnvKeys();
+                this._flagValidateNeeded();
             } else {
                 const data = await resp.json();
                 alert(data.detail || 'Save failed');
@@ -1074,6 +1082,7 @@ const dvad = {
             });
             if (resp.ok) {
                 this._refreshEnvKeys();
+                this._flagValidateNeeded();
             } else {
                 const data = await resp.json();
                 alert(data.detail || 'Clear failed');
@@ -1568,6 +1577,9 @@ const dvad = {
         const changed = JSON.stringify(this._pendingState) !== JSON.stringify(this._originalState);
         const toast = document.getElementById('save-roles-toast');
         if (toast) toast.classList.toggle('visible', changed);
+
+        // Live role conflict validation
+        this._validateRoles(roles);
     },
 
     saveRoles() {
@@ -1578,6 +1590,138 @@ const dvad = {
             () => this._doSaveRoles(),
             false,
         );
+    },
+
+    // ── Validate Keys ─────────────────────────────────────────────────
+
+    _flagValidateNeeded() {
+        const btn = document.getElementById('validate-keys-btn');
+        if (!btn) return;
+        btn.classList.remove('needs-validation', 'needs-validation-hold');
+        void btn.offsetWidth; // force reflow
+        btn.classList.add('needs-validation');
+        btn.addEventListener('animationend', () => {
+            btn.classList.remove('needs-validation');
+            btn.classList.add('needs-validation-hold');
+        }, { once: true });
+    },
+
+    _clearValidateFlag() {
+        const btn = document.getElementById('validate-keys-btn');
+        if (!btn) return;
+        btn.classList.remove('needs-validation', 'needs-validation-hold');
+    },
+
+    async validateKeys() {
+        const btn = document.getElementById('validate-keys-btn');
+        const status = document.getElementById('validate-keys-status');
+        if (btn) { btn.disabled = true; btn.textContent = 'Validating...'; }
+        if (status) status.textContent = '';
+
+        // Clear previous badges
+        document.querySelectorAll('.key-validation-badge').forEach(el => el.remove());
+
+        try {
+            const resp = await fetch('/api/config/validate-keys', {
+                method: 'POST',
+                headers: { 'X-DVAD-Token': this.getToken() },
+            });
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                if (status) status.textContent = data.detail || 'Validation failed';
+                return;
+            }
+
+            const results = data.results || {};
+            let allValid = true;
+
+            for (const [envName, result] of Object.entries(results)) {
+                const row = document.getElementById(`env-row-${envName}`);
+                if (!row) continue;
+
+                const badge = document.createElement('span');
+                badge.className = 'key-validation-badge';
+
+                if (result.status === 'valid') {
+                    badge.classList.add('badge', 'badge-low');
+                    badge.textContent = 'valid';
+                } else if (result.status === 'invalid') {
+                    badge.classList.add('badge', 'badge-critical');
+                    badge.textContent = 'invalid';
+                    allValid = false;
+                } else {
+                    badge.classList.add('badge', 'badge-warning');
+                    badge.textContent = result.status;
+                    badge.title = result.message || '';
+                    allValid = false;
+                }
+
+                row.appendChild(badge);
+            }
+
+            if (status) {
+                status.textContent = allValid ? 'All keys valid' : 'Some keys need attention';
+                status.className = allValid ? 'dim' : 'dim issue-error';
+            }
+        } catch (err) {
+            if (status) status.textContent = 'Network error: ' + err.message;
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Validate Keys'; }
+            this._clearValidateFlag();
+        }
+    },
+
+    async clearAllKeys() {
+        if (!confirm('Clear all API keys? This removes keys from .env and the current process.')) return;
+        try {
+            const resp = await fetch('/api/config/env/clear-all', {
+                method: 'POST',
+                headers: {
+                    'X-DVAD-Token': this.getToken(),
+                    'X-Confirm-Destructive': 'true',
+                },
+            });
+            if (resp.ok) {
+                window.location.reload();
+            } else {
+                const d = await resp.json();
+                alert(d.detail || 'Clear failed');
+            }
+        } catch (err) {
+            alert('Network error: ' + err.message);
+        }
+    },
+
+    // ── Role Conflict Validation ────────────────────────────────────
+
+    _validateRoles(roles) {
+        const result = document.getElementById('validation-result');
+        if (!result) return;
+
+        const issues = [];
+        const author = roles.author;
+        const dedup = roles.dedup;
+        if (author && dedup && author === dedup) {
+            issues.push(['warn', 'Deduplication model should NOT be the author']);
+        }
+
+        result.querySelectorAll('.issue-role-validation').forEach(el => el.remove());
+
+        issues.forEach(([level, msg]) => {
+            const div = document.createElement('div');
+            div.className = `issue issue-${level} issue-role-validation`;
+            div.textContent = `${level.toUpperCase()}: ${msg}`;
+            result.appendChild(div);
+        });
+
+        if (result.children.length === 0) {
+            result.innerHTML = '<div class="issue issue-ok">Configuration is valid.</div>';
+        }
+        const okEl = result.querySelector('.issue-ok');
+        if (okEl && result.querySelectorAll('.issue-warn, .issue-error').length > 0) {
+            okEl.remove();
+        }
     },
 
     async _doSaveRoles() {

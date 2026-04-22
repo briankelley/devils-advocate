@@ -1,6 +1,6 @@
 Read the following specification and suggest additions, enhancements, or ideas
 that would strengthen it. You are a domain expert, UX thinker, and feature
-brainstormer — contribute ideas the author may not have considered.
+brainstormer - contribute ideas the author may not have considered.
 
 Do NOT critique missing implementation details or question technical feasibility.
 This is an early-stage spec; incompleteness is intentional.
@@ -10,11 +10,11 @@ For each suggestion, use this exact format:
 SUGGESTION N:
 THEME: ux|features|integrations|data_model|monetization|accessibility|performance_ux|content|social|platform|security_privacy|onboarding|other
 TITLE: Short descriptive title (5-10 words)
-DESCRIPTION: Clear description of the suggestion and why it would add value
+DESCRIPTION: Self-contained description. Do not reference other suggestions by number.
 CONTEXT: What part of the spec this relates to, or "general" if it's a new area entirely
 
 Be thorough. Aim for 10-20 substantive suggestions across multiple themes.
-Don't hold back on ambitious ideas — this is ideation, not scoping.
+Don't hold back on ambitious ideas - this is ideation, not scoping.
 
 === SPECIFICATION ===
 {content}

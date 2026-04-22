@@ -247,7 +247,7 @@ def validate_config_structure(config: dict) -> list[tuple[str, str]]:
 
     # Per-model checks
     for name, m in models.items():
-        if not m.api_key:
+        if m.api_key_env and not m.api_key:
             issues.append(("error", f"{name}: env var {m.api_key_env} is empty or unset"))
         if m.context_window is None:
             issues.append(("warn", f"{name}: context_window not set - pre-flight checks skipped"))

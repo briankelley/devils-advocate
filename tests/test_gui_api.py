@@ -811,3 +811,91 @@ class TestRevisedDownloadCompat:
 
             assert resp.status_code == 404
             assert "Revised artifact not found" in resp.json()["detail"]
+
+
+class TestValidateKeys:
+    """Tests for POST /api/config/validate-keys."""
+
+    def test_validate_keys_requires_csrf(self, client):
+        resp = client.post("/api/config/validate-keys")
+        assert resp.status_code == 403
+
+    def test_validate_keys_returns_results(self, client, token):
+        """Validate-keys endpoint returns a results dict keyed by env_name."""
+        # Mock _validate_single_key to avoid real HTTP calls
+        async def mock_validate(*args, **kwargs):
+            return {"status": "valid", "message": "Key is valid"}
+
+        with patch("devils_advocate.gui.api._validate_single_key", side_effect=mock_validate):
+            resp = client.post(
+                "/api/config/validate-keys",
+                headers={"X-DVAD-Token": token},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "results" in data
+
+    def test_validate_keys_invalid_key(self, client, token):
+        """Invalid key returns 'invalid' status."""
+        async def mock_validate(*args, **kwargs):
+            return {"status": "invalid", "message": "Authentication failed"}
+
+        with patch("devils_advocate.gui.api._validate_single_key", side_effect=mock_validate):
+            resp = client.post(
+                "/api/config/validate-keys",
+                headers={"X-DVAD-Token": token},
+            )
+        assert resp.status_code == 200
+        results = resp.json()["results"]
+        for env_name, result in results.items():
+            assert result["status"] == "invalid"
+
+    def test_validate_keys_timeout(self, client, token):
+        """Timeout returns 'error' status."""
+        async def mock_validate(*args, **kwargs):
+            return {"status": "error", "message": "Request timed out"}
+
+        with patch("devils_advocate.gui.api._validate_single_key", side_effect=mock_validate):
+            resp = client.post(
+                "/api/config/validate-keys",
+                headers={"X-DVAD-Token": token},
+            )
+        assert resp.status_code == 200
+        results = resp.json()["results"]
+        for env_name, result in results.items():
+            assert result["status"] == "error"
+
+
+class TestClearAllKeys:
+    """Tests for POST /api/config/env/clear-all."""
+
+    def test_clear_all_requires_csrf(self, client):
+        resp = client.post("/api/config/env/clear-all")
+        assert resp.status_code == 403
+
+    def test_clear_all_requires_destructive_header(self, client, token):
+        resp = client.post(
+            "/api/config/env/clear-all",
+            headers={"X-DVAD-Token": token},
+        )
+        assert resp.status_code == 400
+        assert "X-Confirm-Destructive" in resp.json()["detail"]
+
+    def test_clear_all_succeeds(self, client, token, tmp_path):
+        """Clear all keys removes them from .env and returns count."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("ANTHROPIC_API_KEY=sk-test123\nOPENAI_API_KEY=sk-oai456\n")
+        env_file.chmod(0o600)
+
+        with patch("devils_advocate.gui.api._get_env_file_path", return_value=env_file):
+            resp = client.post(
+                "/api/config/env/clear-all",
+                headers={
+                    "X-DVAD-Token": token,
+                    "X-Confirm-Destructive": "true",
+                },
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["cleared"] >= 0

@@ -17,7 +17,7 @@ Guidelines:
 IMPORTANT:
 - If the author ACCEPTED your finding, verify that the acceptance is based on
   correct understanding. An acceptance based on a wrong premise is worse than
-  a rejection — check the actual API contracts, data types, interfaces, or
+  a rejection - check the actual API contracts, data types, interfaces, or
   whatever the finding was about.
 - If the author REJECTED your finding, evaluate whether the technical
   justification holds up. If the rejection is well-reasoned, CONCUR with it.

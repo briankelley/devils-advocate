@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -1050,19 +1051,21 @@ class TestCallWithRetry:
         assert text == "retry ok"
         assert any("429" in msg for msg in log_messages)
 
-    async def test_529_aborts_immediately_with_api_error(self):
-        """HTTP 529 (overloaded) raises APIError without retrying."""
+    async def test_529_retries_then_raises_api_error(self):
+        """HTTP 529 (overloaded) retries with budget then raises APIError."""
         model = _make_model(provider="anthropic")
         with respx.mock:
             route = respx.post(ANTHROPIC_API_URL).mock(
                 return_value=httpx.Response(529, text="Overloaded")
             )
             async with httpx.AsyncClient() as client:
-                with pytest.raises(APIError, match="overloaded.*529"):
-                    await call_with_retry(client, model, "sys", "usr", max_retries=3)
+                with patch("devils_advocate.providers.asyncio.sleep", new_callable=AsyncMock):
+                    with patch("devils_advocate.providers.random.random", return_value=0.0):
+                        with pytest.raises(APIError, match="529.*exhausted.*retry budget"):
+                            await call_with_retry(client, model, "sys", "usr", max_retries=3)
 
-        # Should only be called once (no retries)
-        assert route.call_count == 1
+        # Should retry (initial + up to _529_MAX_RETRIES)
+        assert route.call_count >= 2
 
     async def test_529_chains_original_exception(self):
         """The APIError from 529 has the original HTTPStatusError as __cause__."""
@@ -1072,8 +1075,10 @@ class TestCallWithRetry:
                 return_value=httpx.Response(529, text="Overloaded")
             )
             async with httpx.AsyncClient() as client:
-                with pytest.raises(APIError) as exc_info:
-                    await call_with_retry(client, model, "sys", "usr", max_retries=3)
+                with patch("devils_advocate.providers.asyncio.sleep", new_callable=AsyncMock):
+                    with patch("devils_advocate.providers.random.random", return_value=0.0):
+                        with pytest.raises(APIError) as exc_info:
+                            await call_with_retry(client, model, "sys", "usr", max_retries=3)
 
         assert isinstance(exc_info.value.__cause__, httpx.HTTPStatusError)
 
@@ -1649,3 +1654,94 @@ class TestCallModelResponsesAPI:
                 text, _ = await call_model(client, model, "sys", "usr")
 
         assert text == "from chat completions"
+
+
+class TestNewProviderFeatures:
+    """Tests for 529 retry, empty api_key auth skip, and local provider dispatch."""
+
+    async def test_529_retry_with_retry_after(self):
+        """HTTP 529 with Retry-After header uses the header value as minimum wait."""
+        model = _make_model(provider="anthropic")
+        sleep_mock = AsyncMock()
+        with respx.mock:
+            respx.post(ANTHROPIC_API_URL).mock(
+                side_effect=[
+                    httpx.Response(529, text="Overloaded", headers={"retry-after": "5"}),
+                    httpx.Response(200, json=_anthropic_response("recovered")),
+                ]
+            )
+            async with httpx.AsyncClient() as client:
+                with patch("devils_advocate.providers.asyncio.sleep", sleep_mock):
+                    with patch("devils_advocate.providers.random.random", return_value=0.0):
+                        text, _ = await call_with_retry(client, model, "sys", "usr", max_retries=3)
+
+        assert text == "recovered"
+        # First sleep should be at least the Retry-After value (5s)
+        assert sleep_mock.call_args_list[0][0][0] >= 5.0
+
+    async def test_529_budget_exhaustion_message(self):
+        """Persistent 529s exhaust the budget and report it in the error."""
+        model = _make_model(provider="anthropic")
+        with respx.mock:
+            respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(529, text="Overloaded", headers={"retry-after": "20"})
+            )
+            async with httpx.AsyncClient() as client:
+                with patch("devils_advocate.providers.asyncio.sleep", new_callable=AsyncMock):
+                    with patch("devils_advocate.providers.random.random", return_value=0.0):
+                        with pytest.raises(APIError, match="exhausted.*retry budget"):
+                            await call_with_retry(client, model, "sys", "usr", max_retries=3)
+
+    async def test_empty_api_key_omits_auth_header_openai(self):
+        """When api_key is empty, Authorization header is not sent."""
+        model = _make_model(
+            provider="openai",
+            api_key_env="EMPTY_KEY_TEST",
+            api_base="http://localhost:8080/v1",
+        )
+        with respx.mock:
+            route = respx.post("http://localhost:8080/v1/chat/completions").mock(
+                return_value=httpx.Response(200, json=_openai_response("local model"))
+            )
+            async with httpx.AsyncClient() as client:
+                with patch.dict(os.environ, {"EMPTY_KEY_TEST": ""}, clear=False):
+                    text, _ = await call_openai_compatible(client, model, "sys", "usr")
+
+        assert text == "local model"
+        req_headers = dict(route.calls.last.request.headers)
+        assert "authorization" not in req_headers
+
+    async def test_empty_api_key_omits_auth_header_anthropic(self):
+        """When api_key is empty, x-api-key header is not sent for Anthropic."""
+        model = _make_model(
+            provider="anthropic",
+            api_key_env="EMPTY_KEY_TEST_ANTH",
+        )
+        with respx.mock:
+            route = respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response("ok"))
+            )
+            async with httpx.AsyncClient() as client:
+                with patch.dict(os.environ, {"EMPTY_KEY_TEST_ANTH": ""}, clear=False):
+                    text, _ = await call_anthropic(client, model, "sys", "usr")
+
+        assert text == "ok"
+        req_headers = dict(route.calls.last.request.headers)
+        assert "x-api-key" not in req_headers
+
+    async def test_local_provider_routes_to_openai_compatible(self):
+        """provider='local' dispatches to call_openai_compatible."""
+        model = _make_model(
+            provider="local",
+            api_key_env="",
+            api_base="http://localhost:8080/v1",
+        )
+        with respx.mock:
+            route = respx.post("http://localhost:8080/v1/chat/completions").mock(
+                return_value=httpx.Response(200, json=_openai_response("local response"))
+            )
+            async with httpx.AsyncClient() as client:
+                text, _ = await call_model(client, model, "sys", "usr")
+
+        assert text == "local response"
+        assert route.call_count == 1

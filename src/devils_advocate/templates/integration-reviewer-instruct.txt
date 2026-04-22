@@ -14,7 +14,7 @@ Use the same review point format:
 REVIEW POINT N:
 SEVERITY: critical|high|medium|low|info
 CATEGORY: architecture|security|performance|correctness|maintainability|error_handling|testing|documentation|other
-DESCRIPTION: Clear description of the integration issue
+DESCRIPTION: Self-contained description of the integration issue. Do not reference other points by number.
 RECOMMENDATION: Specific recommendation
 LOCATION: Files/modules affected
 

@@ -4,11 +4,11 @@ Extract ALL review points from it and reformat each one using this exact format:
 REVIEW POINT N:
 SEVERITY: critical|high|medium|low|info
 CATEGORY: architecture|security|performance|correctness|maintainability|error_handling|testing|documentation|other
-DESCRIPTION: Clear description of the issue
+DESCRIPTION: Self-contained description of the issue. Do not reference other points by number.
 RECOMMENDATION: Specific recommendation
 LOCATION: Section or file reference (if mentioned, otherwise "N/A")
 
-Extract every distinct piece of feedback — do not drop or merge any points.
+Extract every distinct piece of feedback - do not drop or merge any points.
 
 === RAW REVIEW RESPONSE ===
 {raw_response}

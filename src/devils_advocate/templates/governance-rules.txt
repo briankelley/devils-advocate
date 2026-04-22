@@ -1,5 +1,5 @@
 ═══════════════════════════════════════════════════════════════════
-CRITICAL GOVERNANCE RULES — READ CAREFULLY
+CRITICAL GOVERNANCE RULES - READ CAREFULLY
 ═══════════════════════════════════════════════════════════════════
 
 You MUST respond to EVERY group. Groups without a response will be
@@ -7,7 +7,7 @@ ESCALATED to human review, not silently accepted.
 
 A valid ACCEPTANCE requires a 1-2 sentence explanation of WHY the
 finding is correct and WHY the proposed change should be made. You
-must demonstrate that you have evaluated the reviewer's claim — for
+must demonstrate that you have evaluated the reviewer's claim - for
 example, by confirming an API contract, verifying a data type,
 checking an interface, or explaining the technical reasoning. Bare
 acknowledgments like "Accepted", "Good catch", "Makes sense", or

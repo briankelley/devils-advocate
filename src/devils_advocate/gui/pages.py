@@ -427,6 +427,7 @@ _VENDOR_PATTERNS: list[tuple[str, str]] = [
     ("api.deepseek.com", "DeepSeek"),
     ("api.moonshot.ai", "Moonshot"),
     ("api.minimax.io", "MiniMax"),
+    ("api.z.ai", "Z.ai"),
 ]
 
 
@@ -438,6 +439,8 @@ def _infer_vendor(model) -> str:
         return "Anthropic"
     if provider == "minimax":
         return "MiniMax"
+    if provider == "local":
+        return "Local"
 
     api_base = (getattr(model, "api_base", "") or "").lower()
     for pattern, vendor in _VENDOR_PATTERNS:
@@ -445,6 +448,36 @@ def _infer_vendor(model) -> str:
             return vendor
 
     return provider.title()
+
+
+def _compute_cost_tiers(all_models) -> dict[str, int]:
+    """Assign cost tier 0-5 to each model via quintile bucketing on blended cost.
+
+    Tier 0 = FREE (zero cost), tiers 1-5 = quintile buckets of non-zero costs.
+    """
+    costs: list[tuple[str, float]] = []
+    for name, m in all_models.items():
+        inp = getattr(m, "cost_per_1k_input", 0) or 0
+        out = getattr(m, "cost_per_1k_output", 0) or 0
+        blended = (inp + out) / 2
+        costs.append((name, blended))
+
+    tiers: dict[str, int] = {}
+    non_zero = sorted([(n, c) for n, c in costs if c > 0], key=lambda x: x[1])
+
+    for name, c in costs:
+        if c <= 0:
+            tiers[name] = 0
+
+    if not non_zero:
+        return tiers
+
+    bucket_size = max(1, len(non_zero) // 5)
+    for i, (name, _) in enumerate(non_zero):
+        tier = min(i // bucket_size + 1, 5)
+        tiers[name] = tier
+
+    return tiers
 
 
 @router.get("/config", response_class=HTMLResponse)
@@ -523,6 +556,9 @@ async def config_page(request: Request):
         for name, m in all_models.items():
             model_vendors[name] = _infer_vendor(m)
 
+        # Cost tier badges
+        model_cost_tiers = _compute_cost_tiers(all_models)
+
     except Exception as exc:
         import logging
         logging.getLogger("devils_advocate.gui").exception("Config page failed to load")
@@ -544,6 +580,7 @@ async def config_page(request: Request):
         templates_dir = ""
         model_vendors = {}
         model_thinking = {}
+        model_cost_tiers = {}
         role_assignments = []
         initial_role_state = {"roles": {}, "thinking": {}}
 
@@ -569,6 +606,7 @@ async def config_page(request: Request):
         "model_thinking": model_thinking,
         "role_assignments": role_assignments,
         "initial_role_state": initial_role_state,
+        "model_cost_tiers": model_cost_tiers,
         "settings": settings_block,
         "csrf_token": request.app.state.csrf_token,
     })

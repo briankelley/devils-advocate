@@ -296,10 +296,11 @@ class TestClassifyUnclassified:
         assert ev.phase == "unknown"
         assert ev.message == "Some random unrecognized message"
 
-    def test_http_retry_not_classified(self):
+    def test_http_retry_classified_as_provider_retry(self):
         from devils_advocate.gui.progress import classify_log_message
         ev = classify_log_message("  kimi-k2-thinking: HTTP 429, retry 1/3 in 1.4s")
-        assert ev.event_type == "log"  # Not a known phase
+        assert ev.event_type == "phase"
+        assert ev.phase == "provider_retry"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -784,6 +785,7 @@ class TestRealLogSequence:
             "review_start",
             "round1_calling",
             "round1_calling",
+            "provider_retry",
             "cost_update",
             "round1_responded",
             "cost_update",

@@ -217,7 +217,7 @@ def parse_review_response(
     raw = re.sub(r'\*\*Thinking:\*\*.*?(?=REVIEW\s+POINT|\Z)', '', raw, flags=re.DOTALL)
 
     # Split into blocks by REVIEW POINT headers
-    blocks = re.split(r'(?=(?:REVIEW\s+POINT|POINT|ISSUE)\s*#?\d+\s*:?)', raw, flags=re.IGNORECASE)
+    blocks = re.split(r'(?=^(?:REVIEW\s+POINT|POINT|ISSUE)\s*#?\d+\s*:?)', raw, flags=re.IGNORECASE | re.MULTILINE)
 
     idx = start_index
     for block in blocks:
@@ -280,7 +280,7 @@ def parse_spec_response(
     raw = _strip_reasoning_delimiters(raw)
 
     # Split into blocks by SUGGESTION headers
-    blocks = re.split(r'(?=SUGGESTION\s+#?\d+\s*:?)', raw, flags=re.IGNORECASE)
+    blocks = re.split(r'(?=^SUGGESTION\s+#?\d+\s*:)', raw, flags=re.IGNORECASE | re.MULTILINE)
 
     idx = start_index
     for block in blocks:

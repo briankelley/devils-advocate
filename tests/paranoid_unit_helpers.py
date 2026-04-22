@@ -143,6 +143,24 @@ WRITE_ENDPOINTS: dict[str, dict[str, Any]] = {
         "empty_payload": {"env_vars": {}},
         "valid_payload": {"env_vars": {"TEST_KEY": "sk-abc123"}},
     },
+    "POST /api/config/validate-keys": {
+        "method": "POST",
+        "path": "/api/config/validate-keys",
+        "writes_to": "nothing (read-only validation probes)",
+        "destroys": "nothing",
+        "requires_csrf": True,
+        "empty_payload": {},
+        "valid_payload": {},
+    },
+    "POST /api/config/env/clear-all": {
+        "method": "POST",
+        "path": "/api/config/env/clear-all",
+        "writes_to": ".env file + os.environ (removes all keys)",
+        "destroys": "all API keys in .env",
+        "requires_csrf": True,
+        "empty_payload": {},
+        "valid_payload": {},
+    },
     # ── Review mutations ──────────────────────────────────────────────
     "POST /api/review/start": {
         "method": "POST",
@@ -269,6 +287,22 @@ LOSS_ANNOTATIONS: dict[str, dict[str, Any]] = {
         "backup_exists": True,  # .bak now always created before write
         "confirmation_required": True,  # X-Confirm-Destructive for empty values
         "precondition": "All keys must be in allowed set",
+    },
+    "POST /api/config/validate-keys": {
+        "on_empty_input": "Returns results dict (no keys to validate)",
+        "on_all_empty": "Returns empty results",
+        "reversible": True,  # read-only, no state change
+        "backup_exists": False,
+        "confirmation_required": False,
+        "precondition": "None",
+    },
+    "POST /api/config/env/clear-all": {
+        "on_empty_input": "Returns cleared: 0 (no keys found)",
+        "on_all_empty": "Returns cleared: 0",
+        "reversible": True,  # .bak provides recovery
+        "backup_exists": True,
+        "confirmation_required": True,  # X-Confirm-Destructive required
+        "precondition": "None",
     },
     "POST /api/review/start": {
         "on_empty_input": "HTTPException 400 (project required, mode validation)",
@@ -557,6 +591,8 @@ MUTATING_ROUTE_PATTERNS: list[tuple[str, str]] = [
     ("PUT", "/api/config/env/{env_name}"),
     ("DELETE", "/api/config/env/{env_name}"),
     ("POST", "/api/config/env"),
+    ("POST", "/api/config/validate-keys"),
+    ("POST", "/api/config/env/clear-all"),
     ("POST", "/api/review/start"),
     ("POST", "/api/review/{review_id}/cancel"),
     ("POST", "/api/review/{review_id}/override"),
