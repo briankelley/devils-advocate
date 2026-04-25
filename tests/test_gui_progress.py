@@ -233,7 +233,7 @@ class TestProviderRetryPatterns:
         assert ev.event_type == "phase"
 
     def test_timeout_connect_error_pattern(self):
-        ev = classify_log_message("  deepseek-chat: TimeoutException, retry 2/3 in 4.3s")
+        ev = classify_log_message("  deepseek-v4-flash: TimeoutException, retry 2/3 in 4.3s")
         assert ev.phase == "provider_retry"
         assert ev.event_type == "phase"
 
