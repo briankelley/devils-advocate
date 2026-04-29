@@ -290,8 +290,7 @@ async def review_detail(request: Request, review_id: str):
 
     if status == "running":
         templates = request.app.state.templates
-        return templates.TemplateResponse("review_detail.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "review_detail.html", {
             "review_id": review_id,
             "status": "running",
             "ledger": None,
