@@ -862,6 +862,27 @@ class TestCallMinimax:
 
         assert text == ""
 
+    async def test_null_usage_returns_zero_token_usage(self):
+        """MiniMax may return usage=null; token accounting should not crash."""
+        model = _make_model(
+            provider="minimax",
+            model_id="MiniMax-M1",
+            api_base="https://api.minimaxi.chat",
+        )
+        response_body = {
+            "choices": [{"message": {"content": "MiniMax output"}}],
+            "usage": None,
+        }
+        with respx.mock:
+            respx.post("https://api.minimaxi.chat/v1/text/chatcompletion_v2").mock(
+                return_value=httpx.Response(200, json=response_body)
+            )
+            async with httpx.AsyncClient() as client:
+                text, usage = await call_minimax(client, model, "", "usr")
+
+        assert text == "MiniMax output"
+        assert usage == {"input_tokens": 0, "output_tokens": 0}
+
 
 # ===========================================================================
 # call_model (dispatcher)
@@ -1745,3 +1766,193 @@ class TestNewProviderFeatures:
 
         assert text == "local response"
         assert route.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Thinking flag × role / mode coverage
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestThinkingDisabledAcrossRoles:
+    """Verify thinking=False produces no thinking params regardless of mode."""
+
+    @pytest.mark.parametrize("mode", [
+        "plan", "code", "spec", "integration", "dedup", "normalization",
+    ])
+    async def test_anthropic_no_thinking_any_mode(self, mode):
+        model = _make_model(provider="anthropic", thinking=False)
+        with respx.mock:
+            route = respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_model(client, model, "sys", "usr", mode=mode)
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert "thinking" not in parsed
+
+    @pytest.mark.parametrize("mode", [
+        "plan", "code", "spec", "integration", "dedup", "normalization",
+    ])
+    async def test_openai_no_thinking_any_mode(self, mode):
+        model = _make_model(
+            provider="openai", model_id="gpt-5.4",
+            api_base="https://api.openai.com/v1", thinking=False,
+        )
+        with respx.mock:
+            route = respx.post("https://api.openai.com/v1/chat/completions").mock(
+                return_value=httpx.Response(200, json=_openai_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_model(client, model, "sys", "usr", mode=mode)
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert "reasoning_effort" not in parsed
+        assert "thinking" not in parsed
+
+    @pytest.mark.parametrize("mode", [
+        "plan", "code", "spec", "integration", "dedup", "normalization",
+    ])
+    async def test_minimax_no_thinking_any_mode(self, mode):
+        model = _make_model(
+            provider="minimax", model_id="MiniMax-M2.7",
+            api_base="https://api.minimaxi.chat", thinking=False,
+        )
+        with respx.mock:
+            route = respx.post("https://api.minimaxi.chat/v1/text/chatcompletion_v2").mock(
+                return_value=httpx.Response(200, json=_minimax_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_model(client, model, "sys", "usr", mode=mode)
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert "reasoning_split" not in parsed
+
+
+@pytest.mark.asyncio
+class TestMixedThinkingConfig:
+    """Models in the same review session with different thinking flags."""
+
+    async def test_reviewer_thinking_on_dedup_thinking_off(self):
+        """Reviewer sends thinking params, dedup in same session does not."""
+        reviewer = _make_model(
+            name="thinker", provider="openai", model_id="gpt-5.4",
+            api_base="https://api.openai.com/v1", thinking=True,
+        )
+        dedup = _make_model(
+            name="cheapo", provider="openai", model_id="glm-4.7-flashx",
+            api_base="https://api.z.ai/api/paas/v4", thinking=False,
+        )
+
+        with respx.mock:
+            rev_route = respx.post("https://api.openai.com/v1/chat/completions").mock(
+                return_value=httpx.Response(200, json=_openai_response("review output"))
+            )
+            ded_route = respx.post("https://api.z.ai/api/paas/v4/chat/completions").mock(
+                return_value=httpx.Response(200, json=_openai_response("dedup output"))
+            )
+
+            async with httpx.AsyncClient() as client:
+                await call_model(client, reviewer, "sys", "usr", mode="plan")
+                await call_model(client, dedup, "", "dedup prompt", mode="dedup")
+
+        import json
+        rev_body = json.loads(rev_route.calls.last.request.content)
+        assert "reasoning_effort" in rev_body or "thinking" in rev_body
+
+        ded_body = json.loads(ded_route.calls.last.request.content)
+        assert "reasoning_effort" not in ded_body
+        assert "thinking" not in ded_body
+
+    async def test_anthropic_thinking_on_openai_thinking_off(self):
+        """Cross-provider: Anthropic with thinking, OpenAI without."""
+        anthropic_model = _make_model(
+            name="claude", provider="anthropic",
+            model_id="claude-sonnet-4-20250514", thinking=True,
+        )
+        openai_model = _make_model(
+            name="gpt", provider="openai", model_id="gpt-5.4",
+            api_base="https://api.openai.com/v1", thinking=False,
+        )
+
+        with respx.mock:
+            anth_route = respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response())
+            )
+            oai_route = respx.post("https://api.openai.com/v1/chat/completions").mock(
+                return_value=httpx.Response(200, json=_openai_response())
+            )
+
+            async with httpx.AsyncClient() as client:
+                await call_model(client, anthropic_model, "sys", "usr", mode="plan")
+                await call_model(client, openai_model, "sys", "usr", mode="dedup")
+
+        import json
+        anth_body = json.loads(anth_route.calls.last.request.content)
+        assert "thinking" in anth_body
+
+        oai_body = json.loads(oai_route.calls.last.request.content)
+        assert "reasoning_effort" not in oai_body
+        assert "thinking" not in oai_body
+
+
+@pytest.mark.asyncio
+class TestNormalizationFallbackThinking:
+    """Normalization uses its own model's thinking flag, not the reviewer's."""
+
+    async def test_norm_fallback_respects_model_thinking_off(self):
+        """When norm model has thinking=False, no thinking params are sent."""
+        from devils_advocate.normalization import normalize_review_response
+
+        norm_model = _make_model(
+            name="dedup-model", provider="openai", model_id="glm-4.7-flashx",
+            api_base="https://api.z.ai/api/paas/v4", thinking=False,
+        )
+
+        with respx.mock:
+            route = respx.post("https://api.z.ai/api/paas/v4/chat/completions").mock(
+                return_value=httpx.Response(200, json=_openai_response(
+                    "## FINDING-1\n**Severity:** high\n**Category:** security\n"
+                    "**Description:** SQL injection\n**Suggestion:** Use parameterized queries\n"
+                ))
+            )
+            async with httpx.AsyncClient() as client:
+                await normalize_review_response(
+                    client, "raw unparseable text", norm_model,
+                    reviewer_name="some-reviewer", mode="normalization",
+                )
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert "reasoning_effort" not in parsed
+        assert "thinking" not in parsed
+
+    async def test_norm_with_thinking_enabled_sends_thinking(self):
+        """When norm model has thinking=True, thinking params are sent."""
+        from devils_advocate.normalization import normalize_review_response
+
+        norm_model = _make_model(
+            name="smart-norm", provider="openai", model_id="gpt-5.4",
+            api_base="https://api.openai.com/v1", thinking=True,
+        )
+
+        with respx.mock:
+            route = respx.post("https://api.openai.com/v1/chat/completions").mock(
+                return_value=httpx.Response(200, json=_openai_response(
+                    "## FINDING-1\n**Severity:** medium\n**Category:** reliability\n"
+                    "**Description:** Race condition\n**Suggestion:** Add lock\n"
+                ))
+            )
+            async with httpx.AsyncClient() as client:
+                await normalize_review_response(
+                    client, "raw unparseable text", norm_model,
+                    reviewer_name="some-reviewer", mode="normalization",
+                )
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert "reasoning_effort" in parsed or "thinking" in parsed

@@ -83,7 +83,7 @@ async def call_anthropic(
     for block in data.get("content", []):
         if block.get("type") == "text":
             text += block.get("text", "")
-    usage = data.get("usage", {})
+    usage = data.get("usage") or {}
     output_tokens = usage.get("output_tokens", 0)
 
     if not text and output_tokens > 0:
@@ -145,7 +145,7 @@ async def call_openai_compatible(
         text = msg.get("content", "") or ""
         # reasoning_content is internal CoT — never use as response text
 
-    usage = data.get("usage", {})
+    usage = data.get("usage") or {}
     output_tokens = usage.get("completion_tokens", 0)
 
     if not text and output_tokens > 0:
@@ -205,7 +205,7 @@ async def call_openai_responses(
             if part.get("type") == "output_text":
                 text += part.get("text", "")
 
-    usage = data.get("usage", {})
+    usage = data.get("usage") or {}
     output_tokens = usage.get("output_tokens", 0)
 
     if not text and output_tokens > 0:
@@ -260,7 +260,7 @@ async def call_minimax(
         msg = choices[0].get("message", {})
         text = msg.get("content", "") or ""
 
-    usage = data.get("usage", {})
+    usage = data.get("usage") or {}
     return text, {
         "input_tokens": usage.get("prompt_tokens", 0),
         "output_tokens": usage.get("completion_tokens", 0),
