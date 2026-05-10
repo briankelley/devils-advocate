@@ -6,7 +6,7 @@
   </a>
 </div>
 
-LIVE DEMO[https://brianckelley.org]
+[LIVE DEMO](https://brianckelley.org)
 
 # Devil's Advocate
 
