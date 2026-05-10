@@ -1,5 +1,5 @@
 <div align="center">
-  <div align="center" style="padding-bottom:20px"><a href="https://brianckelley.org">LIVE DEMO</a></div>
+  <div align="center" style="margin-bottom:20px;padding-bottom:20px"><a href="https://brianckelley.org">LIVE DEMO</a></div>
   <img width="200" alt="dvad-color-white" src="https://github.com/user-attachments/assets/6dd501d8-701c-4fd8-8209-9e72c2f86368" />
   <br/>
   <a href="https://pypi.org/project/devils-advocate/">
