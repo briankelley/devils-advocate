@@ -16,6 +16,7 @@ from devils_advocate.providers import (
     DEFAULT_MAX_RETRIES,
     MAX_OUTPUT_TOKENS,
     _ANTHROPIC_THINKING_BUDGETS,
+    _anthropic_uses_adaptive_thinking,
     call_anthropic,
     call_minimax,
     call_model,
@@ -89,6 +90,48 @@ def _minimax_response(text="Hello", prompt_tokens=100, completion_tokens=50):
 def _set_api_key(monkeypatch):
     """Ensure TEST_API_KEY is available for all tests."""
     monkeypatch.setenv("TEST_API_KEY", "fake-key-for-testing")
+
+
+# ===========================================================================
+# _anthropic_uses_adaptive_thinking
+# ===========================================================================
+
+
+class TestAnthropicUsesAdaptiveThinking:
+    """Version-parsing gate that picks adaptive vs. fixed-budget thinking."""
+
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "claude-opus-4-6-20260101",
+            "claude-sonnet-4-6-20260101",
+            "claude-opus-4-7",
+            "claude-opus-4-8",
+            "claude-sonnet-5",
+            "claude-haiku-5",
+            "claude-opus-5",
+            "claude-fable-5",
+            "claude-mythos-5",
+            "CLAUDE-OPUS-4-8",  # case-insensitive
+        ],
+    )
+    def test_adaptive_models(self, model_id):
+        assert _anthropic_uses_adaptive_thinking(model_id) is True
+
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "claude-opus-4-5-20251101",
+            "claude-sonnet-4-5-20250929",
+            "claude-sonnet-4-20250514",
+            "claude-haiku-4-5-20251001",
+            "claude-3-opus-20240229",
+            "claude-3-5-sonnet-20241022",
+            "some-non-anthropic-model",
+        ],
+    )
+    def test_budget_models(self, model_id):
+        assert _anthropic_uses_adaptive_thinking(model_id) is False
 
 
 # ===========================================================================
@@ -173,9 +216,27 @@ class TestCallAnthropic:
         assert parsed["model"] == "claude-haiku-test"
         assert parsed["max_tokens"] == 8192
 
-    async def test_thinking_explicit_for_opus_4_6(self):
-        """Models containing 'opus-4-6' use explicit thinking with budget."""
-        model = _make_model(model_id="claude-opus-4-6-20260101", thinking=True)
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "claude-opus-4-6-20260101",
+            "claude-sonnet-4-6-20260101",
+            "claude-opus-4-7",
+            "claude-opus-4-8",
+            "claude-sonnet-5",
+            "claude-fable-5",
+            "claude-mythos-5",
+            "claude-opus-5",  # forward-looking: future majors stay on adaptive
+        ],
+    )
+    async def test_thinking_adaptive_for_modern_models(self, model_id):
+        """Opus/Sonnet 4.6+, Sonnet 5, Fable, and Mythos use adaptive thinking.
+
+        The fixed-budget form ({"type": "enabled", "budget_tokens": N}) is
+        rejected with a 400 on Opus 4.7+/Sonnet 5/Fable/Mythos, so these must
+        send {"type": "adaptive"} with no budget_tokens.
+        """
+        model = _make_model(model_id=model_id, thinking=True)
         with respx.mock:
             route = respx.post(ANTHROPIC_API_URL).mock(
                 return_value=httpx.Response(200, json=_anthropic_response())
@@ -185,14 +246,23 @@ class TestCallAnthropic:
 
         import json
         parsed = json.loads(route.calls.last.request.content)
-        assert parsed["thinking"]["type"] == "enabled"
-        assert "budget_tokens" in parsed["thinking"]
-        # max_tokens padded by thinking budget
+        assert parsed["thinking"] == {"type": "adaptive"}
+        assert "budget_tokens" not in parsed["thinking"]
+        # max_tokens still padded to leave headroom for thinking tokens
         assert parsed["max_tokens"] > MAX_OUTPUT_TOKENS
 
-    async def test_thinking_explicit_for_sonnet_4_6(self):
-        """Models containing 'sonnet-4-6' use explicit thinking with budget."""
-        model = _make_model(model_id="claude-sonnet-4-6-20260101", thinking=True)
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "claude-opus-4-5-20251101",
+            "claude-sonnet-4-5-20250929",
+            "claude-haiku-4-5-20251001",  # 4.5 is just below the 4.6 adaptive cutoff
+            "claude-3-opus-20240229",
+        ],
+    )
+    async def test_thinking_budget_for_pre_4_6_models(self, model_id):
+        """Pre-4.6 models still require the fixed-budget thinking form."""
+        model = _make_model(model_id=model_id, thinking=True)
         with respx.mock:
             route = respx.post(ANTHROPIC_API_URL).mock(
                 return_value=httpx.Response(200, json=_anthropic_response())

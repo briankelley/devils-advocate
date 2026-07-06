@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import re
 
 import httpx
 
@@ -40,6 +41,38 @@ _ANTHROPIC_THINKING_BUDGETS = {
 # ─── Provider Implementations ────────────────────────────────────────────────
 
 
+def _anthropic_uses_adaptive_thinking(model_id: str) -> bool:
+    """Whether an Anthropic model takes adaptive thinking vs. a fixed budget.
+
+    Adaptive thinking (``{"type": "adaptive"}``) is the current form for
+    Opus/Sonnet/Haiku 4.6+ and the Fable/Mythos tiers. On Opus 4.7+, Sonnet 5,
+    Fable, and Mythos the older ``{"type": "enabled", "budget_tokens": N}`` form
+    is rejected outright with an HTTP 400; on 4.6 it is merely deprecated. Older
+    models (Opus/Sonnet 4.5-, Haiku 4.5, Claude 3.x) still require the budget
+    form. Parsing the version rather than matching a literal ID keeps this from
+    breaking on every new model launch (e.g. the old ``"-4-7"`` check silently
+    routed opus-4-8 down the rejected path).
+    """
+    mid = model_id.lower()
+    if "fable" in mid or "mythos" in mid:
+        return True
+    # Pre-4.x IDs are version-first with a date suffix (claude-3-5-sonnet-
+    # 20241022); the date must not be mistaken for a version, and none of these
+    # models support adaptive thinking anyway. 4.x+ IDs are family-first
+    # (claude-opus-4-8), never a digit right after "claude-".
+    if re.match(r"claude-\d", mid):
+        return False
+    m = re.search(r"(?:opus|sonnet|haiku)-(\d+)(?:-(\d+))?", mid)
+    if not m:
+        return False
+    major = int(m.group(1))
+    # A trailing date snapshot (…-4-20250514) is not a minor version; real
+    # minors are 1-2 digits, dates are 8.
+    minor_raw = m.group(2)
+    minor = int(minor_raw) if minor_raw and len(minor_raw) <= 2 else 0
+    return (major, minor) >= (4, 6)
+
+
 async def call_anthropic(
     client: httpx.AsyncClient,
     model: ModelConfig,
@@ -66,13 +99,14 @@ async def call_anthropic(
     # Thinking / reasoning support
     if model.thinking:
         budget = _ANTHROPIC_THINKING_BUDGETS.get(mode, 8192)
-        if "-4-7" in model.model_id:
-            # 4-7+ models use adaptive thinking (no budget_tokens)
+        if _anthropic_uses_adaptive_thinking(model.model_id):
+            # Opus/Sonnet/Haiku 4.6+ and Fable/Mythos use adaptive thinking; the
+            # fixed-budget form is deprecated (4.6) or rejected with a 400 (4.7+).
             body["thinking"] = {"type": "adaptive"}
-            body["max_tokens"] = body["max_tokens"] + budget
         else:
             body["thinking"] = {"type": "enabled", "budget_tokens": budget}
-            body["max_tokens"] = body["max_tokens"] + budget
+        # Pad max_tokens so thinking tokens don't crowd out the visible answer.
+        body["max_tokens"] = body["max_tokens"] + budget
 
     resp = await client.post(
         ANTHROPIC_API_URL, json=body, headers=headers, timeout=model.timeout
