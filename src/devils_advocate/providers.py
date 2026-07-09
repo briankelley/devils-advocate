@@ -388,7 +388,7 @@ async def call_with_retry(
                     f"in {wait:.1f}s"
                 )
             await asyncio.sleep(wait)
-        except (httpx.TimeoutException, httpx.ConnectError) as e:
+        except httpx.TransportError as e:
             last_exc = e
             wait = (2 ** attempt) + random.random()
             if log_fn:

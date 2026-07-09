@@ -365,9 +365,9 @@ async def run_spec_review(
                     storage._atomic_write(rd / "dvad-report.md", report_str)
             except Exception as e:
                 console.print(
-                    f"  [yellow]Warning: Revision failed: {e}[/yellow]"
+                    f"  [yellow]Warning: Revision failed: {type(e).__name__}: {e}[/yellow]"
                 )
-                storage.log(f"Revision failed (non-fatal): {e}")
+                storage.log(f"Revision failed (non-fatal): {type(e).__name__}: {e}")
 
         console.print(f"\n[green]Spec review complete.[/green] Results saved to:")
         console.print(f"  Report:  {rd / 'dvad-report.md'}")

@@ -598,9 +598,9 @@ async def _run_adversarial_pipeline(
                     result.revised_output = revised_output
         except Exception as e:
             console.print(
-                f"  [yellow]Warning: Revision failed: {e}[/yellow]"
+                f"  [yellow]Warning: Revision failed: {type(e).__name__}: {e}[/yellow]"
             )
-            storage.log(f"Revision failed (non-fatal): {e}")
+            storage.log(f"Revision failed (non-fatal): {type(e).__name__}: {e}")
             revised_output = ""
 
         if not revised_output:
