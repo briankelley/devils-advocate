@@ -133,6 +133,7 @@ async def _call_reviewer(
     point_parser=None,
     role_label: str = "reviewer",
     mode: str = "",
+    cache_prefix: str = "",
 ) -> list[ReviewPoint]:
     """Call a single reviewer and return parsed points.
 
@@ -147,6 +148,9 @@ async def _call_reviewer(
     point_parser : callable | None
         Override the default ``parse_review_response`` parser. When provided,
         called as ``point_parser(text, reviewer.name)`` instead of the default.
+    cache_prefix : str
+        Stable leading portion of *prompt* shared across rounds, passed
+        through for provider-level prompt caching.
     """
     effective_max = reviewer.max_out_configured or MAX_OUTPUT_TOKENS
     storage.log(
@@ -162,6 +166,7 @@ async def _call_reviewer(
         effective_max,
         log_fn=storage.log,
         mode=mode,
+        cache_prefix=cache_prefix,
     )
     cost_tracker.add(
         reviewer.name,
@@ -170,6 +175,8 @@ async def _call_reviewer(
         reviewer.cost_per_1k_input,
         reviewer.cost_per_1k_output,
         role=role_label,
+        cache_write_tokens=usage.get("cache_write_tokens", 0),
+        cache_read_tokens=usage.get("cache_read_tokens", 0),
     )
     storage.log(
         f"Round 1: {reviewer.name} responded "

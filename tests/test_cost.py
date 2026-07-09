@@ -271,3 +271,56 @@ class TestCheckContextWindow:
         assert fits is True
         assert limit == 0
         assert est == 10000
+
+
+class TestCostTrackerCacheTokens:
+    """Cache-aware pricing: writes bill at 1.25x input rate, reads at 0.1x."""
+
+    def test_cache_write_billed_at_premium(self):
+        ct = CostTracker()
+        ct.add("model-a", 0, 0, 0.01, 0.05, cache_write_tokens=1000)
+        # 1000/1000 * 0.01 * 1.25 = 0.0125
+        assert abs(ct.total_usd - 0.0125) < 1e-9
+
+    def test_cache_read_billed_at_discount(self):
+        ct = CostTracker()
+        ct.add("model-a", 0, 0, 0.01, 0.05, cache_read_tokens=1000)
+        # 1000/1000 * 0.01 * 0.1 = 0.001
+        assert abs(ct.total_usd - 0.001) < 1e-9
+
+    def test_combined_cache_and_regular_tokens(self):
+        ct = CostTracker()
+        ct.add(
+            "model-a", 1000, 1000, 0.01, 0.05,
+            cache_write_tokens=2000, cache_read_tokens=3000,
+        )
+        # in: 0.01 + write: 2*0.01*1.25=0.025 + read: 3*0.01*0.1=0.003 + out: 0.05
+        assert abs(ct.total_usd - 0.088) < 1e-9
+
+    def test_cache_tokens_counted_in_total_input(self):
+        ct = CostTracker()
+        ct.add("model-a", 100, 50, 0.01, 0.05,
+               cache_write_tokens=200, cache_read_tokens=300)
+        assert ct.total_input_tokens == 600
+        assert ct.total_output_tokens == 50
+
+    def test_entry_includes_cache_fields_only_when_present(self):
+        ct = CostTracker()
+        ct.add("model-a", 100, 50, 0.01, 0.05)
+        assert "cache_write_tokens" not in ct.entries[0]
+        ct.add("model-a", 100, 50, 0.01, 0.05, cache_read_tokens=10)
+        assert ct.entries[1]["cache_read_tokens"] == 10
+
+    def test_log_event_includes_cache_fields(self):
+        messages = []
+        ct = CostTracker(_log_fn=messages.append)
+        ct.add("model-a", 100, 50, 0.01, 0.05, role="reviewer_1",
+               cache_write_tokens=200, cache_read_tokens=300)
+        assert "cache_write=200" in messages[0]
+        assert "cache_read=300" in messages[0]
+
+    def test_log_event_omits_cache_fields_when_zero(self):
+        messages = []
+        ct = CostTracker(_log_fn=messages.append)
+        ct.add("model-a", 100, 50, 0.01, 0.05, role="reviewer_1")
+        assert "cache_write" not in messages[0]

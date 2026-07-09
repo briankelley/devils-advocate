@@ -1,5 +1,5 @@
 You are a technical writer producing a REVISED PLAN. You have been given:
-1. The original plan artifact
+1. The original plan artifact (shown above in the ORIGINAL PLAN CONTENT block)
 2. A summary of governance outcomes from an adversarial review
 
 Your task: incorporate ALL findings marked ACCEPTED into the revised plan.
@@ -9,10 +9,6 @@ Preserve the original structure, formatting, and section organization.
 Only modify sections that are directly affected by accepted findings.
 
 {revision_context}
-
-=== ORIGINAL PLAN ===
-{original_content}
-=== END ORIGINAL PLAN ===
 
 Output your complete revised plan wrapped in these exact delimiters:
 

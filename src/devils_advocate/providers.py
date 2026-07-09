@@ -80,18 +80,40 @@ async def call_anthropic(
     user_prompt: str,
     max_tokens: int = MAX_OUTPUT_TOKENS,
     mode: str = "",
+    cache_prefix: str = "",
 ) -> tuple:
-    """Call the Anthropic Messages API. Returns (response_text, usage_dict)."""
+    """Call the Anthropic Messages API. Returns (response_text, usage_dict).
+
+    When ``cache_prefix`` is a leading substring of ``user_prompt``, the prompt
+    is sent as two content blocks with ``cache_control`` on the prefix block,
+    so subsequent calls sharing the same prefix (and model) read it from the
+    prompt cache at 10% of the input price instead of re-paying full rate.
+    """
     headers = {
         "anthropic-version": ANTHROPIC_VERSION,
         "content-type": "application/json",
     }
     if model.api_key:
         headers["x-api-key"] = model.api_key
+    if (
+        cache_prefix
+        and user_prompt.startswith(cache_prefix)
+        and len(user_prompt) > len(cache_prefix)
+    ):
+        user_content = [
+            {
+                "type": "text",
+                "text": cache_prefix,
+                "cache_control": {"type": "ephemeral"},
+            },
+            {"type": "text", "text": user_prompt[len(cache_prefix):]},
+        ]
+    else:
+        user_content = user_prompt
     body = {
         "model": model.model_id,
         "max_tokens": max_tokens,
-        "messages": [{"role": "user", "content": user_prompt}],
+        "messages": [{"role": "user", "content": user_content}],
     }
     if system_prompt:
         body["system"] = system_prompt
@@ -132,6 +154,8 @@ async def call_anthropic(
     return text, {
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": output_tokens,
+        "cache_write_tokens": usage.get("cache_creation_input_tokens", 0) or 0,
+        "cache_read_tokens": usage.get("cache_read_input_tokens", 0) or 0,
     }
 
 
@@ -311,14 +335,23 @@ async def call_model(
     user_prompt: str,
     max_tokens: int = MAX_OUTPUT_TOKENS,
     mode: str = "",
+    cache_prefix: str = "",
 ) -> tuple:
-    """Unified dispatcher. Returns (response_text, usage_dict)."""
+    """Unified dispatcher. Returns (response_text, usage_dict).
+
+    ``cache_prefix`` enables explicit prompt caching on Anthropic models.
+    Other providers cache shared prefixes automatically server-side, so the
+    parameter is ignored for them — the full prompt string is sent either way.
+    """
     # Honour per-model output cap from models.yaml
     if model.max_out_configured and model.max_out_configured < max_tokens:
         max_tokens = model.max_out_configured
 
     if model.provider == "anthropic":
-        return await call_anthropic(client, model, system_prompt, user_prompt, max_tokens, mode)
+        return await call_anthropic(
+            client, model, system_prompt, user_prompt, max_tokens, mode,
+            cache_prefix=cache_prefix,
+        )
     elif model.provider == "minimax":
         return await call_minimax(client, model, system_prompt, user_prompt, max_tokens, mode)
     elif model.provider == "local":
@@ -341,6 +374,7 @@ async def call_with_retry(
     max_retries: int = DEFAULT_MAX_RETRIES,
     log_fn=None,
     mode: str = "",
+    cache_prefix: str = "",
 ) -> tuple:
     """Wrap call_model with exponential backoff + jitter, respects Retry-After."""
     import time as _time
@@ -350,7 +384,10 @@ async def call_with_retry(
     attempts_529 = 0
     for attempt in range(max_retries + 1):
         try:
-            return await call_model(client, model, system_prompt, user_prompt, max_tokens, mode)
+            return await call_model(
+                client, model, system_prompt, user_prompt, max_tokens, mode,
+                cache_prefix=cache_prefix,
+            )
         except httpx.HTTPStatusError as e:
             last_exc = e
             status = e.response.status_code

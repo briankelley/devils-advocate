@@ -10,7 +10,7 @@ import re
 from collections import defaultdict
 
 from .cost import check_context_window, estimate_tokens
-from .prompts import load_template
+from .prompts import build_stable_prefix, load_template
 from .providers import REVISION_MAX_OUTPUT_TOKENS, call_with_retry
 from .types import CostTracker, ModelConfig, ReviewGroup
 from .storage import StorageManager
@@ -177,7 +177,12 @@ def build_revision_prompt(
     original_content: str,
     revision_context: str,
 ) -> str:
-    """Build the revision prompt from a mode-specific template."""
+    """Build the revision prompt from a mode-specific template.
+
+    For plan/code/integration modes the original artifact is prepended as the
+    canonical stable prefix (shared with the round prompts, enabling prompt
+    caching). Spec mode keeps its self-contained template.
+    """
     template_map = {
         "plan": "revision-plan-instruct.txt",
         "code": "revision-code-instruct.txt",
@@ -185,9 +190,14 @@ def build_revision_prompt(
         "spec": "spec-revision-instruct.txt",
     }
     template_name = template_map.get(mode, template_map["plan"])
-    return load_template(
+    if mode == "spec":
+        return load_template(
+            template_name,
+            original_content=original_content,
+            revision_context=revision_context,
+        )
+    return build_stable_prefix(mode, original_content) + load_template(
         template_name,
-        original_content=original_content,
         revision_context=revision_context,
     )
 
@@ -261,6 +271,7 @@ async def _run_revision_core(
         effective_max,
         log_fn=storage.log,
         mode="revision",
+        cache_prefix=build_stable_prefix(mode, original_content) if mode != "spec" else "",
     )
     cost_tracker.add(
         revision_model.name,
@@ -269,6 +280,8 @@ async def _run_revision_core(
         revision_model.cost_per_1k_input,
         revision_model.cost_per_1k_output,
         role="revision",
+        cache_write_tokens=usage.get("cache_write_tokens", 0),
+        cache_read_tokens=usage.get("cache_read_tokens", 0),
     )
     console.print(
         f"  Revision model responded ({usage['output_tokens']} tokens)"

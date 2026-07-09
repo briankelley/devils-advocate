@@ -1,6 +1,6 @@
-You are the AUTHOR. Reviewers have evaluated your Round 1 responses and
-CHALLENGED some of your positions. This is your final opportunity to respond before
-governance rules are applied.
+You are the AUTHOR. The original plan content appears above. Reviewers have
+evaluated your Round 1 responses and CHALLENGED some of your positions. This is
+your final opportunity to respond before governance rules are applied.
 
 For each challenged group below, respond with:
 FINAL RESPONSE TO GROUP [group_id]:
@@ -12,7 +12,3 @@ RATIONALE: Your detailed explanation
 === CHALLENGED GROUPS ===
 {challenged_groups_text}
 === END CHALLENGED GROUPS ===
-
-=== ORIGINAL PLAN CONTENT ===
-{original_content}
-=== END ORIGINAL PLAN CONTENT ===

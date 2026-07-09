@@ -42,6 +42,23 @@ def load_template(name: str, **kwargs: str) -> str:
 # ─── Prompt Builders ─────────────────────────────────────────────────────────
 
 
+def build_stable_prefix(mode: str, content: str) -> str:
+    """Canonical artifact block placed first, byte-identical, in every round prompt.
+
+    All round prompts for a review must share this exact prefix so providers
+    can cache it across calls: Anthropic via an explicit cache_control block
+    (see ``call_anthropic``), OpenAI/DeepSeek via automatic server-side prefix
+    caching. Per-round instructions go after the prefix, where they can vary
+    without breaking the cache match.
+    """
+    label = "PLAN" if mode == "plan" else "CODE"
+    return (
+        f"=== ORIGINAL {label} CONTENT ===\n"
+        f"{content}\n"
+        f"=== END ORIGINAL {label} CONTENT ===\n\n"
+    )
+
+
 def get_reviewer_system_prompt() -> str:
     """Lazy-loaded reviewer system prompt from template."""
     global _reviewer_system_cache
@@ -73,10 +90,9 @@ def build_review_prompt(
     spec_block = (
         f"\n\n=== SPECIFICATION ===\n{spec}\n=== END SPECIFICATION ===" if spec else ""
     )
-    return load_template(
+    return build_stable_prefix(mode, content) + load_template(
         "round1-reviewer-instruct.txt",
         mode_label=mode_label,
-        content=content,
         spec_line=spec_line,
         spec_block=spec_block,
     )
@@ -96,11 +112,10 @@ def build_round1_author_prompt(
         template = "round1-author-plan-instruct.txt"
     else:
         template = "round1-author-code-instruct.txt"
-    return load_template(
+    return build_stable_prefix(mode, original_content) + load_template(
         template,
         governance_rules=_load_governance_block(),
         grouped_feedback=grouped_feedback,
-        original_content=original_content,
     )
 
 
@@ -111,11 +126,9 @@ def build_reviewer_rebuttal_prompt(
     author_responses_text: str,
 ) -> str:
     """Build the Round 2 rebuttal prompt for reviewers."""
-    return load_template(
+    return build_stable_prefix(mode, original_content) + load_template(
         "round2-reviewer-rebuttal-instruct.txt",
         mode=mode,
-        mode_upper=mode.upper(),
-        original_content=original_content,
         grouped_feedback=grouped_feedback,
         author_responses_text=author_responses_text,
     )
@@ -131,11 +144,10 @@ def build_author_final_prompt(
         template = "round2-author-final-plan-instruct.txt"
     else:
         template = "round2-author-final-code-instruct.txt"
-    return load_template(
+    return build_stable_prefix(mode, original_content) + load_template(
         template,
         governance_rules_final=_load_governance_final_block(),
         challenged_groups_text=challenged_groups_text,
-        original_content=original_content,
     )
 
 

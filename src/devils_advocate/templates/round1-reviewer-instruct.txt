@@ -1,4 +1,4 @@
-Review the following {mode_label} thoroughly. For each issue you identify, use this exact format:
+Review the {mode_label} shown above in the ORIGINAL {mode_label} CONTENT block. For each issue you identify, use this exact format:
 
 REVIEW POINT N:
 SEVERITY: critical|high|medium|low|info
@@ -8,9 +8,4 @@ RECOMMENDATION: Specific, actionable recommendation to address it
 LOCATION: Section, file path, function name, or line reference (if applicable)
 
 Be thorough but avoid nitpicks. Focus on issues that affect correctness, security, architecture, and maintainability.
-{spec_line}
-
-=== FILE CONTENT ===
-{content}
-=== END FILE CONTENT ===
-{spec_block}
+{spec_line}{spec_block}

@@ -324,3 +324,74 @@ class TestBuildSpecRevisionPrompt:
         )
         assert "Product Spec" in result
         assert "dark mode" in result
+
+
+# ---------------------------------------------------------------------------
+# Stable prefix (prompt caching) tests
+# ---------------------------------------------------------------------------
+
+
+class TestStablePrefix:
+    """All round prompts must share the byte-identical artifact prefix so
+    providers can cache it across calls."""
+
+    def test_all_plan_prompts_share_prefix(self):
+        from devils_advocate.prompts import build_stable_prefix
+        from devils_advocate.revision import build_revision_prompt
+
+        content = "# Plan\nStep 1: do X\nStep 2: do Y"
+        prefix = build_stable_prefix("plan", content)
+
+        prompts = [
+            build_review_prompt("plan", content),
+            build_round1_author_prompt("plan", content, "GROUP 1: concern"),
+            build_reviewer_rebuttal_prompt(
+                "plan", content, "GROUP 1: concern", "RESPONSE: ACCEPTED"
+            ),
+            build_author_final_prompt("plan", content, "GROUP [g1]: challenge"),
+            build_revision_prompt("plan", content, "=== ACCEPTED FINDINGS ===\nfix X"),
+        ]
+        for p in prompts:
+            assert p.startswith(prefix)
+
+    def test_all_code_prompts_share_prefix(self):
+        from devils_advocate.prompts import build_stable_prefix
+        from devils_advocate.revision import build_revision_prompt
+
+        content = "def foo():\n    pass"
+        prefix = build_stable_prefix("code", content)
+
+        prompts = [
+            build_review_prompt("code", content),
+            build_round1_author_prompt("code", content, "GROUP 1: concern"),
+            build_reviewer_rebuttal_prompt(
+                "code", content, "GROUP 1: concern", "RESPONSE: REJECTED"
+            ),
+            build_author_final_prompt("code", content, "GROUP [g1]: challenge"),
+            build_revision_prompt("code", content, "=== ACCEPTED FINDINGS ===\nfix Y"),
+        ]
+        for p in prompts:
+            assert p.startswith(prefix)
+
+    def test_prefix_contains_content_delimiters(self):
+        from devils_advocate.prompts import build_stable_prefix
+
+        prefix = build_stable_prefix("plan", "the plan body")
+        assert prefix.startswith("=== ORIGINAL PLAN CONTENT ===\n")
+        assert "the plan body" in prefix
+        assert prefix.endswith("=== END ORIGINAL PLAN CONTENT ===\n\n")
+
+    def test_spec_line_and_block_still_in_review_prompt(self):
+        result = build_review_prompt(
+            mode="code", content="def foo(): pass", spec="must return 42"
+        )
+        assert "=== SPECIFICATION ===" in result
+        assert "must return 42" in result
+
+    def test_spec_revision_prompt_unchanged(self):
+        """Spec mode keeps its self-contained template (no stable prefix)."""
+        from devils_advocate.revision import build_revision_prompt
+
+        result = build_revision_prompt("spec", "# Spec v1", "=== THEME: UX ===")
+        assert "# Spec v1" in result
+        assert not result.startswith("=== ORIGINAL")

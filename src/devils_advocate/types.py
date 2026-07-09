@@ -176,21 +176,31 @@ class CostTracker:
         cost_input: float | None,
         cost_output: float | None,
         role: str = "",
+        cache_write_tokens: int = 0,
+        cache_read_tokens: int = 0,
     ) -> None:
+        # Anthropic prompt caching: input_tokens excludes cached content;
+        # cache writes bill at 1.25x the input rate, cache reads at 0.1x.
         cost = 0.0
         if cost_input is not None and cost_output is not None:
             cost = (
                 input_tokens / 1000 * cost_input
+                + cache_write_tokens / 1000 * cost_input * 1.25
+                + cache_read_tokens / 1000 * cost_input * 0.1
                 + output_tokens / 1000 * cost_output
             )
-        self.entries.append({
+        entry = {
             "model": model_name,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "cost_usd": round(cost, 6),
-        })
+        }
+        if cache_write_tokens or cache_read_tokens:
+            entry["cache_write_tokens"] = cache_write_tokens
+            entry["cache_read_tokens"] = cache_read_tokens
+        self.entries.append(entry)
         self.total_usd += cost
-        self.total_input_tokens += input_tokens
+        self.total_input_tokens += input_tokens + cache_write_tokens + cache_read_tokens
         self.total_output_tokens += output_tokens
 
         if role:
@@ -198,11 +208,18 @@ class CostTracker:
 
         # Emit structured cost event for GUI consumption
         if self._log_fn and role:
+            cache_info = ""
+            if cache_write_tokens or cache_read_tokens:
+                cache_info = (
+                    f" cache_write={cache_write_tokens}"
+                    f" cache_read={cache_read_tokens}"
+                )
             self._log_fn(
                 f"§cost role={role} model={model_name} "
                 f"cost={cost:.6f} total={self.total_usd:.6f} "
                 f"in_tokens={input_tokens} out_tokens={output_tokens} "
                 f"total_tokens={self.total_input_tokens + self.total_output_tokens}"
+                f"{cache_info}"
             )
 
         # Update cost guardrail flags when a budget is set

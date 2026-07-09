@@ -34,6 +34,7 @@ from ..prompts import (
     build_author_final_prompt,
     build_reviewer_rebuttal_prompt,
     build_round1_author_prompt,
+    build_stable_prefix,
     get_reviewer_system_prompt,
 )
 from ..parser import (
@@ -153,6 +154,7 @@ async def _run_round2_exchange(
                 effective_max_r,
                 log_fn=storage.log,
                 mode=mode,
+                cache_prefix=build_stable_prefix(mode, content),
             )
         )
 
@@ -176,6 +178,8 @@ async def _run_round2_exchange(
             r.cost_per_1k_input,
             r.cost_per_1k_output,
             role=reviewer_roles.get(r.name, "reviewer") if reviewer_roles else "reviewer",
+            cache_write_tokens=rebuttal_usage.get("cache_write_tokens", 0),
+            cache_read_tokens=rebuttal_usage.get("cache_read_tokens", 0),
         )
         storage.log(
             f"Round 2: {r.name} responded "
@@ -254,6 +258,7 @@ async def _run_round2_exchange(
                     AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
                     log_fn=storage.log,
                     mode=mode,
+                    cache_prefix=build_stable_prefix(mode, content),
                 )
                 cost_tracker.add(
                     author.name,
@@ -262,6 +267,8 @@ async def _run_round2_exchange(
                     author.cost_per_1k_input,
                     author.cost_per_1k_output,
                     role="author",
+                    cache_write_tokens=final_usage.get("cache_write_tokens", 0),
+                    cache_read_tokens=final_usage.get("cache_read_tokens", 0),
                 )
                 storage.log(
                     f"Round 2: author responded "
@@ -415,6 +422,7 @@ async def _run_adversarial_pipeline(
         AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
         log_fn=storage.log,
         mode=mode,
+        cache_prefix=build_stable_prefix(mode, content),
     )
     cost_tracker.add(
         author.name,
@@ -423,6 +431,8 @@ async def _run_adversarial_pipeline(
         author.cost_per_1k_input,
         author.cost_per_1k_output,
         role="author",
+        cache_write_tokens=author_usage.get("cache_write_tokens", 0),
+        cache_read_tokens=author_usage.get("cache_read_tokens", 0),
     )
     console.print(
         f"  Author responded ({author_usage['output_tokens']} tokens)"

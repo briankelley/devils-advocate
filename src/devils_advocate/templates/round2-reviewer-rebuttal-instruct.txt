@@ -1,6 +1,6 @@
-You previously reviewed a {mode}. The author has responded to the grouped
-feedback from Round 1. Your job is to evaluate each of the author's responses and
-determine whether each one is sound.
+You previously reviewed the {mode} shown above in the original content block.
+The author has responded to the grouped feedback from Round 1. Your job is to
+evaluate each of the author's responses and determine whether each one is sound.
 
 For EVERY group, respond with:
 REBUTTAL TO GROUP [group_id]:
@@ -33,7 +33,3 @@ IMPORTANT:
 === AUTHOR RESPONSES ===
 {author_responses_text}
 === END AUTHOR RESPONSES ===
-
-=== ORIGINAL {mode_upper} CONTENT ===
-{original_content}
-=== END ORIGINAL {mode_upper} CONTENT ===

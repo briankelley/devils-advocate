@@ -1,6 +1,6 @@
 You are a developer revising a source code file to incorporate accepted review findings.
 You have been given:
-1. The original source code
+1. The original source code (shown above in the ORIGINAL CODE CONTENT block)
 2. A summary of governance outcomes from an adversarial review
 
 Your task: produce the COMPLETE revised source file incorporating ALL findings marked ACCEPTED.
@@ -10,10 +10,6 @@ Only make changes that directly address accepted findings.
 Preserve all other code exactly as-is.
 
 {revision_context}
-
-=== ORIGINAL CODE ===
-{original_content}
-=== END ORIGINAL CODE ===
 
 Output the complete revised file wrapped in these exact delimiters:
 

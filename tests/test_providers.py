@@ -155,7 +155,12 @@ class TestCallAnthropic:
                 )
 
         assert text == "Review output"
-        assert usage == {"input_tokens": 100, "output_tokens": 50}
+        assert usage == {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
+        }
 
     async def test_system_prompt_included_in_body(self):
         """When system_prompt is non-empty, it appears in the request body."""
@@ -365,7 +370,7 @@ class TestCallAnthropic:
                 text, usage = await call_anthropic(client, model, "sys", "usr")
 
         assert text == "Part one. Part two."
-        assert usage == {"input_tokens": 10, "output_tokens": 20}
+        assert usage == {"input_tokens": 10, "output_tokens": 20, "cache_write_tokens": 0, "cache_read_tokens": 0}
 
     async def test_non_text_blocks_ignored(self):
         """Blocks with type != 'text' (e.g. thinking) are ignored."""
@@ -2026,3 +2031,118 @@ class TestNormalizationFallbackThinking:
         import json
         parsed = json.loads(route.calls.last.request.content)
         assert "reasoning_effort" in parsed or "thinking" in parsed
+
+
+# ─── Anthropic prompt caching ────────────────────────────────────────────────
+
+
+class TestAnthropicPromptCaching:
+    """cache_prefix splits the user prompt into a cached block + suffix."""
+
+    async def test_cache_prefix_splits_user_content_into_blocks(self):
+        model = _make_model()
+        prefix = "=== ORIGINAL PLAN CONTENT ===\nstep 1\n=== END ORIGINAL PLAN CONTENT ===\n\n"
+        prompt = prefix + "Respond to the feedback below."
+        with respx.mock:
+            route = respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_anthropic(
+                    client, model, "sys", prompt, cache_prefix=prefix
+                )
+
+        import json
+        body = json.loads(route.calls.last.request.content)
+        content = body["messages"][0]["content"]
+        assert isinstance(content, list)
+        assert len(content) == 2
+        assert content[0]["text"] == prefix
+        assert content[0]["cache_control"] == {"type": "ephemeral"}
+        assert "cache_control" not in content[1]
+        assert content[0]["text"] + content[1]["text"] == prompt
+
+    async def test_non_matching_prefix_sends_plain_string(self):
+        model = _make_model()
+        with respx.mock:
+            route = respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_anthropic(
+                    client, model, "sys", "some prompt", cache_prefix="unrelated"
+                )
+
+        import json
+        body = json.loads(route.calls.last.request.content)
+        assert body["messages"][0]["content"] == "some prompt"
+
+    async def test_empty_prefix_sends_plain_string(self):
+        model = _make_model()
+        with respx.mock:
+            route = respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_anthropic(client, model, "sys", "some prompt")
+
+        import json
+        body = json.loads(route.calls.last.request.content)
+        assert body["messages"][0]["content"] == "some prompt"
+
+    async def test_prefix_equal_to_prompt_sends_plain_string(self):
+        """A prefix covering the whole prompt would leave an empty second
+        block — the call must fall back to a plain string."""
+        model = _make_model()
+        with respx.mock:
+            route = respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_anthropic(
+                    client, model, "sys", "whole prompt", cache_prefix="whole prompt"
+                )
+
+        import json
+        body = json.loads(route.calls.last.request.content)
+        assert body["messages"][0]["content"] == "whole prompt"
+
+    async def test_cache_usage_fields_passed_through(self):
+        model = _make_model()
+        response_body = {
+            "content": [{"type": "text", "text": "ok"}],
+            "usage": {
+                "input_tokens": 12,
+                "output_tokens": 5,
+                "cache_creation_input_tokens": 1000,
+                "cache_read_input_tokens": 2000,
+            },
+        }
+        with respx.mock:
+            respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=response_body)
+            )
+            async with httpx.AsyncClient() as client:
+                _, usage = await call_anthropic(client, model, "sys", "usr")
+
+        assert usage["cache_write_tokens"] == 1000
+        assert usage["cache_read_tokens"] == 2000
+
+    async def test_call_with_retry_forwards_cache_prefix(self):
+        model = _make_model()
+        prefix = "STABLE\n\n"
+        prompt = prefix + "suffix instructions"
+        with respx.mock:
+            route = respx.post(ANTHROPIC_API_URL).mock(
+                return_value=httpx.Response(200, json=_anthropic_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_with_retry(
+                    client, model, "sys", prompt, cache_prefix=prefix
+                )
+
+        import json
+        body = json.loads(route.calls.last.request.content)
+        content = body["messages"][0]["content"]
+        assert isinstance(content, list)
+        assert content[0]["cache_control"] == {"type": "ephemeral"}

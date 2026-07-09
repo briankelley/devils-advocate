@@ -18,7 +18,7 @@ from ..types import (
 from ..ids import assign_guids, generate_review_id
 from ..cost import check_context_window, estimate_tokens
 from ..config import get_models_by_role
-from ..prompts import build_review_prompt
+from ..prompts import build_review_prompt, build_stable_prefix
 from ..dedup import deduplicate_points
 from ..storage import StorageManager
 from ..ui import console
@@ -193,6 +193,7 @@ async def run_plan_review(
                     storage,
                     role_label=f"reviewer_{i+1}",
                     mode="plan",
+                    cache_prefix=build_stable_prefix("plan", content),
                 )
                 for i, r in enumerate(active_reviewers)
             ]
