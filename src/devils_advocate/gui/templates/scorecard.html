@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% block title %}Scorecard — dvad{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1><i data-lucide="swords" class="header-icon"></i> Model Scorecard</h1>
+</div>
+
+<div class="scorecard-meta">
+    <span class="dim">{{ sc.review_count }} scored reviews</span>
+    {% if sc.months %}<span class="dim"> · {{ sc.months[0] }} → {{ sc.months[-1] }}</span>{% endif %}
+    <span class="dim"> · plan / code / integration modes (spec has no governance pass)</span>
+    <span class="dim"> · </span>
+    {% if show_test %}
+    <a href="/scorecard" class="scorecard-toggle">hide test reviews</a>
+    {% else %}
+    <a href="/scorecard?show_test=true" class="scorecard-toggle">include test reviews</a>
+    {% endif %}
+</div>
+
+{# ── Reviewer leaderboard ─────────────────────────────────────────── #}
+<section class="scorecard-section">
+    <h2>Reviewers</h2>
+    <p class="dim scorecard-blurb">Every model that ever sat a reviewer seat. Click a column to sort.
+    <strong>Conviction</strong> is the share of contested findings where the model refused to withdraw —
+    the split-decision temperament that makes an adversarial reviewer worth paying for.</p>
+    <div class="scorecard-scroll">
+    <table class="data-table scorecard-table" id="reviewer-table">
+        <thead>
+            <tr>
+                <th class="sc-sort" data-type="string">Model<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric">Reviews<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric">Findings<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric">Per review<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric">Accepted<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric">Hit rate<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric">Escalated<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric">Crit/High<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric" title="Share of findings another reviewer independently also raised">Consensus<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric" title="Findings the author pushed back on">Contested<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric" title="Contested findings where the reviewer refused to withdraw">Stood ground<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric">Conviction<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric" title="Stood ground and the finding was ultimately accepted">Vindicated<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric">Cost<span class="sort-indicator"></span></th>
+                <th class="sc-sort num" data-type="numeric">$ / accepted<span class="sort-indicator"></span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in sc.reviewers %}
+            <tr>
+                <td data-v="{{ r.model }}"><span class="mono">{{ r.model }}</span></td>
+                <td class="num" data-v="{{ r.reviews }}">{{ r.reviews }}</td>
+                <td class="num" data-v="{{ r.findings }}">{{ r.findings }}</td>
+                <td class="num" data-v="{{ r.findings_per_review }}">{{ r.findings_per_review }}</td>
+                <td class="num" data-v="{{ r.accepted }}">{{ r.accepted }}</td>
+                <td class="num" data-v="{{ r.hit_rate if r.hit_rate is not none else -1 }}">{{ "%.0f%%"|format(r.hit_rate * 100) if r.hit_rate is not none else "—" }}</td>
+                <td class="num" data-v="{{ r.escalated }}">{{ r.escalated }}</td>
+                <td class="num" data-v="{{ r.critical + r.high }}">{{ r.critical }}/{{ r.high }}</td>
+                <td class="num" data-v="{{ r.consensus_rate if r.consensus_rate is not none else -1 }}">{{ "%.0f%%"|format(r.consensus_rate * 100) if r.consensus_rate is not none else "—" }}</td>
+                <td class="num" data-v="{{ r.contested }}">{{ r.contested }}</td>
+                <td class="num" data-v="{{ r.stood_ground }}">{{ r.stood_ground }}</td>
+                <td class="num{% if r.conviction_rate is not none and r.conviction_rate >= 0.5 %} sc-conviction-high{% endif %}" data-v="{{ r.conviction_rate if r.conviction_rate is not none else -1 }}">{{ "%.0f%%"|format(r.conviction_rate * 100) if r.conviction_rate is not none else "—" }}</td>
+                <td class="num" data-v="{{ r.vindicated }}">{{ r.vindicated }}</td>
+                <td class="num" data-v="{{ r.cost_usd }}">{% if r.cost_usd %}${{ "%.2f"|format(r.cost_usd) }}{% else %}—{% endif %}</td>
+                <td class="num" data-v="{{ r.cost_per_accepted if r.cost_per_accepted is not none else -1 }}">{% if r.cost_per_accepted is not none %}${{ "%.3f"|format(r.cost_per_accepted) }}{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+
+{# ── Monthly trend ────────────────────────────────────────────────── #}
+<section class="scorecard-section">
+    <h2>Monthly trend</h2>
+    <p class="dim scorecard-blurb">Findings per month with acceptance in parentheses. Governance rules and
+    role assignments changed over time — compare within a column, not across the whole row.</p>
+    <div class="scorecard-scroll">
+    <table class="data-table scorecard-table">
+        <thead>
+            <tr>
+                <th>Model</th>
+                {% for m in sc.months %}<th class="num">{{ m }}</th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in sc.reviewers if r.findings > 0 %}
+            <tr>
+                <td><span class="mono">{{ r.model }}</span></td>
+                {% for m in sc.months %}
+                {% set cell = r.monthly.get(m) %}
+                <td class="num">{% if cell %}{{ cell.findings }} <span class="dim">({{ "%.0f%%"|format(cell.accepted / cell.findings * 100) if cell.findings else "" }})</span>{% else %}<span class="dim">·</span>{% endif %}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+
+{# ── Split decisions ──────────────────────────────────────────────── #}
+<section class="scorecard-section">
+    <h2>Split decisions</h2>
+    <p class="dim scorecard-blurb">Every finding where the author pushed back and the reviewer refused to
+    withdraw. {{ sc.split_decisions|length }} on record.</p>
+    {% if sc.split_decisions %}
+    <div class="split-list">
+        {% for d in sc.split_decisions %}
+        <div class="split-card">
+            <div class="split-head">
+                <span class="mono split-reviewer">{{ d.reviewer }}</span>
+                <span class="dim">vs</span>
+                <span class="mono">{{ d.author or "?" }}</span>
+                <span class="badge badge-{{ d.severity }}">{{ d.severity }}</span>
+                <span class="tag tag-{{ d.final_resolution.replace('auto_', '').replace('partial_', '') }}">{{ d.final_resolution.replace('_', ' ') }}</span>
+                <span class="dim split-when">{{ d.project }} · {{ d.mode }} · {{ d.date }}</span>
+                <a class="split-link" href="/review/{{ d.review_id }}" title="Open review">↗</a>
+            </div>
+            <div class="split-body">{{ d.description }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="dim">No split decisions in the scored set.</p>
+    {% endif %}
+</section>
+
+{# ── Head-to-head matrix ──────────────────────────────────────────── #}
+<section class="scorecard-section">
+    <h2>Head-to-head</h2>
+    <p class="dim scorecard-blurb">Reviewer pairs that sat the same review. Cell shows shared reviews and
+    findings (row model / column model). Hover a cell for the full account.</p>
+    <div class="scorecard-scroll">
+    <table class="data-table scorecard-matrix">
+        <thead>
+            <tr>
+                <th></th>
+                {% for m in h2h_models %}<th class="sc-matrix-col"><span class="mono">{{ m }}</span></th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in h2h_models %}
+            <tr>
+                <th class="sc-matrix-row"><span class="mono">{{ a }}</span></th>
+                {% for b in h2h_models %}
+                {% if a == b %}
+                <td class="sc-matrix-self">—</td>
+                {% else %}
+                {% set pair = h2h_lookup.get(a, {}).get(b) %}
+                {% if pair %}
+                {% set a_is_a = pair.model_a == a %}
+                <td class="sc-matrix-cell" title="{{ pair.sentence }}">
+                    <span class="sc-matrix-n">{{ pair.reviews }}×</span>
+                    <span class="dim">{{ pair.a_findings if a_is_a else pair.b_findings }}/{{ pair.b_findings if a_is_a else pair.a_findings }}</span>
+                </td>
+                {% else %}
+                <td class="sc-matrix-empty"><span class="dim">·</span></td>
+                {% endif %}
+                {% endif %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    <details class="scorecard-details">
+        <summary>Full matchup accounts ({{ sc.head_to_head|length }})</summary>
+        <ul class="scorecard-sentences">
+            {% for pair in sc.head_to_head %}
+            <li>{{ pair.sentence }}</li>
+            {% endfor %}
+        </ul>
+    </details>
+</section>
+
+{# ── Reviewer vs author ───────────────────────────────────────────── #}
+<section class="scorecard-section">
+    <h2>Reviewer vs. author</h2>
+    <p class="dim scorecard-blurb">The true adversarial axis: how each reviewer fared against each author.</p>
+    <div class="scorecard-scroll">
+    <table class="data-table scorecard-table">
+        <thead>
+            <tr>
+                <th>Reviewer</th>
+                <th>Author</th>
+                <th class="num">Reviews</th>
+                <th class="num">Findings</th>
+                <th class="num">Accepted</th>
+                <th class="num">Rate</th>
+                <th class="num">Pushback</th>
+                <th class="num">Stood ground</th>
+                <th class="num">Escalated</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for v in sc.reviewer_vs_author %}
+            <tr title="{{ v.sentence }}">
+                <td><span class="mono">{{ v.reviewer }}</span></td>
+                <td><span class="mono">{{ v.author }}</span></td>
+                <td class="num">{{ v.reviews }}</td>
+                <td class="num">{{ v.findings }}</td>
+                <td class="num">{{ v.accepted }}</td>
+                <td class="num">{{ "%.0f%%"|format(v.accept_rate * 100) if v.accept_rate is not none else "—" }}</td>
+                <td class="num">{{ v.author_pushback }}</td>
+                <td class="num{% if v.stood_ground %} sc-conviction-high{% endif %}">{{ v.stood_ground }}</td>
+                <td class="num">{{ v.escalated }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+
+{# ── Authors ──────────────────────────────────────────────────────── #}
+<section class="scorecard-section">
+    <h2>The author's chair</h2>
+    <p class="dim scorecard-blurb">How models behave when defending their own work. <strong>Accept rate</strong>
+    is agreeableness toward incoming findings; <strong>hold rate</strong> is how often a challenged rejection
+    was maintained instead of folding.</p>
+    <div class="scorecard-scroll">
+    <table class="data-table scorecard-table">
+        <thead>
+            <tr>
+                <th>Model</th>
+                <th class="num">Reviews authored</th>
+                <th class="num">Groups answered</th>
+                <th class="num">Accept rate</th>
+                <th class="num">Pushbacks</th>
+                <th class="num">Folded</th>
+                <th class="num">Held</th>
+                <th class="num">Hold rate</th>
+                <th class="num">Cost</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in sc.authors %}
+            <tr>
+                <td><span class="mono">{{ a.model }}</span></td>
+                <td class="num">{{ a.reviews }}</td>
+                <td class="num">{{ a.responded }}</td>
+                <td class="num">{{ "%.0f%%"|format(a.accept_rate * 100) if a.accept_rate is not none else "—" }}</td>
+                <td class="num">{{ a.contests }}</td>
+                <td class="num">{{ a.folded }}</td>
+                <td class="num">{{ a.held }}</td>
+                <td class="num{% if a.hold_rate is not none and a.hold_rate >= 0.5 %} sc-conviction-high{% endif %}">{{ "%.0f%%"|format(a.hold_rate * 100) if a.hold_rate is not none else "—" }}</td>
+                <td class="num">{% if a.cost_usd %}${{ "%.2f"|format(a.cost_usd) }}{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+
+{# ── Service roles ────────────────────────────────────────────────── #}
+<section class="scorecard-section">
+    <h2>Service roles</h2>
+    <p class="dim scorecard-blurb">Dedup, normalization, revision, integration seats. The ledger records no
+    quality signal for these — usage and cost only.</p>
+    <div class="scorecard-scroll">
+    <table class="data-table scorecard-table">
+        <thead>
+            <tr><th>Role</th><th>Model</th><th class="num">Reviews</th><th class="num">Cost</th></tr>
+        </thead>
+        <tbody>
+            {% for s in sc.service_roles %}
+            <tr>
+                <td>{{ s.role }}</td>
+                <td><span class="mono">{{ s.model }}</span></td>
+                <td class="num">{{ s.reviews }}</td>
+                <td class="num">{% if s.cost_usd %}${{ "%.2f"|format(s.cost_usd) }}{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<section class="scorecard-section scorecard-footnote">
+    <h2>Methodology</h2>
+    <ul class="dim">
+        <li>Deterministic pass over review ledgers — no model calls, fully reproducible.</li>
+        <li>Scored set: reviews with real model reviewers and at least one governance-resolved finding. Spec mode, e2e/test harness runs, and synthetic stub reviews are excluded.</li>
+        <li>"Accepted" = auto-accepted, accepted, partial, or human-overridden — survival through governance, which also reflects author agreeableness, not ground truth.</li>
+        <li>Conviction is scored once per finding group, from the reviewer's own round-2 verdict on its contested findings.</li>
+        <li>Costs come from per-review role cost records; early ledgers predate them, so cost columns undercount the oldest months.</li>
+    </ul>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    // Self-contained column sort for the reviewer leaderboard.
+    const table = document.getElementById('reviewer-table');
+    if (!table) return;
+    let state = { col: null, asc: false };
+    table.querySelectorAll('th.sc-sort').forEach((th, idx) => {
+        th.addEventListener('click', () => {
+            const type = th.dataset.type || 'string';
+            state.asc = state.col === idx ? !state.asc : false;
+            state.col = idx;
+            table.querySelectorAll('.sort-indicator').forEach(i => i.textContent = '');
+            th.querySelector('.sort-indicator').textContent = state.asc ? ' ▲' : ' ▼';
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            rows.sort((a, b) => {
+                const av = a.children[idx]?.dataset.v || '';
+                const bv = b.children[idx]?.dataset.v || '';
+                const cmp = type === 'numeric'
+                    ? (parseFloat(av) || 0) - (parseFloat(bv) || 0)
+                    : av.localeCompare(bv);
+                return state.asc ? cmp : -cmp;
+            });
+            rows.forEach(r => tbody.appendChild(r));
+        });
+    });
+})();
+</script>
+{% endblock %}

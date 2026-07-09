@@ -259,6 +259,103 @@ def history(project, review_id, config_path, project_dir):
     console.print(table)
 
 
+# ─── stats ────────────────────────────────────────────────────────────────────
+
+
+@cli.command("stats")
+@click.option("--matchups", is_flag=True, help="Show head-to-head matchup accounts")
+@click.option("--splits", is_flag=True, help="Show split decisions (reviewer stood ground)")
+@click.option("--authors", "show_authors", is_flag=True, help="Show author-seat behavior")
+@click.option("--show-test", is_flag=True, help="Include e2e/test reviews")
+@click.option("--json", "as_json", is_flag=True, help="Emit raw JSON")
+def stats(matchups, splits, show_authors, show_test, as_json):
+    """Model scorecard computed from review ledger history."""
+    from .scorecard import compute_scorecard, matchup_sentence, versus_sentence
+
+    storage = StorageManager(Path.cwd())
+    data = compute_scorecard(storage.reviews_dir, include_test=show_test)
+
+    if as_json:
+        console.print_json(json.dumps(data, indent=2))
+        return
+
+    if not data["reviewers"]:
+        console.print("No scorable reviews found.")
+        return
+
+    window = f"{data['months'][0]} to {data['months'][-1]}" if data["months"] else ""
+    table = Table(title=f"Reviewer Scorecard -- {data['review_count']} reviews, {window}")
+    table.add_column("Model", style="cyan", no_wrap=True)
+    table.add_column("Revs", justify="right")
+    table.add_column("Finds", justify="right")
+    table.add_column("/Rev", justify="right")
+    table.add_column("Acc", justify="right")
+    table.add_column("Hit", justify="right")
+    table.add_column("Esc", justify="right")
+    table.add_column("Consensus", justify="right")
+    table.add_column("Stood", justify="right")
+    table.add_column("Conviction", justify="right")
+    table.add_column("$/Acc", justify="right")
+
+    def pct(v):
+        return f"{v:.0%}" if v is not None else "-"
+
+    for r in data["reviewers"]:
+        table.add_row(
+            r["model"],
+            str(r["reviews"]),
+            str(r["findings"]),
+            str(r["findings_per_review"]),
+            str(r["accepted"]),
+            pct(r["hit_rate"]),
+            str(r["escalated"]),
+            pct(r["consensus_rate"]),
+            str(r["stood_ground"]),
+            pct(r["conviction_rate"]),
+            f"${r['cost_per_accepted']:.3f}" if r["cost_per_accepted"] is not None else "-",
+        )
+    console.print(table)
+    console.print(
+        f"[dim]{len(data['split_decisions'])} split decisions on record. "
+        f"Full detail: --splits, --matchups, --authors, or the GUI /scorecard page.[/dim]"
+    )
+
+    if show_authors and data["authors"]:
+        at = Table(title="The Author's Chair")
+        at.add_column("Model", style="cyan", no_wrap=True)
+        at.add_column("Revs", justify="right")
+        at.add_column("Answered", justify="right")
+        at.add_column("Accept rate", justify="right")
+        at.add_column("Pushbacks", justify="right")
+        at.add_column("Folded", justify="right")
+        at.add_column("Held", justify="right")
+        at.add_column("Hold rate", justify="right")
+        for a in data["authors"]:
+            at.add_row(
+                a["model"], str(a["reviews"]), str(a["responded"]),
+                pct(a["accept_rate"]), str(a["contests"]),
+                str(a["folded"]), str(a["held"]), pct(a["hold_rate"]),
+            )
+        console.print(at)
+
+    if splits:
+        console.print()
+        for d in data["split_decisions"]:
+            console.print(
+                f"[bold]{d['date']}[/bold] [cyan]{d['reviewer']}[/cyan] vs {d['author'] or '?'} "
+                f"({d['project']}, {d['severity']}) -> {d['final_resolution']}"
+            )
+            console.print(f"  [dim]{d['description']}[/dim]")
+
+    if matchups:
+        console.print()
+        for pair in data["head_to_head"]:
+            console.print(f"- {matchup_sentence(pair)}")
+        console.print()
+        for row in data["reviewer_vs_author"]:
+            console.print(f"- {versus_sentence(row)}")
+
+
 # ─── config ───────────────────────────────────────────────────────────────────
 
 

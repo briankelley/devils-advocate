@@ -1528,3 +1528,46 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .key-validation-badge {
     margin-left: var(--pad-sm);
 }
+
+/* ── Scorecard ────────────────────────────────────────────────────── */
+
+.header-icon { width: 18px; height: 18px; vertical-align: -3px; margin-right: 4px; }
+.scorecard-meta { margin-bottom: var(--pad-lg); font-size: 12px; }
+.scorecard-toggle { color: var(--accent); font-size: 12px; }
+.scorecard-section { margin-bottom: 28px; }
+.scorecard-section h2 { font-size: 13px; margin-bottom: 4px; }
+.scorecard-blurb { font-size: 12px; margin-bottom: var(--pad-sm); max-width: 900px; }
+.scorecard-scroll { overflow-x: auto; }
+.scorecard-table th { white-space: nowrap; }
+.scorecard-table td { white-space: nowrap; }
+.sc-sort { cursor: pointer; user-select: none; }
+.sc-sort:hover { color: var(--accent); }
+.sc-conviction-high { color: var(--red); font-weight: 600; }
+
+.split-list { display: flex; flex-direction: column; gap: 8px; max-width: 1100px; }
+.split-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--red);
+    border-radius: 4px;
+    padding: 8px 12px;
+}
+.split-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.split-reviewer { font-weight: 600; }
+.split-when { font-size: 11px; margin-left: auto; }
+.split-link { color: var(--accent); text-decoration: none; }
+.split-body { font-size: 12px; color: var(--text-dim); }
+
+.scorecard-matrix th, .scorecard-matrix td { text-align: center; }
+.sc-matrix-col span, .sc-matrix-row span { font-size: 10px; }
+.sc-matrix-row { text-align: right !important; white-space: nowrap; }
+.sc-matrix-cell { cursor: help; }
+.sc-matrix-n { font-family: var(--font-mono); font-size: 11px; display: block; }
+.sc-matrix-self, .sc-matrix-empty { color: var(--text-dim); }
+
+.scorecard-details { margin-top: var(--pad-sm); }
+.scorecard-details summary { cursor: pointer; font-size: 12px; color: var(--accent); }
+.scorecard-sentences { margin: var(--pad-sm) 0 0 18px; max-width: 1000px; }
+.scorecard-sentences li { font-size: 12px; margin-bottom: 6px; color: var(--text-dim); }
+.scorecard-footnote ul { margin-left: 18px; font-size: 12px; }
+.scorecard-footnote li { margin-bottom: 3px; }

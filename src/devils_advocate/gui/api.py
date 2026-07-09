@@ -1461,3 +1461,15 @@ async def list_directory(request: Request, dir: str = "~"):
         "parent_dir": parent,
         "entries": entries,
     })
+
+
+@router.get("/scorecard")
+async def scorecard_json(request: Request, show_test: bool = False):
+    """Model scorecard as JSON — same data the /scorecard page renders."""
+    from ..scorecard import compute_scorecard
+
+    storage = get_gui_storage()
+    data = await asyncio.to_thread(
+        compute_scorecard, storage.reviews_dir, show_test
+    )
+    return JSONResponse(data)

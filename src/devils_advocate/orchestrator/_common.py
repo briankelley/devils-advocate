@@ -93,6 +93,7 @@ def _save_stub_ledger(
             "total_usd": round(cost_tracker.total_usd, 6),
             "breakdown": {k: round(v, 6) for k, v in cost_tracker.breakdown().items()},
             "role_costs": {k: round(v, 6) for k, v in cost_tracker.role_costs.items()},
+            "entries": cost_tracker.entries,
         }
     # Save role assignments if provided
     if role_assignments is not None:

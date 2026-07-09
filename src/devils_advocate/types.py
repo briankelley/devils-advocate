@@ -191,6 +191,7 @@ class CostTracker:
             )
         entry = {
             "model": model_name,
+            "role": role,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "cost_usd": round(cost, 6),

@@ -274,6 +274,7 @@ def generate_ledger(result: ReviewResult) -> dict:
             "total_usd": round(result.cost.total_usd, 6),
             "breakdown": {k: round(v, 6) for k, v in result.cost.breakdown().items()},
             "role_costs": {k: round(v, 6) for k, v in result.cost.role_costs.items()},
+            "entries": result.cost.entries,
         },
     }
 

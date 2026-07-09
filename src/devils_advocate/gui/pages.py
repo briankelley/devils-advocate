@@ -616,3 +616,35 @@ def _load_raw_yaml(path: str) -> dict:
     import yaml
     with open(path) as f:
         return yaml.safe_load(f) or {}
+
+
+@router.get("/scorecard", response_class=HTMLResponse)
+async def scorecard_page(request: Request, show_test: bool = False):
+    """Model scorecard — batting averages for every model that ever held a role."""
+    from ..scorecard import compute_scorecard, matchup_sentence, versus_sentence
+
+    storage = get_gui_storage()
+    data = await asyncio.to_thread(
+        compute_scorecard, storage.reviews_dir, show_test
+    )
+
+    for pair in data["head_to_head"]:
+        pair["sentence"] = matchup_sentence(pair)
+    for row in data["reviewer_vs_author"]:
+        row["sentence"] = versus_sentence(row)
+
+    # Matrix lookup: models ordered by findings volume, pair stats both ways
+    h2h_models = [r["model"] for r in data["reviewers"] if r["findings"] > 0]
+    h2h_lookup: dict[str, dict[str, dict]] = {}
+    for pair in data["head_to_head"]:
+        h2h_lookup.setdefault(pair["model_a"], {})[pair["model_b"]] = pair
+        h2h_lookup.setdefault(pair["model_b"], {})[pair["model_a"]] = pair
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(request, "scorecard.html", {
+        "sc": data,
+        "h2h_models": h2h_models,
+        "h2h_lookup": h2h_lookup,
+        "show_test": show_test,
+        "csrf_token": request.app.state.csrf_token,
+    })
