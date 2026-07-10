@@ -6,7 +6,14 @@ Your task: incorporate ALL findings marked ACCEPTED into the revised plan.
 IGNORE findings marked DISMISSED or UNRESOLVED -- do not address them.
 
 Preserve the original structure, formatting, and section organization.
-Only modify sections that are directly affected by accepted findings.
+Change only what the accepted findings require.
+
+CRITICAL: your output is a COMPLETE STANDALONE REPLACEMENT for the original
+plan. It will be used as-is, with no access to the original. Reproduce every
+unaffected line VERBATIM. Never elide, summarize, or abbreviate unaffected
+content. Never use placeholders such as "(unchanged)", "(Keep rest as-is)",
+"(sections omitted)", or "... rest of plan". If a section needs no changes,
+copy it out in full exactly as it appears above.
 
 {revision_context}
 

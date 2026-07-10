@@ -27,6 +27,77 @@ _DELIMITERS = {
 # Resolutions treated as actionable
 _ACTIONABLE_RESOLUTIONS = frozenset({"auto_accepted", "accepted", "overridden", "partial_accepted"})
 
+# Placeholder lines a lazy reviser emits instead of reproducing unaffected
+# content ("(Keep rest unchanged.)", "// ... rest unchanged", "# unchanged").
+# Matched against whole lines only, so prose that merely mentions the word
+# "unchanged" mid-sentence doesn't trip it.
+_ELISION_LINE = re.compile(
+    r"^[\s>*\-_#/<!\[\(\.…`]*("
+    r"(keep|rest|remainder|everything( else)?|all other|other) [^,;]{0,40}(unchanged|as[- ]is|the same|identical)"
+    r"|unchanged"
+    r"|no changes?( needed| required)?"
+    r"|same as (the )?original"
+    r"|(rest|remainder|snip|existing code|etc)( of [^,;]{0,30})?( (unchanged|omitted|as[- ]is))?"
+    r"|(sections?|content|lines?|code) [^,;]{0,30}(omitted|elided|truncated|unchanged)"
+    r")[\s.\)\]…`]*$",
+    re.IGNORECASE,
+)
+
+# Revised artifact shorter than this fraction of the original (by non-empty
+# lines) is treated as elided — accepted findings are additive, they don't
+# shrink a plan or file by a third. Originals below the line floor are too
+# small for the ratio to mean anything.
+_MIN_LENGTH_RATIO = 0.7
+_RATIO_CHECK_MIN_LINES = 20
+
+# Multi-input reviews wrap the artifact under review in this block, with
+# reference files after it. The revision replaces only the primary artifact,
+# so completeness is judged against it alone.
+_PRIMARY_ARTIFACT = re.compile(
+    r"=== PRIMARY ARTIFACT \(under review\) ===\n(.*?)\n=== END PRIMARY ARTIFACT ===",
+    re.DOTALL,
+)
+
+# Appended to the revision prompt on the single retry after a lossy output.
+_STERN_RETRY_SUFFIX = (
+    "\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED: it replaced unaffected content "
+    "with placeholders or omitted it entirely, producing a delta instead of "
+    "a complete document. This output REPLACES the original outright — any "
+    "line you do not reproduce is permanently lost. Emit the ENTIRE artifact: "
+    "every unaffected line copied VERBATIM from the original above, with only "
+    "the accepted findings incorporated. No placeholders. No elision.\n"
+)
+
+
+def _completeness_problems(extracted: str, original: str, mode: str) -> list[str]:
+    """Detect lossy revision output for modes that replace the original.
+
+    Returns a list of human-readable problems (empty = looks complete).
+    Only plan and code modes produce standalone replacements; integration
+    and spec emit new documents and are never checked.
+    """
+    if mode not in ("plan", "code"):
+        return []
+    problems = []
+    markers = [
+        line.strip() for line in extracted.splitlines()
+        if line.strip() and _ELISION_LINE.match(line)
+    ]
+    if markers:
+        sample = "; ".join(repr(m[:60]) for m in markers[:3])
+        problems.append(f"{len(markers)} elision placeholder line(s), e.g. {sample}")
+    m = _PRIMARY_ARTIFACT.search(original)
+    if m:
+        original = m.group(1)
+    original_lines = sum(1 for line in original.splitlines() if line.strip())
+    extracted_lines = sum(1 for line in extracted.splitlines() if line.strip())
+    if original_lines >= _RATIO_CHECK_MIN_LINES and extracted_lines < original_lines * _MIN_LENGTH_RATIO:
+        problems.append(
+            f"revised artifact has {extracted_lines} non-empty lines vs "
+            f"{original_lines} in the original ({extracted_lines / original_lines:.0%})"
+        )
+    return problems
+
 
 def build_revision_context(ledger_data: dict) -> str:
     """Build a slim text summary of governance outcomes for the revision prompt.
@@ -263,48 +334,79 @@ async def _run_revision_core(
         )
     else:
         storage.log(f"Revision: calling {revision_model.name} ({call_info})")
-    raw, usage = await call_with_retry(
-        client,
-        revision_model,
-        "",
-        prompt,
-        effective_max,
-        log_fn=storage.log,
-        mode="revision",
-        cache_prefix=build_stable_prefix(mode, original_content) if mode != "spec" else "",
-    )
-    cost_tracker.add(
-        revision_model.name,
-        usage["input_tokens"],
-        usage["output_tokens"],
-        revision_model.cost_per_1k_input,
-        revision_model.cost_per_1k_output,
-        role="revision",
-        cache_write_tokens=usage.get("cache_write_tokens", 0),
-        cache_read_tokens=usage.get("cache_read_tokens", 0),
-    )
-    console.print(
-        f"  Revision model responded ({usage['output_tokens']} tokens)"
-    )
-    storage.log(
-        f"Revision: {revision_model.name} responded "
-        f"(recv: {usage['output_tokens']})"
-    )
-
-    storage.save_intermediate(review_id, "revision", "revision_raw.txt", raw)
-
-    extracted = _extract_revision_strict(raw, mode)
-    if not extracted:
+    cache_prefix = build_stable_prefix(mode, original_content) if mode != "spec" else ""
+    best_candidate = ""
+    for attempt in (1, 2):
+        raw, usage = await call_with_retry(
+            client,
+            revision_model,
+            "",
+            prompt if attempt == 1 else prompt + _STERN_RETRY_SUFFIX,
+            effective_max,
+            log_fn=storage.log,
+            mode="revision",
+            cache_prefix=cache_prefix,
+        )
+        cost_tracker.add(
+            revision_model.name,
+            usage["input_tokens"],
+            usage["output_tokens"],
+            revision_model.cost_per_1k_input,
+            revision_model.cost_per_1k_output,
+            role="revision",
+            cache_write_tokens=usage.get("cache_write_tokens", 0),
+            cache_read_tokens=usage.get("cache_read_tokens", 0),
+        )
         console.print(
-            "  [yellow]Warning: Revision response missing canonical delimiters "
-            "— revised artifact not saved[/yellow]"
+            f"  Revision model responded ({usage['output_tokens']} tokens)"
         )
         storage.log(
-            "Revision: extraction failed — canonical delimiters not found in response"
+            f"Revision: {revision_model.name} responded "
+            f"(recv: {usage['output_tokens']})"
         )
-        return ""
 
-    return extracted
+        raw_name = "revision_raw.txt" if attempt == 1 else "revision_raw_retry.txt"
+        storage.save_intermediate(review_id, "revision", raw_name, raw)
+
+        extracted = _extract_revision_strict(raw, mode)
+        if not extracted:
+            console.print(
+                "  [yellow]Warning: Revision response missing canonical delimiters "
+                "— revised artifact not saved[/yellow]"
+            )
+            storage.log(
+                "Revision: extraction failed — canonical delimiters not found in response"
+            )
+            return best_candidate
+
+        problems = _completeness_problems(extracted, original_content, mode)
+        if not problems:
+            return extracted
+
+        # Keep the longer attempt in case both come back lossy.
+        if len(extracted) > len(best_candidate):
+            best_candidate = extracted
+
+        if attempt == 1:
+            storage.log(
+                f"Revision: output looks INCOMPLETE ({'; '.join(problems)}) "
+                "— retrying once with stricter instructions"
+            )
+            console.print(
+                "  [yellow]Revision output looks incomplete — retrying once[/yellow]"
+            )
+        else:
+            storage.log(
+                f"Revision: WARNING — output still looks INCOMPLETE after retry "
+                f"({'; '.join(problems)}). Saving best attempt anyway; treat the "
+                "revised artifact as a DELTA and verify against the original."
+            )
+            console.print(
+                "  [red]Warning: revised artifact may be incomplete (elided "
+                "content detected) — verify against the original before use[/red]"
+            )
+
+    return best_candidate
 
 
 async def run_revision(

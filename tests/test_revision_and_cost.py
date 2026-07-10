@@ -636,3 +636,176 @@ class TestRevisionConstants:
     def test_context_window_threshold(self):
         from devils_advocate.cost import CONTEXT_WINDOW_THRESHOLD
         assert CONTEXT_WINDOW_THRESHOLD == 0.8
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. Lossy revision detection
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestCompletenessProblems:
+    def _big_plan(self, lines=100):
+        return "\n".join(f"Step {i}: do the thing" for i in range(lines))
+
+    def test_clean_full_output_passes(self):
+        from devils_advocate.revision import _completeness_problems
+        plan = self._big_plan()
+        assert _completeness_problems(plan, plan, "plan") == []
+
+    def test_keep_rest_unchanged_placeholder_caught(self):
+        from devils_advocate.revision import _completeness_problems
+        plan = self._big_plan()
+        lossy = plan + "\n(Keep rest unchanged.)"
+        problems = _completeness_problems(lossy, plan, "plan")
+        assert any("placeholder" in p for p in problems)
+
+    def test_keep_as_is_placeholder_caught(self):
+        from devils_advocate.revision import _completeness_problems
+        plan = self._big_plan()
+        lossy = plan + "\n(Keep as-is)"
+        assert _completeness_problems(lossy, plan, "plan")
+
+    def test_code_comment_elision_caught(self):
+        from devils_advocate.revision import _completeness_problems
+        code = self._big_plan()
+        lossy = code + "\n// ... rest unchanged"
+        assert _completeness_problems(lossy, code, "code")
+
+    def test_prose_mentioning_unchanged_not_flagged(self):
+        from devils_advocate.revision import _completeness_problems
+        plan = self._big_plan()
+        revised = plan + "\nThe API contract remains unchanged because the fix is internal."
+        assert _completeness_problems(revised, plan, "plan") == []
+
+    def test_truncated_output_caught_by_ratio(self):
+        from devils_advocate.revision import _completeness_problems
+        plan = self._big_plan(400)
+        truncated = "\n".join(plan.splitlines()[:150])
+        problems = _completeness_problems(truncated, plan, "plan")
+        assert any("non-empty lines" in p for p in problems)
+
+    def test_tiny_original_skips_ratio_check(self):
+        from devils_advocate.revision import _completeness_problems
+        assert _completeness_problems("one line", "line a\nline b\nline c", "plan") == []
+
+    def test_ratio_measured_against_primary_artifact_only(self):
+        from devils_advocate.revision import _completeness_problems
+        plan = self._big_plan(100)
+        refs = "\n".join(f"ref line {i}" for i in range(2000))
+        original = (
+            "=== PRIMARY ARTIFACT (under review) ===\n"
+            f"{plan}\n"
+            "=== END PRIMARY ARTIFACT ===\n\n"
+            f"=== REFERENCE FILE: big.py ===\n{refs}\n=== END REFERENCE FILE: big.py ==="
+        )
+        # A full revision of just the plan must not trip the ratio check.
+        assert _completeness_problems(plan, original, "plan") == []
+
+    def test_integration_and_spec_modes_never_checked(self):
+        from devils_advocate.revision import _completeness_problems
+        plan = self._big_plan(400)
+        assert _completeness_problems("(unchanged)", plan, "integration") == []
+        assert _completeness_problems("(unchanged)", plan, "spec") == []
+
+
+class TestLossyRevisionRetry:
+    def _setup(self, tmp_path):
+        from devils_advocate.types import CostTracker
+        from devils_advocate.storage import StorageManager
+        storage = StorageManager(tmp_path, data_dir=tmp_path)
+        storage.set_review_id("rev-001")
+        return storage, CostTracker(), make_model_config(name="rev-model")
+
+    def _ledger(self):
+        return {"points": [
+            {"point_id": "p1", "group_id": "g1", "final_resolution": "auto_accepted",
+             "reviewer": "r1", "severity": "high", "description": "Fix this",
+             "recommendation": "Do it right"},
+        ]}
+
+    def _wrap(self, body):
+        return f"=== REVISED PLAN ===\n{body}\n=== END REVISED PLAN ==="
+
+    @pytest.mark.asyncio
+    async def test_lossy_first_attempt_retries_with_stern_prompt(self, tmp_path):
+        from devils_advocate.revision import run_revision, _STERN_RETRY_SUFFIX
+        storage, cost, model = self._setup(tmp_path)
+        original = "\n".join(f"Step {i}" for i in range(100))
+        lossy = self._wrap("Step 0 revised\n(Keep rest unchanged.)")
+        full = self._wrap(original)
+        usage = {"input_tokens": 100, "output_tokens": 50}
+
+        mock = AsyncMock(side_effect=[(lossy, usage), (full, usage)])
+        with patch("devils_advocate.revision.call_with_retry", mock):
+            result = await run_revision(
+                MagicMock(), model, original, self._ledger(), "plan",
+                cost, storage, "rev-001",
+            )
+        assert result == original
+        assert mock.call_count == 2
+        retry_prompt = mock.call_args_list[1].args[3]
+        assert _STERN_RETRY_SUFFIX in retry_prompt
+        assert _STERN_RETRY_SUFFIX not in mock.call_args_list[0].args[3]
+
+    @pytest.mark.asyncio
+    async def test_clean_first_attempt_does_not_retry(self, tmp_path):
+        from devils_advocate.revision import run_revision
+        storage, cost, model = self._setup(tmp_path)
+        original = "\n".join(f"Step {i}" for i in range(100))
+        full = self._wrap(original + "\nStep 100: new mitigation")
+        usage = {"input_tokens": 100, "output_tokens": 50}
+
+        mock = AsyncMock(return_value=(full, usage))
+        with patch("devils_advocate.revision.call_with_retry", mock):
+            result = await run_revision(
+                MagicMock(), model, original, self._ledger(), "plan",
+                cost, storage, "rev-001",
+            )
+        assert "Step 100" in result
+        assert mock.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_both_attempts_lossy_returns_best_with_warning(self, tmp_path):
+        from devils_advocate.revision import run_revision
+        storage, cost, model = self._setup(tmp_path)
+        original = "\n".join(f"Step {i}" for i in range(100))
+        short_lossy = self._wrap("(Keep rest unchanged.)")
+        longer_lossy = self._wrap("Step 0 revised\nStep 1\nStep 2\n(Keep rest unchanged.)")
+        usage = {"input_tokens": 100, "output_tokens": 50}
+
+        mock = AsyncMock(side_effect=[(short_lossy, usage), (longer_lossy, usage)])
+        with patch("devils_advocate.revision.call_with_retry", mock):
+            result = await run_revision(
+                MagicMock(), model, original, self._ledger(), "plan",
+                cost, storage, "rev-001",
+            )
+        assert mock.call_count == 2
+        assert "Step 0 revised" in result  # kept the longer attempt
+        log_text = (tmp_path / "logs" / "rev-001.log").read_text()
+        assert "INCOMPLETE after retry" in log_text
+
+    @pytest.mark.asyncio
+    async def test_both_raw_attempts_saved(self, tmp_path):
+        from devils_advocate.revision import run_revision
+        storage, cost, model = self._setup(tmp_path)
+        original = "\n".join(f"Step {i}" for i in range(100))
+        lossy = self._wrap("(Keep rest unchanged.)")
+        full = self._wrap(original)
+        usage = {"input_tokens": 100, "output_tokens": 50}
+
+        mock = AsyncMock(side_effect=[(lossy, usage), (full, usage)])
+        with patch("devils_advocate.revision.call_with_retry", mock):
+            await run_revision(
+                MagicMock(), model, original, self._ledger(), "plan",
+                cost, storage, "rev-001",
+            )
+        rev_dir = tmp_path / "reviews" / "rev-001" / "revision"
+        assert (rev_dir / "revision_raw.txt").exists()
+        assert (rev_dir / "revision_raw_retry.txt").exists()
+
+    @pytest.mark.asyncio
+    async def test_templates_carry_anti_elision_clause(self):
+        from devils_advocate.prompts import load_template
+        for name in ("revision-plan-instruct.txt", "revision-code-instruct.txt"):
+            text = load_template(name, revision_context="ctx")
+            assert "VERBATIM" in text
+            assert "STANDALONE REPLACEMENT" in text

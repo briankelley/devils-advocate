@@ -9,6 +9,13 @@ IGNORE findings marked DISMISSED or UNRESOLVED -- do not address them.
 Only make changes that directly address accepted findings.
 Preserve all other code exactly as-is.
 
+CRITICAL: your output is a COMPLETE STANDALONE REPLACEMENT for the original
+file. It will be written to disk as-is, with no access to the original.
+Reproduce every unaffected line VERBATIM. Never elide code with comments
+such as "// ... rest unchanged", "# unchanged", or "... existing code ...".
+If a function or section needs no changes, copy it out in full exactly as
+it appears above.
+
 {revision_context}
 
 Output the complete revised file wrapped in these exact delimiters:
