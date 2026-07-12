@@ -392,7 +392,8 @@ async def _run_adversarial_pipeline(
     # -- Round 1: Author response --
     console.print(
         Panel(
-            "[bold]Round 1:[/bold] Author responding to reviewer findings...",
+            f"[bold]Round 1:[/bold] Author responding to reviewer findings...\n"
+            f"Author: {author.name}",
             style="blue",
         )
     )
