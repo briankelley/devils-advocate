@@ -152,6 +152,11 @@
                             <span class="dim">use_completion_tokens: true</span>
                         </div>
                         {% endif %}
+                        {% if m.stream %}
+                        <div class="field-row">
+                            <span class="dim">stream: true</span>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </details>

@@ -42,6 +42,7 @@ def _make_model(
     timeout=120,
     use_completion_tokens=False,
     use_responses_api=False,
+    stream=False,
 ):
     """Build a ModelConfig for testing."""
     return ModelConfig(
@@ -54,6 +55,7 @@ def _make_model(
         timeout=timeout,
         use_completion_tokens=use_completion_tokens,
         use_responses_api=use_responses_api,
+        stream=stream,
     )
 
 
@@ -71,6 +73,16 @@ def _openai_response(text="Hello", prompt_tokens=100, completion_tokens=50):
         "choices": [{"message": {"content": text}}],
         "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens},
     }
+
+
+def _sse_body(*chunks, done=True):
+    """Serialize chat-completion chunk dicts into an SSE byte stream."""
+    import json as _json
+
+    lines = [f"data: {_json.dumps(c)}\n\n" for c in chunks]
+    if done:
+        lines.append("data: [DONE]\n\n")
+    return "".join(lines).encode()
 
 
 def _minimax_response(text="Hello", prompt_tokens=100, completion_tokens=50):
@@ -812,6 +824,204 @@ class TestCallOpenAICompatible:
                 await call_openai_compatible(client, model, "sys", "usr")
 
         assert route.called
+
+
+# ===========================================================================
+# call_openai_compatible — SSE streaming (stream: true)
+# ===========================================================================
+
+
+class TestCallOpenAICompatibleStreaming:
+    """Tests for the stream=True path — SSE chat completions."""
+
+    URL = "https://api.z.ai/api/paas/v4/chat/completions"
+
+    def _stream_model(self, **kwargs):
+        kwargs.setdefault("provider", "openai")
+        kwargs.setdefault("model_id", "glm-5.2")
+        kwargs.setdefault("api_base", "https://api.z.ai/api/paas/v4")
+        kwargs.setdefault("stream", True)
+        return _make_model(**kwargs)
+
+    async def test_deltas_accumulated_and_usage_from_final_chunk(self):
+        """Content deltas are concatenated; usage comes from the final chunk."""
+        body = _sse_body(
+            {"choices": [{"delta": {"content": "Hello"}}]},
+            {"choices": [{"delta": {"content": ", world"}}]},
+            {"choices": [{"delta": {}}]},
+            {"choices": [], "usage": {"prompt_tokens": 42, "completion_tokens": 7}},
+        )
+        model = self._stream_model()
+        with respx.mock:
+            respx.post(self.URL).mock(
+                return_value=httpx.Response(
+                    200, content=body, headers={"content-type": "text/event-stream"}
+                )
+            )
+            async with httpx.AsyncClient() as client:
+                text, usage = await call_openai_compatible(client, model, "sys", "usr")
+
+        assert text == "Hello, world"
+        assert usage == {"input_tokens": 42, "output_tokens": 7}
+
+    async def test_request_body_has_stream_flags(self):
+        """stream=True adds stream + stream_options to the request body."""
+        model = self._stream_model()
+        with respx.mock:
+            route = respx.post(self.URL).mock(
+                return_value=httpx.Response(
+                    200,
+                    content=_sse_body({"choices": [{"delta": {"content": "x"}}]}),
+                    headers={"content-type": "text/event-stream"},
+                )
+            )
+            async with httpx.AsyncClient() as client:
+                await call_openai_compatible(client, model, "sys", "usr", max_tokens=2048)
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert parsed["stream"] is True
+        assert parsed["stream_options"] == {"include_usage": True}
+        assert parsed["max_tokens"] == 2048
+
+    async def test_nonstream_model_body_has_no_stream_key(self):
+        """stream=False (default) sends a plain non-streaming request."""
+        model = self._stream_model(stream=False)
+        with respx.mock:
+            route = respx.post(self.URL).mock(
+                return_value=httpx.Response(200, json=_openai_response())
+            )
+            async with httpx.AsyncClient() as client:
+                await call_openai_compatible(client, model, "sys", "usr")
+
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert "stream" not in parsed
+        assert "stream_options" not in parsed
+
+    async def test_reasoning_content_deltas_skipped(self):
+        """delta.reasoning_content (CoT) never lands in the response text."""
+        body = _sse_body(
+            {"choices": [{"delta": {"reasoning_content": "thinking hard..."}}]},
+            {"choices": [{"delta": {"reasoning_content": "still thinking"}}]},
+            {"choices": [{"delta": {"content": "Answer"}}]},
+        )
+        model = self._stream_model()
+        with respx.mock:
+            respx.post(self.URL).mock(
+                return_value=httpx.Response(
+                    200, content=body, headers={"content-type": "text/event-stream"}
+                )
+            )
+            async with httpx.AsyncClient() as client:
+                text, _ = await call_openai_compatible(client, model, "sys", "usr")
+
+        assert text == "Answer"
+
+    async def test_done_sentinel_stops_consumption(self):
+        """Frames after [DONE] are ignored."""
+        import json as _json
+        body = (
+            _sse_body({"choices": [{"delta": {"content": "kept"}}]})
+            + f"data: {_json.dumps({'choices': [{'delta': {'content': ' dropped'}}]})}\n\n".encode()
+        )
+        model = self._stream_model()
+        with respx.mock:
+            respx.post(self.URL).mock(
+                return_value=httpx.Response(
+                    200, content=body, headers={"content-type": "text/event-stream"}
+                )
+            )
+            async with httpx.AsyncClient() as client:
+                text, _ = await call_openai_compatible(client, model, "sys", "usr")
+
+        assert text == "kept"
+
+    async def test_malformed_and_comment_lines_ignored(self):
+        """Keep-alive comments, blank lines, and bad JSON don't break parsing."""
+        body = (
+            b": keep-alive\n\n"
+            b"data: {not json}\n\n"
+            b"event: ping\n\n"
+            + _sse_body({"choices": [{"delta": {"content": "ok"}}]})
+        )
+        model = self._stream_model()
+        with respx.mock:
+            respx.post(self.URL).mock(
+                return_value=httpx.Response(
+                    200, content=body, headers={"content-type": "text/event-stream"}
+                )
+            )
+            async with httpx.AsyncClient() as client:
+                text, _ = await call_openai_compatible(client, model, "sys", "usr")
+
+        assert text == "ok"
+
+    async def test_missing_usage_chunk_yields_zero_tokens(self):
+        """A stream with no usage chunk reports zero token counts."""
+        body = _sse_body({"choices": [{"delta": {"content": "hi"}}]})
+        model = self._stream_model()
+        with respx.mock:
+            respx.post(self.URL).mock(
+                return_value=httpx.Response(
+                    200, content=body, headers={"content-type": "text/event-stream"}
+                )
+            )
+            async with httpx.AsyncClient() as client:
+                text, usage = await call_openai_compatible(client, model, "sys", "usr")
+
+        assert text == "hi"
+        assert usage == {"input_tokens": 0, "output_tokens": 0}
+
+    async def test_http_error_propagates_with_readable_body(self):
+        """HTTP errors raise HTTPStatusError with the body already read."""
+        model = self._stream_model()
+        with respx.mock:
+            respx.post(self.URL).mock(
+                return_value=httpx.Response(429, content=b'{"error": "rate limited"}')
+            )
+            async with httpx.AsyncClient() as client:
+                with pytest.raises(httpx.HTTPStatusError) as exc_info:
+                    await call_openai_compatible(client, model, "sys", "usr")
+
+        # The retry engine reads e.response.text — must not raise on a stream
+        assert "rate limited" in exc_info.value.response.text
+
+    async def test_wall_clock_timeout_becomes_read_timeout(self):
+        """Wall-clock expiry surfaces as httpx.ReadTimeout for the retry engine."""
+        model = self._stream_model(timeout=1)
+
+        async def _hang(request):
+            await asyncio.sleep(5)
+            return httpx.Response(200, content=b"")
+
+        with respx.mock:
+            respx.post(self.URL).mock(side_effect=_hang)
+            async with httpx.AsyncClient() as client:
+                with pytest.raises(httpx.ReadTimeout, match="wall clock"):
+                    await call_openai_compatible(client, model, "sys", "usr")
+
+    async def test_call_model_routes_streaming_openai_provider(self):
+        """call_model dispatch reaches the streaming path for stream=True models."""
+        body = _sse_body(
+            {"choices": [{"delta": {"content": "routed"}}]},
+            {"choices": [], "usage": {"prompt_tokens": 1, "completion_tokens": 2}},
+        )
+        model = self._stream_model()
+        with respx.mock:
+            route = respx.post(self.URL).mock(
+                return_value=httpx.Response(
+                    200, content=body, headers={"content-type": "text/event-stream"}
+                )
+            )
+            async with httpx.AsyncClient() as client:
+                text, usage = await call_model(client, model, "sys", "usr")
+
+        assert text == "routed"
+        assert usage["output_tokens"] == 2
+        import json
+        parsed = json.loads(route.calls.last.request.content)
+        assert parsed["stream"] is True
 
 
 # ===========================================================================

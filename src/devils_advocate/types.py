@@ -95,6 +95,7 @@ class ModelConfig:
     use_completion_tokens: bool = False
     use_responses_api: bool = False
     thinking: bool = False
+    stream: bool = False
 
     @property
     def api_key(self) -> str:

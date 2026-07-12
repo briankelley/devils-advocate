@@ -19,6 +19,11 @@
 # max_out_configured: Your cap for dvad. Prevents runaway generation and cost.
 #                     Must be <= max_out_stated. 16384 is a good default for
 #                     review roles; revision may need more for large artifacts.
+# stream:             Use SSE streaming for this model (OpenAI-compatible
+#                     providers only). Required for providers that buffer
+#                     non-streaming responses and drop the connection on long
+#                     generations (z.ai does) — without it those models fail
+#                     in long-output roles like revision.
 
 models:
 
@@ -448,6 +453,8 @@ models:
     max_out_configured: 16384
 
   # -- Z.ai (GLM) -------------------------------------------------------
+  # z.ai buffers non-streaming responses and drops the connection on long
+  # generations, so all z.ai models need stream: true.
 
   glm-5.1:
     provider: openai
@@ -455,6 +462,7 @@ models:
     api_key_env: ZAI_API_KEY
     api_base: https://api.z.ai/api/paas/v4
     thinking: false
+    stream: true
     context_window: 200000
     cost_per_1k_input: 0.0014
     cost_per_1k_output: 0.0044
@@ -468,6 +476,7 @@ models:
     api_key_env: ZAI_API_KEY
     api_base: https://api.z.ai/api/paas/v4
     thinking: false
+    stream: true
     context_window: 200000
     cost_per_1k_input: 0.0012
     cost_per_1k_output: 0.004
@@ -481,6 +490,7 @@ models:
     api_key_env: ZAI_API_KEY
     api_base: https://api.z.ai/api/paas/v4
     thinking: false
+    stream: true
     context_window: 200000
     cost_per_1k_input: 0.0006
     cost_per_1k_output: 0.0022
@@ -494,6 +504,7 @@ models:
     api_key_env: ZAI_API_KEY
     api_base: https://api.z.ai/api/paas/v4
     thinking: false
+    stream: true
     context_window: 200000
     cost_per_1k_input: 7.0e-05
     cost_per_1k_output: 0.0004
@@ -507,6 +518,7 @@ models:
     api_key_env: ZAI_API_KEY
     api_base: https://api.z.ai/api/paas/v4
     thinking: false
+    stream: true
     context_window: 128000
     cost_per_1k_input: 0.0002
     cost_per_1k_output: 0.0011
@@ -520,6 +532,7 @@ models:
     api_key_env: ZAI_API_KEY
     api_base: https://api.z.ai/api/paas/v4
     thinking: false
+    stream: true
     context_window: 200000
     cost_per_1k_input: 0.0
     cost_per_1k_output: 0.0

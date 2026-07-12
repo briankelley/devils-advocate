@@ -155,6 +155,7 @@ def load_config(path: Path | None = None) -> dict:
             use_completion_tokens=cfg.get("use_completion_tokens", False),
             use_responses_api=cfg.get("use_responses_api", False),
             thinking=cfg.get("thinking", False),
+            stream=cfg.get("stream", False),
         )
 
     # Assign roles from the top-level 'roles' block

@@ -7,6 +7,7 @@ and keep the dependency footprint minimal.
 from __future__ import annotations
 
 import asyncio
+import json
 import random
 import re
 
@@ -24,6 +25,10 @@ REVISION_MAX_OUTPUT_TOKENS = 64000
 DEFAULT_MAX_RETRIES = 3
 _529_MAX_RETRIES = 3
 _529_BUDGET_SECONDS = 30.0
+
+# Streaming: max seconds between chunks before the connection is considered
+# dead. model.timeout still bounds the whole call; this only bounds the gaps.
+_STREAM_READ_TIMEOUT = 180.0
 
 # Mode-dependent thinking budgets for Anthropic extended thinking
 _ANTHROPIC_THINKING_BUDGETS = {
@@ -192,18 +197,21 @@ async def call_openai_compatible(
         elif "moonshot" in base:
             body["thinking"] = {"type": "enabled"}
 
-    resp = await client.post(url, json=body, headers=headers, timeout=model.timeout)
-    resp.raise_for_status()
-    data = resp.json()
+    if model.stream:
+        text, usage = await _stream_chat_completions(client, model, url, headers, body)
+    else:
+        resp = await client.post(url, json=body, headers=headers, timeout=model.timeout)
+        resp.raise_for_status()
+        data = resp.json()
 
-    text = ""
-    choices = data.get("choices", [])
-    if choices:
-        msg = choices[0].get("message", {})
-        text = msg.get("content", "") or ""
-        # reasoning_content is internal CoT — never use as response text
+        text = ""
+        choices = data.get("choices", [])
+        if choices:
+            msg = choices[0].get("message", {})
+            text = msg.get("content", "") or ""
+            # reasoning_content is internal CoT — never use as response text
 
-    usage = data.get("usage") or {}
+        usage = data.get("usage") or {}
     output_tokens = usage.get("completion_tokens", 0)
 
     if not text and output_tokens > 0:
@@ -219,6 +227,63 @@ async def call_openai_compatible(
         "input_tokens": usage.get("prompt_tokens", 0),
         "output_tokens": output_tokens,
     }
+
+
+async def _stream_chat_completions(
+    client: httpx.AsyncClient,
+    model: ModelConfig,
+    url: str,
+    headers: dict,
+    body: dict,
+) -> tuple[str, dict]:
+    """Consume an OpenAI-compatible SSE stream. Returns (text, raw_usage_dict).
+
+    Some providers (z.ai) buffer non-streaming responses at the edge and drop
+    the connection before long generations finish; streaming keeps bytes
+    flowing from the first token. The httpx read timeout only bounds the gap
+    between chunks — the whole-call wall clock is enforced separately with
+    model.timeout so long generations survive as long as tokens keep arriving.
+    """
+    body = {**body, "stream": True, "stream_options": {"include_usage": True}}
+    timeout = httpx.Timeout(model.timeout, read=_STREAM_READ_TIMEOUT)
+    text_parts: list[str] = []
+    usage: dict = {}
+    try:
+        async with asyncio.timeout(model.timeout):
+            async with client.stream(
+                "POST", url, json=body, headers=headers, timeout=timeout
+            ) as resp:
+                if resp.status_code >= 400:
+                    # Body must be read before raise_for_status so the retry
+                    # engine can include it in the APIError message.
+                    await resp.aread()
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    payload = line[5:].strip()
+                    if payload == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    if chunk.get("usage"):
+                        usage = chunk["usage"]
+                    choices = chunk.get("choices") or []
+                    if choices:
+                        delta = choices[0].get("delta") or {}
+                        piece = delta.get("content")
+                        if piece:
+                            text_parts.append(piece)
+                        # delta.reasoning_content is internal CoT — never response text
+    except TimeoutError as e:
+        # Normalize the wall-clock expiry so the retry engine (which only
+        # catches httpx exceptions) handles it like any other timeout.
+        raise httpx.ReadTimeout(
+            f"streaming call exceeded {model.timeout}s wall clock"
+        ) from e
+    return "".join(text_parts), usage
 
 
 async def call_openai_responses(

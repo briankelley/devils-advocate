@@ -646,6 +646,7 @@ async def get_config_json(request: Request):
             "deduplication": m.deduplication,
             "integration_reviewer": m.integration_reviewer,
             "use_completion_tokens": m.use_completion_tokens,
+            "stream": m.stream,
         }
 
     return JSONResponse({
