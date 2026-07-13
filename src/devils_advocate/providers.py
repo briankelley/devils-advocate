@@ -258,25 +258,33 @@ async def _stream_chat_completions(
                     # engine can include it in the APIError message.
                     await resp.aread()
                 resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data:"):
-                        continue
-                    payload = line[5:].strip()
-                    if payload == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(payload)
-                    except json.JSONDecodeError:
-                        continue
-                    if chunk.get("usage"):
-                        usage = chunk["usage"]
-                    choices = chunk.get("choices") or []
-                    if choices:
-                        delta = choices[0].get("delta") or {}
-                        piece = delta.get("content")
-                        if piece:
-                            text_parts.append(piece)
-                        # delta.reasoning_content is internal CoT — never response text
+                lines = resp.aiter_lines()
+                try:
+                    async for line in lines:
+                        if not line.startswith("data:"):
+                            continue
+                        payload = line[5:].strip()
+                        if payload == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(payload)
+                        except json.JSONDecodeError:
+                            continue
+                        if chunk.get("usage"):
+                            usage = chunk["usage"]
+                        choices = chunk.get("choices") or []
+                        if choices:
+                            delta = choices[0].get("delta") or {}
+                            piece = delta.get("content")
+                            if piece:
+                                text_parts.append(piece)
+                            # delta.reasoning_content is internal CoT — never response text
+                finally:
+                    # Breaking out at [DONE] leaves the generator suspended;
+                    # without an explicit aclose() the GC-time finalizer task
+                    # can outlive the event loop ("Task was destroyed but it
+                    # is pending!").
+                    await lines.aclose()
     except TimeoutError as e:
         # Normalize the wall-clock expiry so the retry engine (which only
         # catches httpx exceptions) handles it like any other timeout.

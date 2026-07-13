@@ -191,6 +191,12 @@ def review(mode, input_path, spec_path, project, max_cost, dry_run, config_path,
         console.print(f"\n[red]Aborted:[/red] {e}")
         sys.exit(1)
     finally:
+        # Finalize any lingering async generators (e.g. abandoned SSE line
+        # iterators) before closing, as asyncio.run() would.
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:
+            pass
         loop.close()
 
 
@@ -667,6 +673,10 @@ def revise(project, review_id, config_path, project_dir, max_cost, input_overrid
         console.print(f"[yellow]Warning: Revision failed: {e}[/yellow]")
         storage.log(f"Revision command failed (non-fatal): {e}")
     finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:
+            pass
         loop.close()
 
 
