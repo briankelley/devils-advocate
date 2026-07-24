@@ -96,7 +96,11 @@
                 <summary class="model-card-header" onclick="event.preventDefault()">
                     <span class="model-name" onclick="this.closest('details').toggleAttribute('open')">{{ name }}{% if m.enabled is defined and not m.enabled %} <span class="disabled-badge">disabled</span>{% endif %}</span>
                     {% set tier = model_cost_tiers.get(name, 1) %}
+                    {% if tier == 'sub' %}
+                    <span class="cost-tier cost-tier-sub" title="Covered by your subscription">SUB</span>
+                    {% else %}
                     <span class="cost-tier cost-tier-{{ tier }}" title="Cost tier {{ tier }}/5">{{ '$' * tier }}</span>
+                    {% endif %}
                     <span class="model-role-icons">
                         <span class="role-icon{% if roles.get('author') == name %} role-active{% endif %}" data-role="author" data-model="{{ name }}" title="Author{% if roles.get('author') == name %} (assigned){% endif %}"><i data-lucide="pen-tool"></i></span>
                         <span class="role-icon{% if name in (roles.get('reviewers') or []) %} role-active{% endif %}" data-role="reviewer" data-model="{{ name }}" title="Reviewer{% if name in (roles.get('reviewers') or []) %} (assigned){% endif %}"><i data-lucide="scan-eye"></i></span>
@@ -188,6 +192,26 @@
                 </div>
             </div>
 
+            <h2>Subscription Backends</h2>
+            <div class="subscription-section" id="subscription-section">
+                <p class="dim" style="margin-bottom: var(--pad-sm);">
+                    Run the judgment roles through your own Claude Max or ChatGPT
+                    subscription using each vendor's official CLI. dvad never sees or
+                    stores your sign-in &mdash; authentication lives entirely with the CLIs.
+                </p>
+                <div class="field-row" style="margin-bottom: var(--pad-sm);">
+                    <span class="field-label">Use subscription backends:</span>
+                    <span class="settings-toggle{% if settings.get('subscription_backend') %} settings-on{% endif %}"
+                          data-key="subscription_backend">{{ 'enabled' if settings.get('subscription_backend') else 'disabled' }}</span>
+                    <span class="dim" style="margin-left:8px">When off, every role is billed through the API keys above &mdash; exactly as before.</span>
+                </div>
+                <div id="subscription-lanes">
+                    <p class="dim">Loading&hellip;</p>
+                </div>
+                <div id="subscription-provision"></div>
+                <div id="subscription-test-status" style="margin-top: var(--pad-sm)"></div>
+            </div>
+
             <h2>Validation</h2>
             <div class="validation-result" id="validation-result">
                 {% if issues %}
@@ -200,7 +224,7 @@
             </div>
             <h2 style="margin-top:12px">Role Assignments</h2>
             <div class="role-summary" id="role-summary">
-                {% set role_keys = ['author', 'reviewer1', 'reviewer2', 'dedup', 'normalization', 'revision', 'integration'] %}
+                {% set role_keys = ['author', 'reviewer1', 'reviewer2', 'reviewer3', 'dedup', 'normalization', 'revision', 'integration'] %}
                 {% for r in role_assignments %}
                 <div class="role-summary-row" data-role-key="{{ role_keys[loop.index0] }}">
                     <span class="role-summary-icon {{ 'icon-active' if r.model }}"><i data-lucide="{{ r.icon }}"></i></span>
@@ -219,7 +243,7 @@
                     <summary class="dim">What do these roles do?</summary>
                     <div class="role-desc-list">
                         <div><strong>Author:</strong> Generates initial responses to reviewer findings and produces revised artifacts</div>
-                        <div><strong>Reviewer (x2):</strong> Independently analyzes input for issues, risks, and improvements</div>
+                        <div><strong>Reviewer (up to x3):</strong> Independently analyzes input for issues, risks, and improvements</div>
                         <div><strong>Dedup:</strong> Consolidates overlapping findings from multiple reviewers into groups</div>
                         <div><strong>Normalization:</strong> Standardizes severity levels and categories across grouped findings</div>
                         <div><strong>Revision:</strong> Creates the final revised artifact incorporating accepted feedback</div>

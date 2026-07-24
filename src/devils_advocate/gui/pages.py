@@ -30,10 +30,13 @@ def _find_dvad_binary() -> str:
     return "(not found in PATH)"
 
 
-def _build_role_display_entries(config_path: str | None) -> tuple[list[dict], dict]:
+def _build_role_display_entries(config_path: str | None, reviewer_slots: int = 2) -> tuple[list[dict], dict]:
     """Build role assignments from raw YAML — single source of truth for both pages.
 
-    Returns (role_assignments list, model_thinking dict).
+    ``reviewer_slots`` is how many reviewer rows to render: the config page passes
+    3 (the assignable ceiling) so all slots are clickable; the dashboard sidebar
+    keeps its compact 2-row glance. Returns (role_assignments list,
+    model_thinking dict).
     """
     from ..config import load_config, find_config
     import yaml
@@ -62,15 +65,18 @@ def _build_role_display_entries(config_path: str | None) -> tuple[list[dict], di
             "thinking": model_thinking.get(model_name, False) if model_name else False,
         }
 
-    role_assignments = [
-        _entry("Author", "pen-tool", roles.get("author")),
-        _entry("Reviewer 1", "scan-eye", reviewers[0] if len(reviewers) > 0 else None),
-        _entry("Reviewer 2", "scan-eye", reviewers[1] if len(reviewers) > 1 else None),
+    role_assignments = [_entry("Author", "pen-tool", roles.get("author"))]
+    for i in range(reviewer_slots):
+        role_assignments.append(
+            _entry(f"Reviewer {i + 1}", "scan-eye",
+                   reviewers[i] if len(reviewers) > i else None)
+        )
+    role_assignments.extend([
         _entry("Dedup", "combine", roles.get("deduplication")),
         _entry("Normalization", "scale", roles.get("normalization")),
         _entry("Revision", "file-pen", roles.get("revision")),
         _entry("Integration", "puzzle", roles.get("integration_reviewer")),
-    ]
+    ])
 
     return role_assignments, model_thinking
 
@@ -239,10 +245,32 @@ def _compute_elapsed_time(log_path: Path) -> str | None:
     return None
 
 
-def _build_role_cost_rows(ledger: dict, normalization_model: str, revision_model: str, integration_model: str) -> list[tuple[str, str, float]]:
-    """Build per-role cost rows for the completed cost table."""
+def _role_equivalents(ledger: dict) -> dict[str, float]:
+    """Sum each role's API-equivalent (subscription pool) cost from the ledger.
+
+    Keyed by the same role names the cost tracker used (``author``,
+    ``reviewer_1``, \u2026). Empty for runs with no pool legs \u2014 the completed table
+    then renders exactly as before.
+    """
+    equiv: dict[str, float] = {}
+    for e in ledger.get("cost", {}).get("entries", []) or []:
+        role = e.get("role")
+        api_equiv = e.get("api_equivalent")
+        if role and api_equiv:
+            equiv[role] = equiv.get(role, 0.0) + api_equiv
+    return equiv
+
+
+def _build_role_cost_rows(ledger: dict, normalization_model: str, revision_model: str, integration_model: str) -> list[tuple[str, str, float, float | None]]:
+    """Build per-role cost rows for the completed cost table.
+
+    Each row is ``(role_label, model, cost, api_equivalent)``; the fourth element
+    is the subscription-covered API-equivalent for that role, or ``None`` when
+    the role drew no pool leg.
+    """
     role_costs = ledger.get("cost", {}).get("role_costs", {})
-    role_cost_rows: list[tuple[str, str, float]] = []
+    role_equiv = _role_equivalents(ledger)
+    role_cost_rows: list[tuple[str, str, float, float | None]] = []
     result_type = ledger.get("result", "success")
     no_cost_results = ("dry_run", "cost_exceeded", "cost_aborted", "failed")
 
@@ -250,34 +278,34 @@ def _build_role_cost_rows(ledger: dict, normalization_model: str, revision_model
         ra = ledger.get("role_assignments", {})
         if ra:
             if ra.get("author"):
-                role_cost_rows.append(("author", ra["author"], 0.0))
+                role_cost_rows.append(("author", ra["author"], 0.0, None))
             for i, rv in enumerate(ra.get("reviewers", []), 1):
                 label = f"reviewer {i}" if len(ra.get("reviewers", [])) > 1 else "reviewer"
-                role_cost_rows.append((label, rv, 0.0))
+                role_cost_rows.append((label, rv, 0.0, None))
             if ra.get("dedup"):
-                role_cost_rows.append(("dedup", ra["dedup"], 0.0))
+                role_cost_rows.append(("dedup", ra["dedup"], 0.0, None))
             if ra.get("normalization"):
-                role_cost_rows.append(("normalization", ra["normalization"], 0.0))
+                role_cost_rows.append(("normalization", ra["normalization"], 0.0, None))
             if ra.get("revision"):
-                role_cost_rows.append(("revision", ra["revision"], 0.0))
+                role_cost_rows.append(("revision", ra["revision"], 0.0, None))
             if ra.get("integration"):
-                role_cost_rows.append(("integration", ra["integration"], 0.0))
+                role_cost_rows.append(("integration", ra["integration"], 0.0, None))
     else:
         if ledger.get("author_model"):
-            role_cost_rows.append(("author", ledger["author_model"], role_costs.get("author", 0.0)))
+            role_cost_rows.append(("author", ledger["author_model"], role_costs.get("author", 0.0), role_equiv.get("author")))
         reviewer_models = ledger.get("reviewer_models", [])
         for i, rv in enumerate(reviewer_models, 1):
             role_key = f"reviewer_{i}"
             label = f"reviewer {i}" if len(reviewer_models) > 1 else "reviewer"
-            role_cost_rows.append((label, rv, role_costs.get(role_key, 0.0)))
+            role_cost_rows.append((label, rv, role_costs.get(role_key, 0.0), role_equiv.get(role_key)))
         if ledger.get("dedup_model"):
-            role_cost_rows.append(("dedup", ledger["dedup_model"], role_costs.get("dedup", 0.0)))
+            role_cost_rows.append(("dedup", ledger["dedup_model"], role_costs.get("dedup", 0.0), role_equiv.get("dedup")))
         if normalization_model != "\u2014":
-            role_cost_rows.append(("normalization", normalization_model, role_costs.get("normalization", 0.0)))
+            role_cost_rows.append(("normalization", normalization_model, role_costs.get("normalization", 0.0), role_equiv.get("normalization")))
         if revision_model != "\u2014":
-            role_cost_rows.append(("revision", revision_model, role_costs.get("revision", 0.0)))
+            role_cost_rows.append(("revision", revision_model, role_costs.get("revision", 0.0), role_equiv.get("revision")))
         if integration_model != "\u2014":
-            role_cost_rows.append(("integration", integration_model, role_costs.get("integration", 0.0)))
+            role_cost_rows.append(("integration", integration_model, role_costs.get("integration", 0.0), role_equiv.get("integration")))
 
     return role_cost_rows
 
@@ -387,6 +415,7 @@ async def review_detail(request: Request, review_id: str):
     # Build per-role cost rows for the completed cost table
     role_cost_rows = _build_role_cost_rows(ledger, normalization_model, revision_model, integration_model)
     total_cost = ledger.get("cost", {}).get("total_usd", 0.0)
+    total_api_equivalent = ledger.get("cost", {}).get("total_api_equivalent_usd", 0.0)
 
     # Cost estimate rows (for dry_run details page)
     cost_estimate_rows = ledger.get("cost_estimate_rows", [])
@@ -412,6 +441,7 @@ async def review_detail(request: Request, review_id: str):
         "review_mode": ledger.get("mode", "plan"),
         "role_cost_rows": role_cost_rows,
         "total_cost": total_cost,
+        "total_api_equivalent": total_api_equivalent,
         "input_files_manifest": input_files_manifest,
         "cost_estimate_rows": cost_estimate_rows,
         "elapsed_str": elapsed_str,
@@ -449,23 +479,36 @@ def _infer_vendor(model) -> str:
     return provider.title()
 
 
-def _compute_cost_tiers(all_models) -> dict[str, int]:
-    """Assign cost tier 0-5 to each model via quintile bucketing on blended cost.
+def _compute_cost_tiers(all_models) -> dict[str, object]:
+    """Assign cost tier to each model via quintile bucketing on blended cost.
 
     Tier 0 = FREE (zero cost), tiers 1-5 = quintile buckets of non-zero costs.
+    A CLI-lane model (a subscription provider) gets the string ``"sub"`` instead
+    of a numeric tier — it bills $0 to the API but is covered by a subscription,
+    so its badge reads SUB rather than an empty ``$`` dead-end.
     """
+    from ..cli_providers import CLI_LANE_PROVIDERS
+
     costs: list[tuple[str, float]] = []
+    sub_models: set[str] = set()
     for name, m in all_models.items():
+        if getattr(m, "provider", "") in CLI_LANE_PROVIDERS:
+            sub_models.add(name)
         inp = getattr(m, "cost_per_1k_input", 0) or 0
         out = getattr(m, "cost_per_1k_output", 0) or 0
         blended = (inp + out) / 2
         costs.append((name, blended))
 
-    tiers: dict[str, int] = {}
-    non_zero = sorted([(n, c) for n, c in costs if c > 0], key=lambda x: x[1])
+    tiers: dict[str, object] = {}
+    non_zero = sorted(
+        [(n, c) for n, c in costs if c > 0 and n not in sub_models],
+        key=lambda x: x[1],
+    )
 
+    for name in sub_models:
+        tiers[name] = "sub"
     for name, c in costs:
-        if c <= 0:
+        if c <= 0 and name not in sub_models:
             tiers[name] = 0
 
     if not non_zero:
@@ -501,7 +544,7 @@ async def config_page(request: Request):
         roles_block = raw.get("roles", {})
         settings_block = raw.get("settings", {})
         role_assignments, model_thinking = await asyncio.to_thread(
-            _build_role_display_entries, request.app.state.config_path
+            _build_role_display_entries, request.app.state.config_path, 3
         )
 
         # Build initial_role_state for JS pendingState initialization
@@ -511,6 +554,7 @@ async def config_page(request: Request):
                 "author": roles_block.get("author") or None,
                 "reviewer1": reviewers_list[0] if len(reviewers_list) > 0 else None,
                 "reviewer2": reviewers_list[1] if len(reviewers_list) > 1 else None,
+                "reviewer3": reviewers_list[2] if len(reviewers_list) > 2 else None,
                 "dedup": roles_block.get("deduplication") or None,
                 "normalization": roles_block.get("normalization") or None,
                 "revision": roles_block.get("revision") or None,

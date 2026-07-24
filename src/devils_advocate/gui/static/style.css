@@ -1458,6 +1458,33 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
     margin-left: auto;
     margin-right: 20px;
 }
+/* Subscription (CLI-lane) cards: $0 to the API, covered by a plan. */
+.cost-tier-sub {
+    color: var(--green);
+    font-size: 10px;
+    letter-spacing: 0;
+}
+
+/* ── Subscription Backends section ────────────────────────────────── */
+
+.subscription-lane-row {
+    display: flex;
+    align-items: center;
+    gap: var(--pad-sm);
+    padding: var(--pad-xs) 0;
+    font-size: 11px;
+}
+.subscription-lane-label {
+    min-width: 110px;
+    font-weight: 600;
+    color: var(--text);
+}
+.subscription-provision-row {
+    margin-top: var(--pad-sm);
+    display: flex;
+    align-items: center;
+}
+.key-unknown { color: var(--text-dim); }
 
 /* ── Local Model Card ─────────────────────────────────────────────── */
 

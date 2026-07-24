@@ -104,6 +104,27 @@ Escalated findings are resolved through the GUI's override controls or `dvad ove
 
 **spec** is non-adversarial - no author, no rebuttals, no governance. Findings are grouped by theme and compiled into a suggestion report. All other modes use the full 2-round adversarial protocol.
 
+## Subscription backends
+
+If you already pay for **Claude Max** or a **ChatGPT** plan, dvad can route the expensive review roles (reviewers, author, integration) through those subscriptions instead of your metered API keys — using each vendor's official CLI (`claude` and `codex`) in its documented headless mode.
+
+**What it costs.** Nothing beyond the plans you already have. Subscription legs draw on the plans' own usage limits and bill $0 to the API; every run surface shows the API-equivalent ("covered by subscription ≈ $X") so a $0.19 run that would have cost $15 reads as the win it is. When a pool is exhausted, the call **falls back per leg** to the API twin you configured — a run never dies, it just costs money for that leg and says so in the ledger.
+
+**What dvad never does.** dvad never sees, stores, or forwards your subscription credentials. Sign-in lives entirely with the vendor CLIs; dvad only spawns them and reads their output. The API-keys section holds keys; the subscription section holds none.
+
+**How to enable.**
+
+1. Install and sign in to either CLI (`claude` → `claude auth login`; `codex` → `codex login`).
+2. Open the GUI config page → **Subscription Backends** → **Add subscription models**. This creates `-sub` model entries wired to fall back to your existing API models (your `models.yaml` is backed up first).
+3. Assign those `-sub` models to roles with the role icons, exactly as you would any model.
+4. Flip **Use subscription backends** on.
+
+The `models.yaml` equivalent is a `provider: claude-cli` / `provider: codex-cli` entry per lane (each with a `failover_model` naming an enabled API twin) plus `settings.subscription_backend: true` — see `examples/models.yaml.example`.
+
+**Honest caveats.** Usage-limit windows are real — when a pool is spent, that leg falls back to the API. On very large inputs the codex lane tends to report fewer minor findings than its API twin; if you want the fullest tail, keep one API reviewer in your roster. When the switch is **off**, dvad behaves exactly as before, byte for byte.
+
+**Platform.** Linux and macOS (the tested surface). The lanes follow dvad's existing XDG / `DVAD_HOME` path conventions.
+
 ## CLI Quick Start
 
 ```bash

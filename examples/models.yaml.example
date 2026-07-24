@@ -355,6 +355,43 @@ models:
     cost_per_1k_output: 0.0024
     timeout: 300
 
+  # ── Subscription backends (optional) ─────────────────────────────────
+  # Route the expensive review roles through your own Claude Max or ChatGPT
+  # subscription via the official `claude` / `codex` CLIs (see the README's
+  # "Subscription backends" section). These entries bill $0 to the API and fall
+  # back per call to their `failover_model` API twin when a pool is exhausted.
+  # The GUI config page can create these for you (Add subscription models).
+  # Uncomment and adjust to match your own model entry names.
+  #
+  # claude-opus-4-8-sub:
+  #   provider: claude-cli          # drives `claude -p` (Claude Max)
+  #   model_id: claude-opus-4-8
+  #   api_key_env: ''               # no key — auth lives in the claude CLI
+  #   thinking: false               # the CLI applies its own adaptive thinking
+  #   context_window: 1000000
+  #   cost_per_1k_input: 0
+  #   cost_per_1k_output: 0
+  #   timeout: 1200
+  #   max_out_stated: 128000
+  #   max_out_configured: 60000
+  #   failover_model: claude-opus-4-6   # an enabled non-CLI entry to fall back to
+  #   extra: {api_twin: claude-opus-4-6}  # its rates price the API-equivalent
+  #
+  # gpt-5.5-sub:
+  #   provider: codex-cli           # drives `codex exec` (ChatGPT)
+  #   model_id: gpt-5.5
+  #   api_key_env: ''
+  #   thinking: false
+  #   context_window: 400000
+  #   cost_per_1k_input: 0
+  #   cost_per_1k_output: 0
+  #   timeout: 1200
+  #   max_out_stated: 128000
+  #   max_out_configured: 60000
+  #   failover_model: gpt-5.2       # an enabled non-CLI entry to fall back to
+  #   extra: {api_twin: gpt-5.2}
+  #   min_points_hint: 20           # optional completeness floor for reviewers
+
 # ── Role Assignments ──────────────────────────────────────────────────
 # Assign models from above to pipeline roles.
 # You only need models you have API keys for.
@@ -372,3 +409,10 @@ roles:
   normalization:
   revision:
   integration_reviewer:
+
+# ── Settings ──────────────────────────────────────────────────────────
+settings:
+  # Master switch for the subscription backends above. When false (the default),
+  # every role is billed through your API keys — exactly as if this feature did
+  # not exist. See the README's "Subscription backends" section to enable it.
+  subscription_backend: false

@@ -65,6 +65,7 @@ const dvad = {
         this.initMaxTokenEditing();
         this.initSettingsToggle();
         this.initEnvKeys();
+        this.initSubscription();
     },
 
     // ── New Review Form (Dashboard) ─────────────────────────────────
@@ -527,6 +528,8 @@ const dvad = {
     },
 
     _roleCosts: {},
+    _roleEquiv: {},
+    _totalEquiv: 0,
 
     _handleCostUpdate(detail) {
         if (!detail) return;
@@ -536,13 +539,46 @@ const dvad = {
         // Accumulate per-role cost
         this._roleCosts[role] = (this._roleCosts[role] || 0) + callCost;
 
+        // Pool (subscription) legs bill $0 but carry an API-equivalent; show it
+        // so a $0 row reads as "covered", not a display bug.
+        const isPool = detail.channel === 'pool';
+        const equiv = parseFloat(detail.equiv) || 0;
+        if (isPool && equiv > 0) {
+            this._roleEquiv[role] = (this._roleEquiv[role] || 0) + equiv;
+            this._totalEquiv += equiv;
+        }
+
         const costEl = document.getElementById('cost-' + role);
         if (costEl) {
-            costEl.textContent = '$' + this._roleCosts[role].toFixed(6);
+            let html = '$' + this._roleCosts[role].toFixed(6);
+            if (this._roleEquiv[role]) {
+                html += ` <span class="dim">· pool ≈ $${this._roleEquiv[role].toFixed(2)}</span>`;
+            }
+            costEl.innerHTML = html;
         }
         const totalEl = document.getElementById('cost-total');
         if (totalEl) {
             totalEl.textContent = '$' + parseFloat(detail.total).toFixed(6);
+        }
+
+        // A covered-by line under the total, present only once a pool leg exists.
+        if (this._totalEquiv > 0) {
+            let covered = document.getElementById('cost-covered');
+            if (!covered) {
+                const table = document.getElementById('live-cost-table');
+                if (table) {
+                    const rowDiv = document.createElement('div');
+                    rowDiv.className = 'cost-row';
+                    rowDiv.innerHTML = '<span class="cost-role"></span>' +
+                        '<span class="cost-model"></span>' +
+                        '<span class="cost-value dim" id="cost-covered"></span>';
+                    table.appendChild(rowDiv);
+                    covered = document.getElementById('cost-covered');
+                }
+            }
+            if (covered) {
+                covered.textContent = `covered by subscriptions: ≈ $${this._totalEquiv.toFixed(2)}`;
+            }
         }
     },
 
@@ -944,6 +980,183 @@ const dvad = {
                 }
             });
         });
+    },
+
+    // ── Subscription Backends (Config Page, design D5) ───────────────
+
+    initSubscription() {
+        const section = document.getElementById('subscription-section');
+        if (!section) return;
+        this._loadSubscriptionStatus();
+    },
+
+    _loadSubscriptionStatus() {
+        fetch('/api/config/subscription/status')
+            .then(resp => {
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                return resp.json();
+            })
+            .then(data => this._renderSubscription(data))
+            .catch(err => {
+                const list = document.getElementById('subscription-lanes');
+                if (list) list.innerHTML = `<p class="dim">Failed to load lane status: ${err.message}</p>`;
+            });
+    },
+
+    _renderSubscription(data) {
+        const list = document.getElementById('subscription-lanes');
+        if (list) {
+            list.innerHTML = '';
+            (data.lanes || []).forEach(lane => this._renderLaneRow(list, lane));
+        }
+
+        // Provision row: shown only when no CLI-provider entries exist yet.
+        const prov = document.getElementById('subscription-provision');
+        if (prov) {
+            prov.innerHTML = '';
+            if (!data.has_cli_entries) {
+                const row = document.createElement('div');
+                row.className = 'subscription-provision-row';
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm';
+                btn.textContent = 'Add subscription models';
+                btn.addEventListener('click', () => this._provisionSubscription(btn));
+                row.appendChild(btn);
+
+                const help = document.createElement('span');
+                help.className = 'dim';
+                help.style.marginLeft = '8px';
+                help.textContent = 'Creates claude-fable-5-sub, claude-opus-4-8-sub, and gpt-5.5-sub entries wired to fall back to your API models. Your models.yaml is backed up first.';
+                row.appendChild(help);
+
+                prov.appendChild(row);
+            }
+        }
+    },
+
+    _renderLaneRow(container, lane) {
+        const row = document.createElement('div');
+        row.className = 'subscription-lane-row';
+        row.id = `sub-lane-${lane.lane}`;
+
+        const label = document.createElement('span');
+        label.className = 'subscription-lane-label';
+        label.textContent = lane.label;
+        row.appendChild(label);
+
+        // Binary state badge.
+        const bin = document.createElement('span');
+        bin.className = 'key-status ' + (lane.found ? 'key-set' : 'key-missing');
+        bin.textContent = lane.found
+            ? `found${lane.version ? ' v' + lane.version : ''}`
+            : 'not found';
+        row.appendChild(bin);
+
+        // Sign-in state badge (only meaningful when the binary is present).
+        if (lane.found) {
+            const signin = lane.signin || {};
+            const sb = document.createElement('span');
+            sb.className = 'key-status';
+            if (signin.state === 'signed_in') {
+                sb.classList.add('key-set');
+                sb.textContent = signin.detail || 'signed in';
+            } else if (signin.state === 'signed_out') {
+                sb.classList.add('key-missing');
+                sb.textContent = signin.detail || 'not signed in';
+            } else {
+                sb.classList.add('key-unknown');
+                sb.textContent = signin.detail || 'sign-in unknown — use Test';
+            }
+            row.appendChild(sb);
+
+            const testBtn = document.createElement('button');
+            testBtn.type = 'button';
+            testBtn.className = 'btn btn-sm btn-accent';
+            testBtn.textContent = 'Test';
+            testBtn.title = 'Sends one tiny request through your subscription.';
+            testBtn.addEventListener('click', () => this._testLane(lane.lane, testBtn));
+            row.appendChild(testBtn);
+        } else {
+            const help = document.createElement('span');
+            help.className = 'dim';
+            help.style.marginLeft = '8px';
+            help.textContent = `Install the ${lane.vendor} CLI and sign in to enable this lane.`;
+            row.appendChild(help);
+
+            // No dead controls: a disabled Test when the binary is absent.
+            const testBtn = document.createElement('button');
+            testBtn.type = 'button';
+            testBtn.className = 'btn btn-sm btn-disabled';
+            testBtn.textContent = 'Test';
+            testBtn.disabled = true;
+            row.appendChild(testBtn);
+        }
+
+        container.appendChild(row);
+    },
+
+    async _testLane(lane, btn) {
+        const status = document.getElementById('subscription-test-status');
+        const prevText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Testing…';
+        if (status) status.innerHTML = '';
+
+        try {
+            const resp = await fetch(`/api/config/subscription/test/${encodeURIComponent(lane)}`, {
+                method: 'POST',
+                headers: { 'X-DVAD-Token': this.getToken() },
+            });
+            const data = await resp.json();
+            const badge = document.createElement('span');
+            badge.className = 'badge';
+            if (resp.ok && data.ok) {
+                badge.classList.add('badge-low');
+                badge.textContent = 'test passed — response received through your subscription (≈$0 billed)';
+            } else {
+                badge.classList.add('badge-critical');
+                badge.textContent = (data.detail || data.error || 'test failed').slice(0, 300);
+            }
+            if (status) status.appendChild(badge);
+        } catch (err) {
+            if (status) {
+                const badge = document.createElement('span');
+                badge.className = 'badge badge-critical';
+                badge.textContent = `test failed: ${err.message}`;
+                status.appendChild(badge);
+            }
+        } finally {
+            btn.disabled = false;
+            btn.textContent = prevText;
+        }
+    },
+
+    async _provisionSubscription(btn) {
+        btn.disabled = true;
+        const prevText = btn.textContent;
+        btn.textContent = 'Adding…';
+        try {
+            const resp = await fetch('/api/config/subscription/provision', {
+                method: 'POST',
+                headers: { 'X-DVAD-Token': this.getToken() },
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                // New cards + role icons appear on reload; roles stay the user's
+                // explicit act via the icons (no auto-assignment).
+                window.location.reload();
+            } else {
+                alert(data.detail || 'Provision failed');
+                btn.disabled = false;
+                btn.textContent = prevText;
+            }
+        } catch (err) {
+            alert('Network error: ' + err.message);
+            btn.disabled = false;
+            btn.textContent = prevText;
+        }
     },
 
     // ── API Key Management ───────────────────────────────────────────
@@ -1404,6 +1617,7 @@ const dvad = {
         author: 'author',
         reviewer1: 'reviewer',
         reviewer2: 'reviewer',
+        reviewer3: 'reviewer',
         dedup: 'deduplication',
         normalization: 'normalization',
         revision: 'revision',
@@ -1447,24 +1661,24 @@ const dvad = {
         const roles = this._pendingState.roles;
 
         if (dataRole === 'reviewer') {
-            // Reviewer logic: ceiling = 2
-            if (roles.reviewer1 === model) {
-                // Unassign reviewer1, compact
-                roles.reviewer1 = roles.reviewer2;
-                roles.reviewer2 = null;
+            // Reviewer logic: ceiling = 3, compacting on unassign.
+            const slots = ['reviewer1', 'reviewer2', 'reviewer3'];
+            const idx = slots.findIndex(s => roles[s] === model);
+            if (idx !== -1) {
+                // Unassign this model and compact the remaining reviewers up.
+                const remaining = slots
+                    .map(s => roles[s])
+                    .filter((m, i) => m && i !== idx);
+                slots.forEach((s, i) => { roles[s] = remaining[i] || null; });
                 this._clearThinkingIfOrphaned(model);
-            } else if (roles.reviewer2 === model) {
-                // Unassign reviewer2
-                roles.reviewer2 = null;
-                this._clearThinkingIfOrphaned(model);
-            } else if (!roles.reviewer1) {
-                roles.reviewer1 = model;
-                this._pendingState.thinking[model] = this._pendingState.thinking[model] || false;
-            } else if (!roles.reviewer2) {
-                roles.reviewer2 = model;
-                this._pendingState.thinking[model] = this._pendingState.thinking[model] || false;
+            } else {
+                // Assign into the first open slot; no-op if all full.
+                const open = slots.find(s => !roles[s]);
+                if (open) {
+                    roles[open] = model;
+                    this._pendingState.thinking[model] = this._pendingState.thinking[model] || false;
+                }
             }
-            // else: both slots full, no-op
         } else {
             // Singular role: map data-role to role key
             const roleKey = this._dataRoleToKey(dataRole);
@@ -1507,8 +1721,8 @@ const dvad = {
     _modelHasRole(model) {
         const r = this._pendingState.roles;
         return r.author === model || r.reviewer1 === model || r.reviewer2 === model ||
-            r.dedup === model || r.normalization === model || r.revision === model ||
-            r.integration === model;
+            r.reviewer3 === model || r.dedup === model || r.normalization === model ||
+            r.revision === model || r.integration === model;
     },
 
     _clearThinkingIfOrphaned(model) {
@@ -1528,7 +1742,8 @@ const dvad = {
             let isActive = false;
 
             if (dataRole === 'reviewer') {
-                isActive = roles.reviewer1 === model || roles.reviewer2 === model;
+                isActive = roles.reviewer1 === model || roles.reviewer2 === model ||
+                    roles.reviewer3 === model;
             } else {
                 const roleKey = this._dataRoleToKey(dataRole);
                 if (roleKey) isActive = roles[roleKey] === model;

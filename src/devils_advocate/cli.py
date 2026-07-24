@@ -442,6 +442,21 @@ def config_cmd(show, do_init, config_path):
         )
     console.print(table)
 
+    # Subscription backends line (one line after the models table).
+    from .cli_providers import CLI_LANE_PROVIDERS
+
+    all_models_for_sub = config.get("all_models", config["models"])
+    has_cli_entries = any(
+        m.provider in CLI_LANE_PROVIDERS for m in all_models_for_sub.values()
+    )
+    if not has_cli_entries:
+        sub_state = "[dim]disabled (not configured)[/dim]"
+    elif config.get("subscription_backend", False):
+        sub_state = "[green]enabled[/green]"
+    else:
+        sub_state = "disabled"
+    console.print(f"\n[bold]Subscription backends:[/bold] {sub_state}")
+
     # Validate
     issues = validate_config_structure(config)
     if issues:

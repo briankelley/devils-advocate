@@ -113,6 +113,55 @@ def test_config_page_loads(page, dvad_server):
     expect(page.locator(".page-header h1")).to_have_text("Configuration")
 
 
+# ── Subscription Backends section (Journey 5 / D5) ──────────────────────────
+
+def test_subscription_section_placement(page, dvad_server):
+    """The section renders BETWEEN API Keys and Validation."""
+    _goto_config(page, dvad_server)
+    expect(page.locator("#subscription-section")).to_be_visible()
+    headings = page.locator(".config-panel h2").all_inner_texts()
+    assert "Subscription Backends" in headings
+    assert headings.index("API Keys") < headings.index("Subscription Backends") < headings.index("Validation")
+
+
+def test_subscription_lanes_render(page, dvad_server):
+    """Both lane rows build client-side from the status endpoint."""
+    _goto_config(page, dvad_server)
+    page.wait_for_selector("#subscription-lanes .subscription-lane-row")
+    labels = page.locator(".subscription-lane-label").all_inner_texts()
+    assert "Claude CLI" in labels and "Codex CLI" in labels
+
+
+def test_subscription_toggle_persists(page, dvad_server, restore_config):
+    """The master pill flips through settings-toggle and survives a reload."""
+    _goto_config(page, dvad_server)
+    toggle = page.locator('.settings-toggle[data-key="subscription_backend"]')
+    expect(toggle).to_be_visible()
+    was_on = "settings-on" in (toggle.get_attribute("class") or "")
+    with page.expect_response("**/api/config/settings-toggle") as resp_info:
+        toggle.click()
+    assert resp_info.value.status == 200
+    _goto_config(page, dvad_server)
+    toggle2 = page.locator('.settings-toggle[data-key="subscription_backend"]')
+    now_on = "settings-on" in (toggle2.get_attribute("class") or "")
+    assert now_on != was_on
+
+
+def test_reviewer_ceiling_three_slot(page, dvad_server):
+    """The config page exposes a third reviewer slot (ceiling 2 → 3)."""
+    _goto_config(page, dvad_server)
+    expect(page.locator('.role-summary-row[data-role-key="reviewer3"]')).to_have_count(1)
+
+
+def test_subscription_status_api(page, dvad_server):
+    """The status endpoint returns both lanes with the expected shape."""
+    resp = page.request.get(f"{dvad_server}/api/config/subscription/status")
+    assert resp.status == 200
+    data = resp.json()
+    assert set(l["lane"] for l in data["lanes"]) == {"claude-cli", "codex-cli"}
+    assert "enabled" in data and "has_cli_entries" in data
+
+
 def test_config_tab_bar(page, dvad_server):
     """Tab bar with Structured and Raw YAML tabs is present."""
     page.goto(f"{dvad_server}/config")

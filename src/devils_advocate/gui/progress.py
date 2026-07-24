@@ -36,8 +36,11 @@ class ProgressEvent:
 
 # Phase detection patterns (best-effort, matched against storage.log() corpus)
 _PHASE_PATTERNS: list[tuple[str, str, dict[str, Any]]] = [
-    # Cost events (must be first — suppressed from console log)
-    (r"§cost role=(\S+) model=(.+?) cost=([\d.]+) total=([\d.]+)(?: in_tokens=(\d+) out_tokens=(\d+) total_tokens=(\d+))?", "cost_update", {}),
+    # Cost events (must be first — suppressed from console log). The equiv/channel
+    # tail is OPTIONAL and matched after a lazy gap (it rides after the optional
+    # cache_write/cache_read tokens); the mandatory prefix is untouched, so old
+    # lines parse identically and a new line's prefix parses under the old shape.
+    (r"§cost role=(\S+) model=(.+?) cost=([\d.]+) total=([\d.]+)(?: in_tokens=(\d+) out_tokens=(\d+) total_tokens=(\d+))?(?:.*?equiv=([\d.]+) channel=(\w+))?", "cost_update", {}),
 
     # Integration reviewer (maps to round1 dots — same breadcrumb position)
     (r"Integration: calling (.+)", "round1_calling", {}),
@@ -115,6 +118,11 @@ def classify_log_message(msg: str) -> ProgressEvent:
                     detail["in_tokens"] = m.group(5)
                     detail["out_tokens"] = m.group(6)
                     detail["total_tokens"] = m.group(7)
+                # Pool (subscription) legs carry the API-equivalent + channel so
+                # the live table can show "covered by subscription ≈ $X".
+                if m.group(8):
+                    detail["equiv"] = m.group(8)
+                    detail["channel"] = m.group(9)
                 return ProgressEvent(
                     event_type="cost",
                     message="",

@@ -71,11 +71,11 @@
     </h1>
     <div class="completed-cost-table">
         {% set no_cost = ledger.get('result') in ('dry_run', 'cost_exceeded', 'cost_aborted', 'failed') %}
-        {% for role_name, model_name, role_cost in role_cost_rows %}
+        {% for role_name, model_name, role_cost, role_equiv in role_cost_rows %}
         <div class="cost-row">
             <span class="cost-role">{{ role_name }}:</span>
             <span class="cost-model">{{ model_name }}</span>
-            <span class="cost-value">{% if no_cost %}&mdash;{% else %}${{ "%.6f"|format(role_cost) }}{% endif %}</span>
+            <span class="cost-value">{% if no_cost %}&mdash;{% else %}${{ "%.6f"|format(role_cost) }}{% if role_equiv %} <span class="dim">&middot; pool &asymp; ${{ "%.2f"|format(role_equiv) }}</span>{% endif %}{% endif %}</span>
         </div>
         {% endfor %}
         {% if not no_cost %}
@@ -85,6 +85,13 @@
             <span class="cost-model"></span>
             <span class="cost-value cost-total-value">${{ "%.6f"|format(total_cost) }}</span>
         </div>
+        {% if total_api_equivalent and total_api_equivalent > 0 %}
+        <div class="cost-row">
+            <span class="cost-role"></span>
+            <span class="cost-model"></span>
+            <span class="cost-value dim">covered by subscriptions: &asymp; ${{ "%.2f"|format(total_api_equivalent) }}</span>
+        </div>
+        {% endif %}
         {% endif %}
     </div>
 </div>

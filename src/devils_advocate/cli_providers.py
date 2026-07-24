@@ -26,6 +26,7 @@ import json
 import os
 import shutil
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import httpx  # dispatch hands every provider an AsyncClient; unused by CLI lanes
@@ -576,3 +577,249 @@ CLI_LANE_PROVIDERS: frozenset[str] = frozenset({"claude-cli", "codex-cli"})
 
 register_provider("claude-cli", call_claude_cli)
 register_provider("codex-cli", call_codex_cli)
+
+
+# ─── GUI config surface: detection, sign-in, Test (design D5.3) ───────────────
+
+# One implementation, two consumers: the GUI status/test endpoints and the
+# unit/e2e tests both call these — they never re-encode the lane invocation, so
+# the Test button exercises the SAME machinery a real run does.
+
+# Per-lane display + probe metadata. `default_model_id` is the model a Test
+# falls back to when the user has no `-sub` entry yet (cheapest tier, so the
+# probe draws the least pool).
+LANE_SPECS: dict[str, dict] = {
+    "claude-cli": {
+        "binary": "claude",
+        "label": "Claude CLI",
+        "vendor": "Claude",
+        "default_model_id": "claude-fable-5",
+    },
+    "codex-cli": {
+        "binary": "codex",
+        "label": "Codex CLI",
+        "vendor": "ChatGPT",
+        "default_model_id": "gpt-5.5",
+    },
+}
+
+# Read-only probes are quick; the Test call sends one real (tiny) request.
+_STATUS_PROBE_TIMEOUT = 5.0
+_TEST_CALL_TIMEOUT = 60.0
+
+
+def _probe_env(extra: dict | None = None) -> dict:
+    """Child env for status/detection probes: the key strip, no model context.
+
+    Mirrors :func:`_child_env` minus the per-model ``api_key_env`` (a probe has
+    no model). The hazard keys and every configured provider key are stripped so
+    a probe can never nudge a CLI onto the paid API; HOME/PATH pass through for
+    the CLI's own subscription auth.
+    """
+    strip = set(_HARNESS_STRIP) | set(_configured_key_envs)
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in strip and not k.startswith("CLAUDE_CODE_")
+    }
+    if extra:
+        env.update(extra)
+    return env
+
+
+def _first_version_token(text: str) -> str | None:
+    """Pull the first ``N.N…`` version token out of a ``--version`` banner."""
+    import re
+
+    m = re.search(r"\d+\.\d+(?:\.\d+)?", text)
+    return m.group(0) if m else None
+
+
+async def _detect_binary(binary: str) -> dict:
+    """Locate a CLI and read its ``--version`` (5s cap). No spend, no auth read."""
+    path = shutil.which(binary)
+    if not path:
+        return {"found": False, "path": None, "version": None}
+    version: str | None = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            path, "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=_probe_env(),
+        )
+        out, err = await asyncio.wait_for(
+            proc.communicate(), timeout=_STATUS_PROBE_TIMEOUT
+        )
+        banner = (
+            out.decode("utf-8", "replace") + err.decode("utf-8", "replace")
+        ).strip()
+        version = _first_version_token(banner)
+    except (asyncio.TimeoutError, TimeoutError, OSError):
+        version = None
+    return {"found": True, "path": path, "version": version}
+
+
+async def _claude_signin() -> dict:
+    """No-spend claude sign-in probe (U6 → BRANCH A, verified 2026-07-24).
+
+    ``claude auth status --json`` reads local auth state (no pool spend) and
+    emits ``{"loggedIn": bool, "subscriptionType": …, …}`` on stdout at 2.1.201.
+    Secrets law: ONLY ``loggedIn`` and ``subscriptionType`` are read — the
+    email/org fields in that payload are never touched, stored, or returned.
+    The panel under-claims on any ambiguity (unknown, never a false "signed in").
+    """
+    path = shutil.which("claude")
+    if not path:
+        return {"state": "unknown", "detail": ""}
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            path, "auth", "status", "--json",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=_probe_env(),
+        )
+        out, err = await asyncio.wait_for(
+            proc.communicate(), timeout=_STATUS_PROBE_TIMEOUT
+        )
+    except (asyncio.TimeoutError, TimeoutError, OSError):
+        return {"state": "unknown", "detail": "sign-in unknown — use Test"}
+    try:
+        data = json.loads(out.decode("utf-8", "replace"))
+    except (json.JSONDecodeError, ValueError):
+        return {"state": "unknown", "detail": "sign-in unknown — use Test"}
+    if isinstance(data, dict) and data.get("loggedIn"):
+        sub = data.get("subscriptionType")
+        label = f"signed in ({sub})" if isinstance(sub, str) and sub else "signed in"
+        return {"state": "signed_in", "detail": label}
+    return {"state": "signed_out", "detail": "not signed in"}
+
+
+async def _codex_signin() -> dict:
+    """No-spend codex sign-in probe: ``codex login status`` under the alt home.
+
+    j0 bonus finding (banked): codex writes the "Logged in using ChatGPT" line
+    to STDERR (stdout empty), rc 0 — so both streams are read and combined. A
+    dead auth pointer (ensure_codex_home raising) reads as signed-out, not a
+    crash.
+    """
+    path = shutil.which("codex")
+    if not path:
+        return {"state": "unknown", "detail": ""}
+    try:
+        home = ensure_codex_home()
+    except ProviderUnavailableError:
+        return {"state": "signed_out", "detail": "not signed in (codex login)"}
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            path, "login", "status",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=_probe_env({"CODEX_HOME": str(home)}),
+        )
+        out, err = await asyncio.wait_for(
+            proc.communicate(), timeout=_STATUS_PROBE_TIMEOUT
+        )
+    except (asyncio.TimeoutError, TimeoutError, OSError):
+        return {"state": "unknown", "detail": "sign-in unknown — use Test"}
+    combined = (
+        out.decode("utf-8", "replace") + err.decode("utf-8", "replace")
+    ).strip()
+    if proc.returncode == 0 and "logged in" in combined.lower():
+        return {"state": "signed_in", "detail": "signed in (ChatGPT)"}
+    return {"state": "signed_out", "detail": "not signed in (codex login)"}
+
+
+async def lane_status(lane: str) -> dict:
+    """Full status for one lane: binary, version, and no-spend sign-in state."""
+    spec = LANE_SPECS[lane]
+    binary = await _detect_binary(spec["binary"])
+    result = {
+        "lane": lane,
+        "label": spec["label"],
+        "vendor": spec["vendor"],
+        "binary": spec["binary"],
+        "found": binary["found"],
+        "path": binary["path"],
+        "version": binary["version"],
+    }
+    if not binary["found"]:
+        result["signin"] = {"state": "unknown", "detail": ""}
+        return result
+    result["signin"] = (
+        await _claude_signin() if lane == "claude-cli" else await _codex_signin()
+    )
+    return result
+
+
+async def subscription_status(config: dict) -> dict:
+    """Aggregate status for the config-page Subscription Backends section.
+
+    Per lane: binary presence/version, sign-in state, and whether the user has a
+    ``-sub`` entry for it. Plus the master-switch state and whether any CLI-lane
+    entries exist at all (drives the provision row's visibility).
+    """
+    all_models = config.get("all_models", config.get("models", {}))
+    lanes = []
+    for lane in ("claude-cli", "codex-cli"):
+        info = await lane_status(lane)
+        info["configured"] = any(
+            m.provider == lane for m in all_models.values()
+        )
+        lanes.append(info)
+    has_cli_entries = any(
+        m.provider in CLI_LANE_PROVIDERS for m in all_models.values()
+    )
+    return {
+        "enabled": bool(config.get("subscription_backend", False)),
+        "has_cli_entries": has_cli_entries,
+        "lanes": lanes,
+    }
+
+
+def lane_test_model(config: dict, lane: str) -> ModelConfig:
+    """Pick the model a Test should exercise: the user's ``-sub`` entry, else a
+    pinned cheapest-tier default. The chosen model's timeout is capped to the
+    Test budget so the button can never hang the request handler.
+    """
+    all_models = config.get("all_models", config.get("models", {}))
+    for m in all_models.values():
+        if m.provider == lane:
+            return replace(m, timeout=min(m.timeout or 60, int(_TEST_CALL_TIMEOUT)))
+    spec = LANE_SPECS[lane]
+    return ModelConfig(
+        name=f"{lane}-test",
+        provider=lane,
+        model_id=spec["default_model_id"],
+        api_key_env="",
+        timeout=int(_TEST_CALL_TIMEOUT),
+    )
+
+
+async def lane_test(lane: str, model: ModelConfig) -> dict:
+    """Send ONE tiny real request through the actual lane function (Test button).
+
+    Exercises the very machinery a run uses — the preflight, the child-env strip,
+    the envelope parse — so a green Test means the runtime path works, not a
+    parallel mock of it. A ``ProviderUnavailableError`` (missing binary, signed
+    out, pool down, bad envelope) returns a clean failure line, never a 500.
+    """
+    import httpx
+
+    system = "You are a connectivity probe. Answer in one short sentence."
+    user = "Reply with exactly: subscription lane OK."
+    fn = call_claude_cli if lane == "claude-cli" else call_codex_cli
+    try:
+        async with httpx.AsyncClient() as client:
+            text, usage = await fn(client, model, system, user, mode="plan")
+    except ProviderUnavailableError as exc:
+        return {"ok": False, "detail": str(exc)}
+    except Exception as exc:  # defensive — the Test button never 500s
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+    return {
+        "ok": True,
+        "detail": text.strip()[:200],
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0),
+        "api_equivalent": usage.get("api_equivalent"),
+    }

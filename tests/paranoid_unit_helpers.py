@@ -588,6 +588,12 @@ MUTATING_ROUTE_PATTERNS: list[tuple[str, str]] = [
     ("POST", "/api/config/model-thinking"),
     ("POST", "/api/config/model-max-tokens"),
     ("POST", "/api/config/settings-toggle"),
+    # Subscription backends (Journey 5): test spawns a CLI subprocess (no
+    # persistent write); provision mutates models.yaml with an automatic .bak.
+    # Both guard with CSRF; neither is body-driven, so they are registered here
+    # for completeness but not fuzzed via the body-payload WRITE_ENDPOINTS specs.
+    ("POST", "/api/config/subscription/test/{lane}"),
+    ("POST", "/api/config/subscription/provision"),
     ("PUT", "/api/config/env/{env_name}"),
     ("DELETE", "/api/config/env/{env_name}"),
     ("POST", "/api/config/env"),

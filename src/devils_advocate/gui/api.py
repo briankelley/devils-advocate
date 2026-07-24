@@ -756,7 +756,7 @@ async def set_settings_toggle(request: Request):
     key = body.get("key", "")
     value = body.get("value", False)
 
-    valid_keys = {"live_testing"}
+    valid_keys = {"live_testing", "subscription_backend"}
     if key not in valid_keys:
         raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")
 
@@ -767,6 +767,115 @@ async def set_settings_toggle(request: Request):
 
     await _mutate_yaml_config(request, _apply)
     return JSONResponse({"status": "ok", "key": key, "value": bool(value)})
+
+
+# ── Subscription Backends (design D5.3) ───────────────────────────────────────
+
+# The `-sub` entries the provision endpoint creates, one per lane, wired to fall
+# back to the user's own API twin. Each is added ONLY when a twin entry (a model
+# whose model_id matches `twin_model_id`) already exists in the user's config —
+# so no dangling failover target is ever written. Roster (`roles:`) is never
+# touched: assigning a role stays the user's explicit act via the role icons.
+_PROVISION_SPECS: list[dict] = [
+    {"name": "claude-fable-5-sub", "provider": "claude-cli", "twin_model_id": "claude-fable-5"},
+    {"name": "claude-opus-4-8-sub", "provider": "claude-cli", "twin_model_id": "claude-opus-4-8"},
+    {"name": "gpt-5.5-sub", "provider": "codex-cli", "twin_model_id": "gpt-5.5", "min_points_hint": 20},
+]
+
+
+@router.get("/config/subscription/status")
+async def subscription_status_endpoint(request: Request):
+    """Per-lane subscription status: binary, version, sign-in, config presence.
+
+    Read-only (no spend, no CSRF — the house pattern for status GETs). Sign-in is
+    probed with each vendor CLI's own no-spend status surface.
+    """
+    from .. import cli_providers
+
+    config = await _load_app_config(request)
+    data = await cli_providers.subscription_status(config)
+    return JSONResponse(data)
+
+
+@router.post("/config/subscription/test/{lane}")
+async def subscription_test(request: Request, lane: str):
+    """Send one tiny real request through the lane's actual runtime function."""
+    _check_csrf(request)
+    from .. import cli_providers
+
+    if lane not in cli_providers.LANE_SPECS:
+        raise HTTPException(status_code=404, detail=f"Unknown lane: {lane}")
+
+    config = await _load_app_config(request)
+    model = cli_providers.lane_test_model(config, lane)
+    result = await cli_providers.lane_test(lane, model)
+    return JSONResponse(result)
+
+
+@router.post("/config/subscription/provision")
+async def subscription_provision(request: Request):
+    """Create the `-sub` entries whose API twins exist. Idempotent; roster-safe.
+
+    Backed by ``_mutate_yaml_config`` (automatic ``.bak`` + ruamel round-trip +
+    atomic write). Re-running with entries present is a no-op with a message;
+    lanes with no matching twin skip-with-message so no dangling failover target
+    is ever written.
+    """
+    _check_csrf(request)
+
+    outcome: dict = {"created": [], "skipped": []}
+
+    def _apply(data: dict) -> None:
+        models = data.get("models")
+        if not isinstance(models, dict):
+            raise HTTPException(status_code=400, detail="Config has no models block")
+
+        for spec in _PROVISION_SPECS:
+            name = spec["name"]
+            if name in models:
+                outcome["skipped"].append(f"{name}: already present")
+                continue
+            # Find a twin entry by model_id (enabled, non-CLI provider).
+            twin_key = None
+            for key, entry in models.items():
+                if not isinstance(entry, dict):
+                    continue
+                if entry.get("enabled", True) is False:
+                    continue
+                if entry.get("model_id") == spec["twin_model_id"]:
+                    twin_key = key
+                    break
+            if twin_key is None:
+                outcome["skipped"].append(
+                    f"{name}: no API twin (model_id '{spec['twin_model_id']}') in your config"
+                )
+                continue
+
+            twin = models[twin_key]
+            new_entry: dict = {
+                "provider": spec["provider"],
+                "model_id": spec["twin_model_id"],
+                "api_key_env": "",
+                "thinking": False,
+                "context_window": twin.get("context_window", 200000),
+                "cost_per_1k_input": 0,
+                "cost_per_1k_output": 0,
+                "timeout": 1200,
+                "max_out_stated": twin.get("max_out_stated", 128000),
+                "max_out_configured": twin.get("max_out_configured", 60000),
+                "failover_model": twin_key,
+                "extra": {"api_twin": twin_key},
+            }
+            if "min_points_hint" in spec:
+                new_entry["min_points_hint"] = spec["min_points_hint"]
+            models[name] = new_entry
+            outcome["created"].append(name)
+
+    # Every write backs up first (house convention); a re-run adds nothing and
+    # reports "already present" — idempotent from the roster's point of view.
+    await _mutate_yaml_config(request, _apply)
+
+    return JSONResponse({"status": "ok", **outcome})
 
 
 @router.post("/config/validate")
@@ -928,9 +1037,9 @@ async def _save_structured_config(request: Request, body: dict):
 
         data["roles"]["author"] = roles_payload.get("author") or None
 
-        # Build reviewers list from reviewer1/reviewer2
+        # Build reviewers list from reviewer1/reviewer2/reviewer3 (ceiling 3)
         reviewers = []
-        for key in ("reviewer1", "reviewer2"):
+        for key in ("reviewer1", "reviewer2", "reviewer3"):
             val = roles_payload.get(key)
             if val:
                 reviewers.append(val)

@@ -115,6 +115,12 @@ def generate_report(result: ReviewResult) -> str:
     for model, cost in result.cost.breakdown().items():
         lines.append(f"| {model} | ${cost:.4f} |")
     lines.append(f"| **Total** | **${result.cost.total_usd:.4f}** |")
+    if result.cost.total_api_equivalent_usd > 0:
+        lines.append("")
+        lines.append(
+            f"**Subscription-covered (API-equivalent):** "
+            f"${result.cost.total_api_equivalent_usd:.4f}"
+        )
     lines.append("")
 
     return "\n".join(lines)
@@ -275,6 +281,13 @@ def generate_ledger(result: ReviewResult) -> dict:
             "breakdown": {k: round(v, 6) for k, v in result.cost.breakdown().items()},
             "role_costs": {k: round(v, 6) for k, v in result.cost.role_costs.items()},
             "entries": result.cost.entries,
+            # Present only when a subscription pool leg contributed — keeps the
+            # ledger byte-identical for runs that never touched a CLI lane.
+            **(
+                {"total_api_equivalent_usd": round(result.cost.total_api_equivalent_usd, 6)}
+                if result.cost.total_api_equivalent_usd > 0
+                else {}
+            ),
         },
     }
 
@@ -371,6 +384,12 @@ def _generate_spec_report(result: ReviewResult) -> str:
     for model, cost in result.cost.breakdown().items():
         lines.append(f"| {model} | ${cost:.4f} |")
     lines.append(f"| **Total** | **${result.cost.total_usd:.4f}** |")
+    if result.cost.total_api_equivalent_usd > 0:
+        lines.append("")
+        lines.append(
+            f"**Subscription-covered (API-equivalent):** "
+            f"${result.cost.total_api_equivalent_usd:.4f}"
+        )
     lines.append("")
 
     return "\n".join(lines)
