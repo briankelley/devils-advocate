@@ -62,6 +62,20 @@ class APIError(AdvocateError):
     pass
 
 
+class ProviderUnavailableError(APIError):
+    """A provider transport is unavailable for this call.
+
+    Raised by the subscription CLI lanes when a call cannot be served at all —
+    the binary is missing, auth has lapsed, the pool is exhausted, the model is
+    unsupported, the process exits non-zero, times out, or returns a malformed
+    or empty envelope. Subclasses :class:`APIError` so it already propagates
+    loudly (fail-loud, never a silently empty review); the failover engine
+    landing in a later journey catches it *by type* to re-dispatch the same call
+    down the model's ``failover_model`` API twin.
+    """
+    pass
+
+
 class CostLimitError(AdvocateError):
     """Cost budget exceeded."""
     pass

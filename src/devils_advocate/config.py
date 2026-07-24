@@ -204,6 +204,17 @@ def load_config(path: Path | None = None) -> dict:
             min_points_hint=cfg.get("min_points_hint"),
         )
 
+    # Built-in subscription CLI lanes register their providers on import; do it
+    # before validation and role assignment consult PROVIDER_REGISTRY (a
+    # `claude-cli`/`codex-cli` entry must resolve in D1.3). The lane also learns
+    # every configured api_key_env here so its child-env strip can remove all
+    # provider keys — the GUI process holds them all in os.environ.
+    from . import cli_providers
+
+    cli_providers.note_configured_key_envs(
+        m.api_key_env for m in all_models.values()
+    )
+
     # Provider plugins register external transports into PROVIDER_REGISTRY
     # before validation and role assignment consult it. Loaded from the
     # top-level settings block; any failure is fatal at load, never mid-run.
