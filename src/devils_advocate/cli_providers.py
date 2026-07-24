@@ -61,6 +61,35 @@ def note_configured_key_envs(names) -> None:
     _configured_key_envs = {n for n in names if n}
 
 
+# ─── API-twin rate table (codex equivalent-cost) ─────────────────────────────
+
+# Per-model ($/1k input, $/1k output) rates, keyed by model NAME (the models.yaml
+# key). Populated by ``config.load_config`` the same way the key-env set is: the
+# provider dispatch signature can't carry the whole config, but the codex lane
+# needs a twin's rates to compute an API-equivalent (the claude CLI reports its
+# own cost; codex does not). ``extra.api_twin`` names the entry whose rates the
+# equivalent is priced at. Empty until a config loads — a lane call before any
+# load simply omits the equivalent, never guesses.
+_model_rates: dict[str, tuple[float, float]] = {}
+
+
+def note_model_rates(rates) -> None:
+    """Record per-model ($/1k in, $/1k out) rates for codex api_twin pricing.
+
+    Called by :func:`devils_advocate.config.load_config` with an iterable of
+    ``(name, cost_per_1k_input, cost_per_1k_output)`` triples. Entries whose
+    rates are unknown (``None``) are dropped — a missing twin rate means the
+    equivalent is simply not computed, never invented. Replaced, not
+    accumulated, on each load so a stale entry never lingers.
+    """
+    global _model_rates
+    _model_rates = {
+        name: (float(ci), float(co))
+        for name, ci, co in rates
+        if ci is not None and co is not None
+    }
+
+
 def _child_env(model: ModelConfig, extra: dict | None = None) -> dict:
     """Build the subprocess environment: os.environ minus every provider key.
 
@@ -272,6 +301,271 @@ async def call_claude_cli(
         _cleanup_scratch(scratch, keep=not succeeded)
 
 
+# ─── Codex (ChatGPT) lane ────────────────────────────────────────────────────
+
+# Env overrides for test isolation (mirroring DVAD_STATE_HOME). In production
+# both resolve to the pinned real paths: the alt CODEX_HOME under the state dir
+# and the operator's own codex auth file. A `/tmp` home is deliberately avoided
+# (probe R2: it trips a codex PATH-helper warning).
+_CODEX_HOME_ENV = "DVAD_CODEX_HOME"
+_CODEX_AUTH_SRC_ENV = "DVAD_CODEX_AUTH_SRC"
+
+# The no-commands line prepended to every codex user prompt. `codex exec` is an
+# agent turn, not a bare completion — without this it will read files / run shell
+# commands (the probe measured two unprompted reads on the contaminated leg). The
+# review is answered from the prompt alone; the role dir carries no tools.
+_CODEX_NO_COMMANDS_LINE = (
+    "Do not execute any commands or read any files; answer from the prompt alone."
+)
+
+
+def _codex_home() -> Path:
+    """The alternate ``CODEX_HOME`` the lane runs under (never the operator's).
+
+    Honors ``DVAD_CODEX_HOME`` (test isolation), then the pinned
+    ``<state>/codex-home`` under the runtime state root. Kept distinct from the
+    operator's ``~/.codex`` so their interactive ``AGENTS.md`` / config never
+    reaches a role call.
+    """
+    override = os.environ.get(_CODEX_HOME_ENV)
+    if override:
+        return Path(override)
+    return _state_dir() / "codex-home"
+
+
+def _codex_auth_src() -> Path:
+    """The operator's real codex auth file — a symlink TARGET, never read here."""
+    override = os.environ.get(_CODEX_AUTH_SRC_ENV)
+    if override:
+        return Path(override)
+    return Path.home() / ".codex" / "auth.json"
+
+
+def ensure_codex_home() -> Path:
+    """Provision the alt ``CODEX_HOME`` and (re)point its auth symlink.
+
+    Creates ``<home>`` at 0700 and links ``<home>/auth.json`` to the operator's
+    real codex auth file — a POINTER only: the target is never opened, read, or
+    copied here (secrets law). Idempotent and re-verified every call: if the
+    target is missing (user signed out / moved codex dirs) the symlink is dead
+    and the lane is unavailable with a NAMED reason. Shared by the lane and the
+    GUI status/test endpoints (one implementation, two consumers).
+
+    Raises :class:`ProviderUnavailableError` when the auth pointer is dead.
+    """
+    home = _codex_home()
+    home.mkdir(parents=True, exist_ok=True)
+    os.chmod(home, 0o700)
+    link = home / "auth.json"
+    src = _codex_auth_src()
+    # (Re)establish the pointer without ever reading the target.
+    if link.is_symlink():
+        if os.readlink(link) != str(src):
+            link.unlink()
+            link.symlink_to(src)
+    elif link.exists():
+        # A real file sits where the pointer belongs — replace with the symlink
+        # (we never keep a copy of auth material under our control).
+        link.unlink()
+        link.symlink_to(src)
+    else:
+        link.symlink_to(src)
+    if not src.exists():
+        raise ProviderUnavailableError(
+            f"codex lane unavailable: auth pointer {link} -> {src} is dead "
+            f"(sign in with `codex login`)"
+        )
+    return home
+
+
+def _extract_codex_error(message) -> str:
+    """Pull a human string out of a codex error event's ``message`` field.
+
+    The message is often a JSON-encoded envelope
+    (``{"type":"error","status":400,"error":{"message": …}}``); dig out the
+    inner ``error.message`` when present, else return the raw text.
+    """
+    if not isinstance(message, str):
+        return str(message) if message else "codex reported an error"
+    try:
+        obj = json.loads(message)
+    except (json.JSONDecodeError, ValueError):
+        return message.strip()
+    if isinstance(obj, dict):
+        err = obj.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return str(err["message"])
+        if obj.get("message"):
+            return str(obj["message"])
+    return message.strip()
+
+
+def _parse_codex_events(stdout: str) -> tuple[dict | None, str | None]:
+    """Scan the ``codex exec --json`` event stream (one JSON object per line).
+
+    Returns ``(usage, error_message)``: the ``turn.completed`` event's ``usage``
+    block (or ``None``), and the first failure reason found (or ``None``).
+    Detection keys on TOP-LEVEL ``type:"error"`` and ``type:"turn.failed"``
+    events per the V3-corrected D3.3 — NOT a startup banner (there is none in
+    ``--json`` mode) and NOT the nested ``item.completed`` metadata warning
+    (which rides on an unsupported model but is not itself the failure). Lines
+    that are not JSON objects are tolerated (never crash the parse).
+    """
+    usage: dict | None = None
+    error_msg: str | None = None
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(ev, dict):
+            continue
+        etype = ev.get("type")
+        if etype == "turn.completed":
+            usage = ev.get("usage") or {}
+        elif etype == "error" and error_msg is None:
+            error_msg = _extract_codex_error(ev.get("message"))
+        elif etype == "turn.failed" and error_msg is None:
+            err = ev.get("error") or {}
+            error_msg = _extract_codex_error(err.get("message"))
+    return usage, error_msg
+
+
+def _codex_usage(raw: dict, model: ModelConfig) -> dict:
+    """Map codex ``turn.completed`` usage onto dvad's standard usage dict.
+
+    Field mapping (banked-shape U5, stable trivial→champion):
+    ``input_tokens`` → ``input_tokens``; ``output_tokens`` → ``output_tokens``;
+    ``cached_input_tokens`` → ``cache_read_tokens``; ``cache_write_input_tokens``
+    → ``cache_write_tokens``. codex reports no cost, so the API-equivalent is
+    COMPUTED from the ``extra.api_twin`` entry's rates (resolved from the loaded
+    config via :func:`note_model_rates`) when both are available.
+    """
+    usage: dict = {
+        "input_tokens": raw.get("input_tokens", 0) or 0,
+        "output_tokens": raw.get("output_tokens", 0) or 0,
+        "cache_write_tokens": raw.get("cache_write_input_tokens", 0) or 0,
+        "cache_read_tokens": raw.get("cached_input_tokens", 0) or 0,
+    }
+    twin = (model.extra or {}).get("api_twin")
+    rates = _model_rates.get(twin) if twin else None
+    if rates:
+        ci, co = rates
+        equiv = usage["input_tokens"] / 1000 * ci + usage["output_tokens"] / 1000 * co
+        usage["api_equivalent"] = equiv
+        usage["memo"] = (
+            f"pool leg; computed API-equivalent ${equiv:.3f} (twin {twin})"
+        )
+    return usage
+
+
+async def call_codex_cli(
+    client: httpx.AsyncClient,
+    model: ModelConfig,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = MAX_OUTPUT_TOKENS,
+    mode: str = "",
+) -> tuple[str, dict]:
+    """Drive ``codex exec`` (ChatGPT subscription) as a dvad transport.
+
+    Encodes the probe R2 posture verbatim: an alternate ``CODEX_HOME`` whose only
+    content is the auth pointer, a per-call role-dir ``AGENTS.md`` carrying the
+    role system prompt (codex exec has NO system-prompt flag — the project doc IS
+    the slot), the no-commands line prepended to the user prompt, read-only
+    sandbox, ``--ignore-user-config``, ``--ephemeral``, one-shot ``--json`` with
+    the answer written to ``last-message.txt``. ``project_doc_max_bytes=0`` is NOT
+    set (it would kill the planted AGENTS.md); it stands as the degrade lever
+    only. ``client``/``max_tokens`` are accepted for dispatch uniformity and
+    unused. Returns the standard ``(text, usage)`` 2-tuple; any failure raises
+    :class:`ProviderUnavailableError`.
+    """
+    home = ensure_codex_home()  # dead auth pointer → ProviderUnavailableError
+    scratch = _new_scratch_dir("codex")
+    # Plant the role system prompt as the role-dir AGENTS.md (the instruction
+    # slot). If it can't be written, the call refuses to launch (no slot = no
+    # call) rather than run an unguided review.
+    try:
+        (scratch / "AGENTS.md").write_text(system_prompt, encoding="utf-8")
+    except OSError as exc:
+        _cleanup_scratch(scratch, keep=True)
+        raise ProviderUnavailableError(
+            f"{model.name}: codex role-dir AGENTS.md could not be written ({exc})"
+        ) from exc
+
+    stdin_text = f"{_CODEX_NO_COMMANDS_LINE}\n\n{user_prompt}"
+    argv = [
+        "codex", "exec", "--skip-git-repo-check", "--ignore-user-config",
+        "--ephemeral", "-s", "read-only", "-m", model.model_id,
+        "-c", "model_reasoning_effort=high",
+        "--json", "-o", "last-message.txt", "-",
+    ]
+    env = _child_env(model, {"CODEX_HOME": str(home)})
+    succeeded = False
+    try:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(scratch),
+                env=env,
+            )
+        except (FileNotFoundError, OSError) as exc:
+            raise ProviderUnavailableError(
+                f"{model.name}: codex CLI could not be launched ({exc})"
+            ) from exc
+        try:
+            stdout_b, stderr_b = await asyncio.wait_for(
+                proc.communicate(input=stdin_text.encode("utf-8")),
+                timeout=model.timeout,
+            )
+        except (asyncio.TimeoutError, TimeoutError) as exc:
+            proc.kill()
+            await proc.wait()
+            raise ProviderUnavailableError(
+                f"{model.name}: codex CLI timed out after {model.timeout}s"
+            ) from exc
+
+        stdout = stdout_b.decode("utf-8", "replace")
+        usage_raw, error_msg = _parse_codex_events(stdout)
+
+        # Reactive detection (D3.3, V3-corrected): error/turn.failed event OR a
+        # non-zero exit → unavailable → failover. Refuse-and-failover, never a
+        # silent substitution or a silently empty review.
+        if proc.returncode != 0 or error_msg is not None:
+            detail = error_msg
+            if detail is None:
+                tail = stderr_b.decode("utf-8", "replace").strip()[-500:]
+                detail = f"exit {proc.returncode}" + (f": {tail}" if tail else "")
+            raise ProviderUnavailableError(
+                f"{model.name}: codex CLI unavailable: {detail}"
+            )
+
+        last_message = scratch / "last-message.txt"
+        try:
+            text = last_message.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ProviderUnavailableError(
+                f"{model.name}: codex CLI wrote no last-message.txt ({exc})"
+            ) from exc
+        if not text.strip():
+            raise ProviderUnavailableError(
+                f"{model.name}: codex CLI returned no answer text"
+            )
+
+        usage = _codex_usage(usage_raw or {}, model)
+        succeeded = True
+        return text, usage
+    finally:
+        _cleanup_scratch(scratch, keep=not succeeded)
+
+
 # ─── Registration ────────────────────────────────────────────────────────────
 
 register_provider("claude-cli", call_claude_cli)
+register_provider("codex-cli", call_codex_cli)

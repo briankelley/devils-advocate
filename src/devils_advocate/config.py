@@ -214,6 +214,14 @@ def load_config(path: Path | None = None) -> dict:
     cli_providers.note_configured_key_envs(
         m.api_key_env for m in all_models.values()
     )
+    # The codex lane prices its API-equivalent from an `extra.api_twin` entry's
+    # rates (unlike claude, whose CLI reports its own cost). The dispatch
+    # signature can't carry the whole config, so feed the lane the per-model
+    # rate table here, keyed by name — the same pattern as the key-env set above.
+    cli_providers.note_model_rates(
+        (m.name, m.cost_per_1k_input, m.cost_per_1k_output)
+        for m in all_models.values()
+    )
 
     # Provider plugins register external transports into PROVIDER_REGISTRY
     # before validation and role assignment consult it. Loaded from the
