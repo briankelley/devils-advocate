@@ -227,6 +227,19 @@ def load_config(path: Path | None = None) -> dict:
     # before validation and role assignment consult it. Loaded from the
     # top-level settings block; any failure is fatal at load, never mid-run.
     settings_block = raw.get("settings") or {}
+
+    # The subscription master switch (first runtime consumer of `settings:`).
+    # Absent means false — a config that never heard of this feature behaves
+    # exactly as before. A non-bool is a config error (never coerced): a stray
+    # `subscription_backend: "yes"` should fail loudly at load, not silently read
+    # as truthy.
+    subscription_backend = settings_block.get("subscription_backend", False)
+    if not isinstance(subscription_backend, bool):
+        raise ConfigError(
+            "settings.subscription_backend must be a boolean (true/false); got "
+            f"{type(subscription_backend).__name__}"
+        )
+
     plugin_paths = settings_block.get("provider_plugins") or []
     if plugin_paths:
         _load_provider_plugins(plugin_paths, config_path.parent)
@@ -308,12 +321,69 @@ def load_config(path: Path | None = None) -> dict:
                 f"registered by a plugin, or reachable via api_base"
             )
 
+    # D4.2: the switch and the failover are total by construction. Every active
+    # model on a CLI lane MUST name a failover_model that is a defined, enabled,
+    # non-CLI entry — so switch-OFF has a twin to route to and a live-lane
+    # ProviderUnavailableError always has an API path home. Scoped to the active
+    # working set, matching D1.3 (an inactive fixture entry never dispatches).
+    for name, m in models.items():
+        if m.provider in cli_providers.CLI_LANE_PROVIDERS:
+            if not m.failover_model:
+                raise ConfigError(
+                    f"model '{name}' uses CLI lane provider '{m.provider}' but "
+                    f"declares no failover_model; a CLI-lane entry must name an "
+                    f"enabled non-CLI model to fall back to"
+                )
+            twin = all_models.get(m.failover_model)
+            if twin is None:
+                raise ConfigError(
+                    f"model '{name}': failover_model '{m.failover_model}' is not "
+                    f"defined"
+                )
+            if not twin.enabled:
+                raise ConfigError(
+                    f"model '{name}': failover_model '{m.failover_model}' is "
+                    f"disabled"
+                )
+            if twin.provider in cli_providers.CLI_LANE_PROVIDERS:
+                raise ConfigError(
+                    f"model '{name}': failover_model '{m.failover_model}' must be "
+                    f"a non-CLI (API) model, not another CLI lane"
+                )
+
     return {
         "models": models,
         "all_models": all_models,
         "config_path": str(config_path),
         "reviewer_order": roles_block.get("reviewers", []),
+        "subscription_backend": subscription_backend,
     }
+
+
+def resolve_effective_model(config: dict, model: ModelConfig) -> ModelConfig:
+    """Return the model that should actually run for *model* under the switch.
+
+    When *model* rides a subscription CLI lane and the master switch
+    (``settings.subscription_backend``) is OFF, it resolves to the model's
+    ``failover_model`` API twin — so a switch-off run dispatches, prices, and
+    accounts exactly as pre-feature dvad did. When the switch is ON (or *model*
+    is not a CLI lane), *model* is returned unchanged.
+
+    Consumed at dispatch (via :func:`~devils_advocate.providers.call_and_account`)
+    and by the cost-estimate / dry-run path, so the estimate and the real run
+    price the same effective model. Load-time validation guarantees the twin
+    exists and is a non-CLI entry; if the lookup somehow misses, the CLI model
+    itself is returned — fail toward the lane (which fails loud) rather than a
+    silent wrong-model swap.
+    """
+    from . import cli_providers
+
+    if model.provider not in cli_providers.CLI_LANE_PROVIDERS:
+        return model
+    if config.get("subscription_backend", False):
+        return model
+    twin = (config.get("all_models") or {}).get(model.failover_model)
+    return twin if twin is not None else model
 
 
 def validate_config_structure(config: dict) -> list[tuple[str, str]]:

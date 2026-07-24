@@ -241,7 +241,7 @@ class TestRunRevision:
             "=== REVISED PLAN ===\nRevised plan content\n=== END REVISED PLAN ==="
         )
 
-        with patch("devils_advocate.revision.call_with_retry", new_callable=AsyncMock) as mock_call:
+        with patch("devils_advocate.providers.call_with_retry", new_callable=AsyncMock) as mock_call:
             mock_call.return_value = (revision_response, {"input_tokens": 100, "output_tokens": 50})
 
             result = await run_revision(
@@ -265,7 +265,7 @@ class TestRunRevision:
 
         bad_response = "This response has no delimiters at all."
 
-        with patch("devils_advocate.revision.call_with_retry", new_callable=AsyncMock) as mock_call:
+        with patch("devils_advocate.providers.call_with_retry", new_callable=AsyncMock) as mock_call:
             mock_call.return_value = (bad_response, {"input_tokens": 100, "output_tokens": 50})
 
             result = await run_revision(
@@ -286,7 +286,7 @@ class TestRunRevision:
         cost = CostTracker()
         storage.set_review_id("test_review")
 
-        with patch("devils_advocate.revision.call_with_retry", new_callable=AsyncMock) as mock_call:
+        with patch("devils_advocate.providers.call_with_retry", new_callable=AsyncMock) as mock_call:
             mock_call.side_effect = Exception("API failure")
 
             with pytest.raises(Exception, match="API failure"):
@@ -443,7 +443,7 @@ class TestRunSpecRevision:
             "=== END SPEC SUGGESTIONS ==="
         )
 
-        with patch("devils_advocate.revision.call_with_retry", new_callable=AsyncMock) as mock_call:
+        with patch("devils_advocate.providers.call_with_retry", new_callable=AsyncMock) as mock_call:
             mock_call.return_value = (revision_response, {"input_tokens": 100, "output_tokens": 50})
 
             result = await run_spec_revision(
@@ -508,7 +508,7 @@ class TestRunRevisionCore:
         # Response without canonical delimiters
         bad_response = "Here is my revision without any proper delimiters."
 
-        with patch("devils_advocate.revision.call_with_retry", new_callable=AsyncMock) as mock_call:
+        with patch("devils_advocate.providers.call_with_retry", new_callable=AsyncMock) as mock_call:
             mock_call.return_value = (bad_response, {"input_tokens": 100, "output_tokens": 50})
 
             result = await _run_revision_core(
@@ -539,7 +539,7 @@ class TestRunRevisionCore:
         storage.set_review_id("test_review")
 
         raw_text = "=== REVISED PLAN ===\nrevised content\n=== END REVISED PLAN ==="
-        with patch("devils_advocate.revision.call_with_retry", new_callable=AsyncMock) as mock_call:
+        with patch("devils_advocate.providers.call_with_retry", new_callable=AsyncMock) as mock_call:
             mock_call.return_value = (raw_text, {"input_tokens": 100, "output_tokens": 50})
 
             result = await _run_revision_core(

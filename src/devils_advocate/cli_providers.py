@@ -567,5 +567,12 @@ async def call_codex_cli(
 
 # ─── Registration ────────────────────────────────────────────────────────────
 
+# The built-in subscription CLI lane provider names. resolve_effective_model
+# (the master switch) and the load-time failover validation both key on this
+# set to decide which entries route to a twin when the switch is off and which
+# must declare an enabled non-CLI failover_model. Kept here so the lane roster
+# lives in one place alongside the registrations below.
+CLI_LANE_PROVIDERS: frozenset[str] = frozenset({"claude-cli", "codex-cli"})
+
 register_provider("claude-cli", call_claude_cli)
 register_provider("codex-cli", call_codex_cli)

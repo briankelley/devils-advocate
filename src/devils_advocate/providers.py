@@ -15,7 +15,14 @@ from typing import Awaitable, Callable
 
 import httpx
 
-from .types import AdvocateError, APIError, ConfigError, ModelConfig
+from .types import (
+    AdvocateError,
+    APIError,
+    ConfigError,
+    CostTracker,
+    ModelConfig,
+    ProviderUnavailableError,
+)
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -25,6 +32,11 @@ MAX_OUTPUT_TOKENS = 16384
 AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS = 32000
 REVISION_MAX_OUTPUT_TOKENS = 64000
 DEFAULT_MAX_RETRIES = 3
+# One failover hop only: a CLI lane that raises ProviderUnavailableError
+# re-dispatches to its (non-CLI, validated) failover_model exactly once. The
+# twin is an API transport that cannot itself raise ProviderUnavailableError, so
+# a second hop is impossible by construction; the cap is a belt-and-braces stop.
+_FAILOVER_MAX_HOPS = 1
 _529_MAX_RETRIES = 3
 _529_BUDGET_SECONDS = 30.0
 
@@ -515,8 +527,20 @@ async def call_with_retry(
     log_fn=None,
     mode: str = "",
     cache_prefix: str = "",
+    config: dict | None = None,
+    _failover_hops: int = 0,
 ) -> tuple:
-    """Wrap call_model with exponential backoff + jitter, respects Retry-After."""
+    """Wrap call_model with exponential backoff + jitter, respects Retry-After.
+
+    When *config* is supplied and the transport raises
+    :class:`ProviderUnavailableError` (a subscription CLI lane that cannot serve
+    the call — pool exhausted, auth lapsed, binary missing, model unsupported),
+    the SAME call re-dispatches once down the model's ``failover_model`` API twin
+    (one hop, :data:`_FAILOVER_MAX_HOPS`). With no ``failover_model`` (or no
+    *config*) the error propagates loudly — dvad never silently drops a review.
+    The served twin's name is stamped into the returned usage under
+    ``_served_model_name`` so :func:`call_and_account` charges the twin's rates.
+    """
     import time as _time
 
     last_exc = None
@@ -528,6 +552,39 @@ async def call_with_retry(
                 client, model, system_prompt, user_prompt, max_tokens, mode,
                 cache_prefix=cache_prefix,
             )
+        except ProviderUnavailableError as e:
+            # The lane has already exhausted its own in-lane handling before
+            # raising, so this is a definitive "cannot serve" — fail over rather
+            # than retry the dead lane. One hop, to the validated non-CLI twin.
+            if (
+                config is None
+                or _failover_hops >= _FAILOVER_MAX_HOPS
+                or not model.failover_model
+            ):
+                raise
+            twin = (config.get("all_models") or {}).get(model.failover_model)
+            if twin is None:
+                raise
+            if log_fn:
+                log_fn(
+                    f"  {model.name}: provider unavailable ({e}); "
+                    f"failing over to {twin.name} on the API path"
+                )
+            text, usage = await call_with_retry(
+                client, twin, system_prompt, user_prompt, max_tokens,
+                max_retries=max_retries, log_fn=log_fn, mode=mode,
+                cache_prefix=cache_prefix, config=config,
+                _failover_hops=_failover_hops + 1,
+            )
+            usage["_served_model_name"] = twin.name
+            # Annotate the ledger: this leg billed real API dollars because the
+            # subscription lane was down. api_equivalent stays absent (it IS the
+            # real cost, not a pool substitute); the memo tells the operator why
+            # a CLI-lane role shows up on the twin's rates.
+            usage.setdefault(
+                "memo", f"failover from {model.name}: served by {twin.name} via API"
+            )
+            return text, usage
         except httpx.HTTPStatusError as e:
             last_exc = e
             status = e.response.status_code
@@ -580,3 +637,79 @@ async def call_with_retry(
                     )
             await asyncio.sleep(wait)
     raise APIError(f"{model.name}: failed after {max_retries} retries") from last_exc
+
+
+# ─── Call + account (the one home for the dispatch→cost pattern) ──────────────
+
+
+async def call_and_account(
+    client: httpx.AsyncClient,
+    model: ModelConfig,
+    config: dict | None,
+    cost_tracker: CostTracker | None,
+    role: str,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = MAX_OUTPUT_TOKENS,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    log_fn=None,
+    mode: str = "",
+    cache_prefix: str = "",
+) -> tuple:
+    """Resolve the effective model, call it with retry+failover, and account.
+
+    The single consolidation point every role call flows through. It:
+
+    1. Resolves *model* to the model that should actually run (D4.5): the
+       subscription master switch, when OFF, routes a CLI-lane model to its API
+       twin, so a run with the switch off is byte-identical to pre-feature dvad.
+    2. Dispatches through :func:`call_with_retry` (which may itself fail over a
+       live CLI lane to its twin).
+    3. Learns which config actually SERVED the text — the effective model, or,
+       after a failover hop, the twin — and performs the single
+       ``cost_tracker.add`` at THAT model's rates, passing the pool leg's
+       ``memo``/``api_equivalent`` through to the ledger.
+
+    Returns ``(text, usage, served_model)``. *cost_tracker* may be None (dedup /
+    normalization call it that way); the dispatch still runs, accounting is
+    simply skipped. With *config* None the resolution and failover are inert and
+    the served model is *model* itself — bit-identical to a bare
+    ``call_with_retry`` + ``cost_tracker.add`` pair.
+    """
+    if config is not None:
+        from .config import resolve_effective_model
+        effective = resolve_effective_model(config, model)
+    else:
+        effective = model
+
+    text, usage = await call_with_retry(
+        client, effective, system_prompt, user_prompt, max_tokens,
+        max_retries=max_retries, log_fn=log_fn, mode=mode,
+        cache_prefix=cache_prefix, config=config,
+    )
+
+    # Which config produced the text? call_with_retry stamps the twin's name
+    # when it failed over; absent that, the effective model served. Pop the
+    # private marker so it never rides downstream into parsers or serialization.
+    served_name = usage.pop("_served_model_name", effective.name)
+    served = None
+    if config is not None:
+        served = (config.get("all_models") or {}).get(served_name)
+    if served is None:
+        served = effective
+
+    if cost_tracker is not None:
+        cost_tracker.add(
+            served.name,
+            usage.get("input_tokens", 0),
+            usage.get("output_tokens", 0),
+            served.cost_per_1k_input,
+            served.cost_per_1k_output,
+            role=role,
+            cache_write_tokens=usage.get("cache_write_tokens", 0),
+            cache_read_tokens=usage.get("cache_read_tokens", 0),
+            memo=usage.get("memo"),
+            api_equivalent=usage.get("api_equivalent"),
+        )
+
+    return text, usage, served

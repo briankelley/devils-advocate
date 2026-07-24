@@ -147,9 +147,13 @@ async def run_spec_review(
 
     # Dry run
     if dry_run:
-        _print_spec_dry_run(content, active_reviewers, dedup_model, revision_model, max_cost)
+        _print_spec_dry_run(
+            content, active_reviewers, dedup_model, revision_model, max_cost,
+            config=config,
+        )
         cost_estimate_rows = _build_dry_run_estimate_rows(
             content, revision_model, active_reviewers, dedup_model, revision_model,
+            config=config,
         )
         role_assignments = _build_role_assignments(roles, active_reviewers)
         _save_stub_ledger(
@@ -161,7 +165,9 @@ async def run_spec_review(
 
     # Cost estimate
     if max_cost is not None:
-        est_cost = _estimate_spec_cost(content, active_reviewers, dedup_model, revision_model)
+        est_cost = _estimate_spec_cost(
+            content, active_reviewers, dedup_model, revision_model, config=config
+        )
         if est_cost > max_cost:
             console.print(
                 f"[red]Error:[/red] Estimated cost ${est_cost:.4f} exceeds "
@@ -208,6 +214,7 @@ async def run_spec_review(
                     point_parser=parse_spec_response,
                     role_label=f"reviewer_{i+1}",
                     mode="spec",
+                    config=config,
                 )
                 for i, r in enumerate(active_reviewers)
             ]
@@ -269,6 +276,7 @@ async def run_spec_review(
                     log_fn=storage.log,
                     cost_tracker=cost_tracker,
                     mode="spec",
+                    config=config,
                 )
                 assign_guids(groups)
             storage.save_intermediate(
@@ -352,6 +360,7 @@ async def run_spec_review(
                     cost_tracker,
                     storage,
                     review_id,
+                    config=config,
                 )
                 if revised_output:
                     result.revised_output = revised_output
@@ -391,8 +400,17 @@ def _estimate_spec_cost(
     reviewers: list,
     dedup,
     revision_model,
+    config: dict | None = None,
 ) -> float:
-    """Rough cost estimate for spec mode (no round 2)."""
+    """Rough cost estimate for spec mode (no round 2).
+
+    Prices the EFFECTIVE model for each role (D4.5) so the estimate tracks the
+    subscription switch: twin rates when off, $0 when on.
+    """
+    from ._display import _effective
+    reviewers = [_effective(config, r) for r in reviewers]
+    dedup = _effective(config, dedup)
+    revision_model = _effective(config, revision_model)
     input_tokens = estimate_tokens(content)
     est_output = min(input_tokens, MAX_OUTPUT_TOKENS)
     total = 0.0
@@ -409,9 +427,15 @@ def _print_spec_dry_run(
     dedup,
     revision_model,
     max_cost: float | None,
+    config: dict | None = None,
 ) -> None:
     """Print a spec-mode dry-run summary."""
     from rich.table import Table
+    from ._display import _effective
+
+    reviewers = [_effective(config, r) for r in reviewers]
+    dedup = _effective(config, dedup)
+    revision_model = _effective(config, revision_model)
 
     console.print(
         Panel(

@@ -131,10 +131,14 @@ async def run_plan_review(
 
     # Dry run
     if dry_run:
-        _print_dry_run("plan", content, author, active_reviewers, dedup_model, max_cost)
+        _print_dry_run(
+            "plan", content, author, active_reviewers, dedup_model, max_cost,
+            config=config,
+        )
         revision_model = roles["revision"]
         cost_estimate_rows = _build_dry_run_estimate_rows(
             content, author, active_reviewers, dedup_model, revision_model,
+            config=config,
         )
         role_assignments = _build_role_assignments(roles, active_reviewers)
         _save_stub_ledger(
@@ -146,7 +150,9 @@ async def run_plan_review(
 
     # Cost estimate
     if max_cost is not None:
-        est_cost = _estimate_total_cost(content, author, active_reviewers, dedup_model)
+        est_cost = _estimate_total_cost(
+            content, author, active_reviewers, dedup_model, config=config
+        )
         if est_cost > max_cost:
             console.print(
                 f"[red]Error:[/red] Estimated cost ${est_cost:.4f} exceeds "
@@ -194,6 +200,7 @@ async def run_plan_review(
                     role_label=f"reviewer_{i+1}",
                     mode="plan",
                     cache_prefix=build_stable_prefix("plan", content),
+                    config=config,
                 )
                 for i, r in enumerate(active_reviewers)
             ]
@@ -255,6 +262,7 @@ async def run_plan_review(
                     ctx,
                     log_fn=storage.log,
                     cost_tracker=cost_tracker,
+                    config=config,
                 )
                 assign_guids(groups)
                 storage.log(
@@ -297,6 +305,7 @@ async def run_plan_review(
                         r.name: f"reviewer_{i+1}"
                         for i, r in enumerate(active_reviewers)
                     },
+                    config=config,
                 ),
             )
 

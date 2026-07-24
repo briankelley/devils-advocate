@@ -189,6 +189,10 @@ class CostTracker:
     exceeded: bool = False
     total_input_tokens: int = 0
     total_output_tokens: int = 0
+    # Sum of the API-equivalent cost of pool (subscription) legs — what the run
+    # WOULD have cost on the paid API. Accumulated only from legs that carry an
+    # api_equivalent; stays 0.0 for runs with no subscription lanes.
+    total_api_equivalent_usd: float = 0.0
     role_costs: dict = field(default_factory=dict)
     _log_fn: Any = field(default=None, repr=False)
 
@@ -202,6 +206,8 @@ class CostTracker:
         role: str = "",
         cache_write_tokens: int = 0,
         cache_read_tokens: int = 0,
+        memo: str | None = None,
+        api_equivalent: float | None = None,
     ) -> None:
         # Anthropic prompt caching: input_tokens excludes cached content;
         # cache writes bill at 1.25x the input rate, cache reads at 0.1x.
@@ -223,10 +229,20 @@ class CostTracker:
         if cache_write_tokens or cache_read_tokens:
             entry["cache_write_tokens"] = cache_write_tokens
             entry["cache_read_tokens"] = cache_read_tokens
+        # Subscription (pool) legs bill $0 but carry the API-equivalent so every
+        # cost surface can show "covered by subscription ≈ $X". Both fields land
+        # on the entry ONLY when present, so a run with no pool legs writes a
+        # byte-identical ledger to before this feature existed.
+        if memo is not None:
+            entry["memo"] = memo
+        if api_equivalent is not None:
+            entry["api_equivalent"] = round(api_equivalent, 6)
         self.entries.append(entry)
         self.total_usd += cost
         self.total_input_tokens += input_tokens + cache_write_tokens + cache_read_tokens
         self.total_output_tokens += output_tokens
+        if api_equivalent is not None:
+            self.total_api_equivalent_usd += api_equivalent
 
         if role:
             self.role_costs[role] = self.role_costs.get(role, 0.0) + cost
@@ -239,12 +255,20 @@ class CostTracker:
                     f" cache_write={cache_write_tokens}"
                     f" cache_read={cache_read_tokens}"
                 )
+            # Pool legs append the equivalent + channel marker. These are strictly
+            # APPENDED optional tokens: the mandatory prefix (through total_tokens=)
+            # and its field order/spelling are untouched, so the progress.py cost
+            # regex — which has no end-anchor — parses old and new lines alike, and
+            # a new line's prefix parses under the old regex.
+            equiv_info = ""
+            if api_equivalent is not None:
+                equiv_info = f" equiv={api_equivalent:.6f} channel=pool"
             self._log_fn(
                 f"§cost role={role} model={model_name} "
                 f"cost={cost:.6f} total={self.total_usd:.6f} "
                 f"in_tokens={input_tokens} out_tokens={output_tokens} "
                 f"total_tokens={self.total_input_tokens + self.total_output_tokens}"
-                f"{cache_info}"
+                f"{cache_info}{equiv_info}"
             )
 
         # Update cost guardrail flags when a budget is set

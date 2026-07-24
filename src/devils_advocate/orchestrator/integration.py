@@ -15,7 +15,7 @@ from ..types import (
 from ..ids import assign_guids, generate_review_id
 from ..cost import check_context_window
 from ..config import get_models_by_role
-from ..providers import MAX_OUTPUT_TOKENS, call_with_retry
+from ..providers import MAX_OUTPUT_TOKENS, call_and_account
 from ..prompts import build_integration_prompt, get_reviewer_system_prompt
 from ..parser import parse_review_response
 from ..normalization import normalize_review_response
@@ -147,10 +147,12 @@ async def run_integration_review(
             [integ_reviewer],
             dedup_model,
             max_cost,
+            config=config,
         )
         revision_model = roles["revision"]
         cost_estimate_rows = _build_dry_run_estimate_rows(
             combined, author, [integ_reviewer], dedup_model, revision_model,
+            config=config,
         )
         role_assignments = _build_role_assignments(roles, [integ_reviewer])
         role_assignments["integration"] = integ_reviewer.name
@@ -164,7 +166,9 @@ async def run_integration_review(
 
     # Pre-flight cost estimate (abort before any LLM calls if over budget)
     if max_cost is not None:
-        est_cost = _estimate_total_cost(combined, author, [integ_reviewer], dedup_model)
+        est_cost = _estimate_total_cost(
+            combined, author, [integ_reviewer], dedup_model, config=config
+        )
         if est_cost > max_cost:
             console.print(
                 f"[red]Error:[/red] Estimated cost ${est_cost:.4f} exceeds "
@@ -204,9 +208,12 @@ async def run_integration_review(
                 f"Integration: calling {integ_reviewer.name} "
                 f"({_call_info(integ_reviewer, prompt, effective_max)})"
             )
-            text, usage = await call_with_retry(
+            text, usage, _served = await call_and_account(
                 client,
                 integ_reviewer,
+                config,
+                cost_tracker,
+                "integration",
                 get_reviewer_system_prompt(),
                 prompt,
                 effective_max,
@@ -216,14 +223,6 @@ async def run_integration_review(
             storage.log(
                 f"Integration: {integ_reviewer.name} responded "
                 f"(recv: {usage['output_tokens']})"
-            )
-            cost_tracker.add(
-                integ_reviewer.name,
-                usage["input_tokens"],
-                usage["output_tokens"],
-                integ_reviewer.cost_per_1k_input,
-                integ_reviewer.cost_per_1k_output,
-                role="integration",
             )
             storage.save_intermediate(
                 review_id, "round1", f"{integ_reviewer.name}_raw.txt", text
@@ -239,6 +238,7 @@ async def run_integration_review(
                     log_fn=storage.log,
                     cost_tracker=cost_tracker,
                     mode="integration",
+                    config=config,
                 )
 
             if not points:
@@ -275,6 +275,7 @@ async def run_integration_review(
                     storage=storage,
                     revision_filename="remediation-plan.md",
                     reviewer_roles={integ_reviewer.name: "integration"},
+                    config=config,
                 ),
             )
 

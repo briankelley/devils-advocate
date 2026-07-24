@@ -407,7 +407,7 @@ class TestRunRevision:
         raw_response = "=== REVISED PLAN ===\nRevised plan content\n=== END REVISED PLAN ==="
         usage = {"input_tokens": 100, "output_tokens": 50}
 
-        with patch("devils_advocate.revision.call_with_retry", new_callable=AsyncMock,
+        with patch("devils_advocate.providers.call_with_retry", new_callable=AsyncMock,
                     return_value=(raw_response, usage)):
             result = await run_revision(
                 MagicMock(), model, "original plan", ledger, "plan",
@@ -457,7 +457,7 @@ class TestRunSpecRevision:
         raw_response = "=== SPEC SUGGESTIONS ===\nSpec suggestions\n=== END SPEC SUGGESTIONS ==="
         usage = {"input_tokens": 100, "output_tokens": 50}
 
-        with patch("devils_advocate.revision.call_with_retry", new_callable=AsyncMock,
+        with patch("devils_advocate.providers.call_with_retry", new_callable=AsyncMock,
                     return_value=(raw_response, usage)):
             result = await run_spec_revision(
                 MagicMock(), model, "original spec", [g], 2,
@@ -735,7 +735,7 @@ class TestLossyRevisionRetry:
         usage = {"input_tokens": 100, "output_tokens": 50}
 
         mock = AsyncMock(side_effect=[(lossy, usage), (full, usage)])
-        with patch("devils_advocate.revision.call_with_retry", mock):
+        with patch("devils_advocate.providers.call_with_retry", mock):
             result = await run_revision(
                 MagicMock(), model, original, self._ledger(), "plan",
                 cost, storage, "rev-001",
@@ -755,7 +755,7 @@ class TestLossyRevisionRetry:
         usage = {"input_tokens": 100, "output_tokens": 50}
 
         mock = AsyncMock(return_value=(full, usage))
-        with patch("devils_advocate.revision.call_with_retry", mock):
+        with patch("devils_advocate.providers.call_with_retry", mock):
             result = await run_revision(
                 MagicMock(), model, original, self._ledger(), "plan",
                 cost, storage, "rev-001",
@@ -773,7 +773,7 @@ class TestLossyRevisionRetry:
         usage = {"input_tokens": 100, "output_tokens": 50}
 
         mock = AsyncMock(side_effect=[(short_lossy, usage), (longer_lossy, usage)])
-        with patch("devils_advocate.revision.call_with_retry", mock):
+        with patch("devils_advocate.providers.call_with_retry", mock):
             result = await run_revision(
                 MagicMock(), model, original, self._ledger(), "plan",
                 cost, storage, "rev-001",
@@ -793,7 +793,7 @@ class TestLossyRevisionRetry:
         usage = {"input_tokens": 100, "output_tokens": 50}
 
         mock = AsyncMock(side_effect=[(lossy, usage), (full, usage)])
-        with patch("devils_advocate.revision.call_with_retry", mock):
+        with patch("devils_advocate.providers.call_with_retry", mock):
             await run_revision(
                 MagicMock(), model, original, self._ledger(), "plan",
                 cost, storage, "rev-001",

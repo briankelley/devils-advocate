@@ -533,7 +533,7 @@ class TestDeduplicatePoints:
         )
         usage = {"input_tokens": 200, "output_tokens": 100}
 
-        with patch("devils_advocate.dedup.call_with_retry",
+        with patch("devils_advocate.providers.call_with_retry",
                     new_callable=AsyncMock, return_value=(dedup_response, usage)):
             groups = await deduplicate_points(
                 MagicMock(), [p1, p2], model, ctx,

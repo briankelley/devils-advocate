@@ -11,7 +11,7 @@ from collections import defaultdict
 
 from .cost import check_context_window, estimate_tokens
 from .prompts import build_stable_prefix, load_template
-from .providers import REVISION_MAX_OUTPUT_TOKENS, call_with_retry
+from .providers import REVISION_MAX_OUTPUT_TOKENS, call_and_account
 from .types import CostTracker, ModelConfig, ReviewGroup
 from .storage import StorageManager
 from .ui import console
@@ -283,6 +283,7 @@ async def _run_revision_core(
     storage: StorageManager,
     review_id: str,
     finding_count: int = 0,
+    config: dict | None = None,
 ) -> str:
     """Shared revision implementation: build prompt, call LLM, extract result.
 
@@ -337,25 +338,18 @@ async def _run_revision_core(
     cache_prefix = build_stable_prefix(mode, original_content) if mode != "spec" else ""
     best_candidate = ""
     for attempt in (1, 2):
-        raw, usage = await call_with_retry(
+        raw, usage, _served = await call_and_account(
             client,
             revision_model,
+            config,
+            cost_tracker,
+            "revision",
             "",
             prompt if attempt == 1 else prompt + _STERN_RETRY_SUFFIX,
             effective_max,
             log_fn=storage.log,
             mode="revision",
             cache_prefix=cache_prefix,
-        )
-        cost_tracker.add(
-            revision_model.name,
-            usage["input_tokens"],
-            usage["output_tokens"],
-            revision_model.cost_per_1k_input,
-            revision_model.cost_per_1k_output,
-            role="revision",
-            cache_write_tokens=usage.get("cache_write_tokens", 0),
-            cache_read_tokens=usage.get("cache_read_tokens", 0),
         )
         console.print(
             f"  Revision model responded ({usage['output_tokens']} tokens)"
@@ -418,6 +412,7 @@ async def run_revision(
     cost_tracker: CostTracker,
     storage: StorageManager,
     review_id: str,
+    config: dict | None = None,
 ) -> str:
     """Run the isolated revision LLM call.
 
@@ -441,7 +436,7 @@ async def run_revision(
     return await _run_revision_core(
         client, revision_model, original_content, revision_context,
         mode, cost_tracker, storage, review_id,
-        finding_count=finding_count,
+        finding_count=finding_count, config=config,
     )
 
 
@@ -454,6 +449,7 @@ async def run_spec_revision(
     cost_tracker: CostTracker,
     storage: StorageManager,
     review_id: str,
+    config: dict | None = None,
 ) -> str:
     """Run the spec mode revision — compiles suggestions into a themed report.
 
@@ -470,5 +466,5 @@ async def run_spec_revision(
     return await _run_revision_core(
         client, revision_model, original_content, revision_context,
         "spec", cost_tracker, storage, review_id,
-        finding_count=len(groups),
+        finding_count=len(groups), config=config,
     )

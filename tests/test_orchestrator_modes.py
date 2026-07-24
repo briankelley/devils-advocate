@@ -785,7 +785,7 @@ class TestIntegrationReviewLockRelease:
             patch("devils_advocate.orchestrator.integration.get_models_by_role", return_value=roles),
             patch("devils_advocate.orchestrator.integration.check_context_window", return_value=(True, 100, 100000)),
             patch("devils_advocate.http.make_async_client", return_value=mock_client),
-            patch("devils_advocate.orchestrator.integration.call_with_retry", side_effect=Exception("HTTP 500")),
+            patch("devils_advocate.providers.call_with_retry", side_effect=Exception("HTTP 500")),
         ):
             # Integration review doesn't catch reviewer exceptions — they propagate
             # through the try block, but the finally block still runs.
@@ -926,7 +926,7 @@ class TestCallReviewerNormalization:
 
         with (
             patch(
-                "devils_advocate.orchestrator._common.call_with_retry",
+                "devils_advocate.providers.call_with_retry",
                 return_value=("raw unparseable text", {"input_tokens": 100, "output_tokens": 50}),
             ),
             patch(
@@ -961,7 +961,7 @@ class TestCallReviewerNormalization:
 
         with (
             patch(
-                "devils_advocate.orchestrator._common.call_with_retry",
+                "devils_advocate.providers.call_with_retry",
                 return_value=("parsed text", {"input_tokens": 100, "output_tokens": 50}),
             ),
             patch(
@@ -995,7 +995,7 @@ class TestCallReviewerNormalization:
         custom_parser = MagicMock(return_value=[make_review_point(point_id="custom")])
 
         with patch(
-            "devils_advocate.orchestrator._common.call_with_retry",
+            "devils_advocate.providers.call_with_retry",
             return_value=("custom text", {"input_tokens": 100, "output_tokens": 50}),
         ):
             points = await _call_reviewer(

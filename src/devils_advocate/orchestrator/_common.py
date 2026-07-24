@@ -16,7 +16,7 @@ from ..types import (
 from ..cost import estimate_tokens
 from ..providers import (
     MAX_OUTPUT_TOKENS,
-    call_with_retry,
+    call_and_account,
 )
 from ..prompts import apply_min_points_hint, get_reviewer_system_prompt
 from ..parser import parse_review_response
@@ -135,6 +135,7 @@ async def _call_reviewer(
     role_label: str = "reviewer",
     mode: str = "",
     cache_prefix: str = "",
+    config: dict | None = None,
 ) -> list[ReviewPoint]:
     """Call a single reviewer and return parsed points.
 
@@ -161,25 +162,18 @@ async def _call_reviewer(
     sys_prompt = system_prompt if system_prompt is not None else get_reviewer_system_prompt()
     # Optional per-model completeness floor (appended after the cached prefix).
     prompt = apply_min_points_hint(prompt, reviewer.min_points_hint)
-    text, usage = await call_with_retry(
+    text, usage, _served = await call_and_account(
         client,
         reviewer,
+        config,
+        cost_tracker,
+        role_label,
         sys_prompt,
         prompt,
         effective_max,
         log_fn=storage.log,
         mode=mode,
         cache_prefix=cache_prefix,
-    )
-    cost_tracker.add(
-        reviewer.name,
-        usage["input_tokens"],
-        usage["output_tokens"],
-        reviewer.cost_per_1k_input,
-        reviewer.cost_per_1k_output,
-        role=role_label,
-        cache_write_tokens=usage.get("cache_write_tokens", 0),
-        cache_read_tokens=usage.get("cache_read_tokens", 0),
     )
     storage.log(
         f"Round 1: {reviewer.name} responded "
@@ -201,7 +195,7 @@ async def _call_reviewer(
         points = await normalize_review_response(
             client, text, normalization_model, reviewer.name,
             log_fn=storage.log, cost_tracker=cost_tracker,
-            mode=mode or "normalization",
+            mode=mode or "normalization", config=config,
         )
 
     return points

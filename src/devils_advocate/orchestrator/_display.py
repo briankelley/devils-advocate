@@ -23,14 +23,38 @@ from ..providers import (
 from ..ui import console
 
 
+def _effective(config: dict | None, model: ModelConfig | None) -> ModelConfig | None:
+    """Resolve *model* to the model that would actually run, for estimation.
+
+    With the subscription switch OFF a CLI-lane role is priced at its API twin's
+    rates (what it will really cost); with the switch ON it resolves to the CLI
+    model itself, whose rates are unset — so the estimate reads $0, matching the
+    pool leg. With no *config* (older direct callers / tests) the model is
+    returned unchanged.
+    """
+    if config is None or model is None:
+        return model
+    from ..config import resolve_effective_model
+    return resolve_effective_model(config, model)
+
+
 def _estimate_total_cost(
     content: str,
     author: ModelConfig,
     reviewers: list[ModelConfig],
     dedup: ModelConfig,
     revision_model: ModelConfig | None = None,
+    config: dict | None = None,
 ) -> float:
-    """Rough cost estimate covering both rounds of the review protocol."""
+    """Rough cost estimate covering both rounds of the review protocol.
+
+    Prices the EFFECTIVE model for each role (D4.5) so the estimate tracks the
+    subscription switch: twin rates when off, $0 when on.
+    """
+    author = _effective(config, author)
+    reviewers = [_effective(config, r) for r in reviewers]
+    dedup = _effective(config, dedup)
+    revision_model = _effective(config, revision_model)
     input_tokens = estimate_tokens(content)
     est_output = min(input_tokens, MAX_OUTPUT_TOKENS)
     total = 0.0
@@ -58,8 +82,17 @@ def _build_dry_run_estimate_rows(
     reviewers: list[ModelConfig],
     dedup: ModelConfig,
     revision_model: ModelConfig | None = None,
+    config: dict | None = None,
 ) -> list[dict]:
-    """Build cost estimate rows for dry run display (CLI table + GUI details page)."""
+    """Build cost estimate rows for dry run display (CLI table + GUI details page).
+
+    Each row prices the EFFECTIVE model for its role (D4.5): twin rates when the
+    subscription switch is off, $0 when on.
+    """
+    author = _effective(config, author)
+    reviewers = [_effective(config, r) for r in reviewers]
+    dedup = _effective(config, dedup)
+    revision_model = _effective(config, revision_model)
     rows = []
     input_tokens = estimate_tokens(content)
 
@@ -136,6 +169,7 @@ def _print_dry_run(
     dedup: ModelConfig,
     max_cost: float | None,
     revision_model: ModelConfig | None = None,
+    config: dict | None = None,
 ) -> None:
     """Print a dry-run summary table without making API calls."""
     console.print(
@@ -151,7 +185,9 @@ def _print_dry_run(
     table.add_column("Est. Output Tokens")
     table.add_column("Est. Cost (USD)")
 
-    rows = _build_dry_run_estimate_rows(content, author, reviewers, dedup, revision_model)
+    rows = _build_dry_run_estimate_rows(
+        content, author, reviewers, dedup, revision_model, config=config
+    )
     for row in rows:
         table.add_row(
             row["step"],
@@ -163,7 +199,9 @@ def _print_dry_run(
 
     console.print(table)
 
-    total = _estimate_total_cost(content, author, reviewers, dedup, revision_model)
+    total = _estimate_total_cost(
+        content, author, reviewers, dedup, revision_model, config=config
+    )
     console.print(f"\nEstimated total cost: [bold]${total:.4f}[/bold]")
     if max_cost:
         color = "green" if total <= max_cost else "red"

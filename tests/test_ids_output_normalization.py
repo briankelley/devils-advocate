@@ -530,7 +530,7 @@ class TestNormalizeReviewResponse:
         )
         usage = {"input_tokens": 200, "output_tokens": 100}
 
-        with patch("devils_advocate.normalization.call_with_retry",
+        with patch("devils_advocate.providers.call_with_retry",
                     new_callable=AsyncMock, return_value=(structured_output, usage)):
             points = await normalize_review_response(
                 MagicMock(), "raw text", model, "reviewer-1",
@@ -547,7 +547,7 @@ class TestNormalizeReviewResponse:
         model = make_model_config(name="norm-model")
         log = MagicMock()
 
-        with patch("devils_advocate.normalization.call_with_retry",
+        with patch("devils_advocate.providers.call_with_retry",
                     new_callable=AsyncMock, side_effect=Exception("LLM error")):
             points = await normalize_review_response(
                 MagicMock(), "raw text", model, "reviewer-1",
@@ -565,7 +565,7 @@ class TestNormalizeReviewResponse:
         log = MagicMock()
         usage = {"input_tokens": 100, "output_tokens": 50}
 
-        with patch("devils_advocate.normalization.call_with_retry",
+        with patch("devils_advocate.providers.call_with_retry",
                     new_callable=AsyncMock, return_value=("no findings", usage)):
             await normalize_review_response(
                 MagicMock(), "raw text", model, "reviewer-1",
@@ -584,7 +584,7 @@ class TestNormalizeReviewResponse:
         cost = CostTracker()
         usage = {"input_tokens": 200, "output_tokens": 100}
 
-        with patch("devils_advocate.normalization.call_with_retry",
+        with patch("devils_advocate.providers.call_with_retry",
                     new_callable=AsyncMock, return_value=("no findings", usage)):
             await normalize_review_response(
                 MagicMock(), "raw text", model, "reviewer-1",
@@ -600,7 +600,7 @@ class TestNormalizeReviewResponse:
         model = make_model_config(name="norm-model")
         usage = {"input_tokens": 100, "output_tokens": 50}
 
-        with patch("devils_advocate.normalization.call_with_retry",
+        with patch("devils_advocate.providers.call_with_retry",
                     new_callable=AsyncMock, return_value=("no findings", usage)):
             points = await normalize_review_response(
                 MagicMock(), "raw text", model, "reviewer-1",

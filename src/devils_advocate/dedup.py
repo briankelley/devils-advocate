@@ -7,7 +7,7 @@ import httpx
 from .types import CostTracker, ModelConfig, ReviewContext, ReviewGroup, ReviewPoint
 from .cost import check_context_window, estimate_tokens
 from .prompts import build_dedup_prompt, build_spec_dedup_prompt
-from .providers import MAX_OUTPUT_TOKENS, call_with_retry
+from .providers import MAX_OUTPUT_TOKENS, call_and_account
 from .parser import parse_dedup_response, parse_spec_dedup_response
 
 
@@ -72,6 +72,7 @@ async def deduplicate_points(
     log_fn=None,
     cost_tracker: CostTracker | None = None,
     mode: str = "plan",
+    config: dict | None = None,
 ) -> list[ReviewGroup]:
     """Send all review points to the dedup model for grouping.
 
@@ -107,20 +108,11 @@ async def deduplicate_points(
             f"max_out: {configured}/{stated}, thinking: {thinking_str})"
         )
 
-    text, usage = await call_with_retry(
-        client, model, "", prompt, MAX_OUTPUT_TOKENS, log_fn=log_fn,
+    text, usage, _served = await call_and_account(
+        client, model, config, cost_tracker, "dedup",
+        "", prompt, MAX_OUTPUT_TOKENS, log_fn=log_fn,
         mode="dedup",
     )
-
-    if cost_tracker is not None:
-        cost_tracker.add(
-            model.name,
-            usage.get("input_tokens", 0),
-            usage.get("output_tokens", 0),
-            model.cost_per_1k_input,
-            model.cost_per_1k_output,
-            role="dedup",
-        )
 
     if log_fn:
         log_fn(

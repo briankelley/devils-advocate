@@ -28,7 +28,7 @@ from ..cost import check_context_window, estimate_tokens
 from ..providers import (
     AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
     MAX_OUTPUT_TOKENS,
-    call_with_retry,
+    call_and_account,
 )
 from ..prompts import (
     apply_min_points_hint,
@@ -77,6 +77,7 @@ async def _run_round2_exchange(
     storage: StorageManager,
     review_id: str,
     reviewer_roles: dict[str, str] | None = None,
+    config: dict | None = None,
 ) -> tuple[list[RebuttalResponse], list[AuthorFinalResponse], str | None]:
     """Shared Round 2 exchange: reviewer rebuttals + author final response.
 
@@ -148,10 +149,16 @@ async def _run_round2_exchange(
             f"({_call_info(r, rebuttal_prompt, effective_max_r)})"
         )
         rebuttal_reviewers.append(r)
+        rb_role = (
+            reviewer_roles.get(r.name, "reviewer") if reviewer_roles else "reviewer"
+        )
         rebuttal_coroutines.append(
-            call_with_retry(
+            call_and_account(
                 client,
                 r,
+                config,
+                cost_tracker,
+                rb_role,
                 get_reviewer_system_prompt(),
                 rebuttal_prompt,
                 effective_max_r,
@@ -173,17 +180,7 @@ async def _run_round2_exchange(
             console.print(f"  [yellow]Warning: {r.name} failed: {rb_result}[/yellow]")
             storage.log(f"Rebuttal {r.name} failed: {rb_result}")
             continue
-        rebuttal_raw, rebuttal_usage = rb_result
-        cost_tracker.add(
-            r.name,
-            rebuttal_usage["input_tokens"],
-            rebuttal_usage["output_tokens"],
-            r.cost_per_1k_input,
-            r.cost_per_1k_output,
-            role=reviewer_roles.get(r.name, "reviewer") if reviewer_roles else "reviewer",
-            cache_write_tokens=rebuttal_usage.get("cache_write_tokens", 0),
-            cache_read_tokens=rebuttal_usage.get("cache_read_tokens", 0),
-        )
+        rebuttal_raw, rebuttal_usage, _served = rb_result
         storage.log(
             f"Round 2: {r.name} responded "
             f"(recv: {rebuttal_usage['output_tokens']})"
@@ -253,25 +250,18 @@ async def _run_round2_exchange(
                     f"Round 2: calling author to respond to rebuttals "
                     f"({_call_info(author, final_prompt, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS)})"
                 )
-                final_raw, final_usage = await call_with_retry(
+                final_raw, final_usage, _served = await call_and_account(
                     client,
                     author,
+                    config,
+                    cost_tracker,
+                    "author",
                     "",
                     final_prompt,
                     AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
                     log_fn=storage.log,
                     mode=mode,
                     cache_prefix=build_stable_prefix(mode, content),
-                )
-                cost_tracker.add(
-                    author.name,
-                    final_usage["input_tokens"],
-                    final_usage["output_tokens"],
-                    author.cost_per_1k_input,
-                    author.cost_per_1k_output,
-                    role="author",
-                    cache_write_tokens=final_usage.get("cache_write_tokens", 0),
-                    cache_read_tokens=final_usage.get("cache_read_tokens", 0),
                 )
                 storage.log(
                     f"Round 2: author responded "
@@ -369,6 +359,9 @@ class PipelineInputs:
     storage: StorageManager
     revision_filename: str
     reviewer_roles: dict
+    # The loaded config dict — threaded to call_and_account so the master switch
+    # and per-model failover apply at every dispatch in the shared pipeline.
+    config: dict | None = None
 
 
 async def _run_adversarial_pipeline(
@@ -391,6 +384,7 @@ async def _run_adversarial_pipeline(
     cost_tracker = inputs.cost_tracker
     storage = inputs.storage
     review_id = inputs.review_id
+    config = inputs.config
 
     # -- Round 1: Author response --
     console.print(
@@ -418,25 +412,18 @@ async def _run_adversarial_pipeline(
         f"Round 1: calling author to respond to grouped feedback "
         f"({_call_info(author, round1_author_prompt, AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS)})"
     )
-    author_raw, author_usage = await call_with_retry(
+    author_raw, author_usage, _served = await call_and_account(
         client,
         author,
+        config,
+        cost_tracker,
+        "author",
         "",
         round1_author_prompt,
         AUTHOR_RESPONSE_MAX_OUTPUT_TOKENS,
         log_fn=storage.log,
         mode=mode,
         cache_prefix=build_stable_prefix(mode, content),
-    )
-    cost_tracker.add(
-        author.name,
-        author_usage["input_tokens"],
-        author_usage["output_tokens"],
-        author.cost_per_1k_input,
-        author.cost_per_1k_output,
-        role="author",
-        cache_write_tokens=author_usage.get("cache_write_tokens", 0),
-        cache_read_tokens=author_usage.get("cache_read_tokens", 0),
     )
     console.print(
         f"  Author responded ({author_usage['output_tokens']} tokens)"
@@ -490,6 +477,7 @@ async def _run_adversarial_pipeline(
         storage,
         review_id,
         reviewer_roles=inputs.reviewer_roles,
+        config=config,
     )
 
     # -- Governance --
@@ -589,6 +577,7 @@ async def _run_adversarial_pipeline(
                 cost_tracker=cost_tracker,
                 storage=storage,
                 review_id=review_id,
+                config=config,
             )
             if revised_output:
                 storage._atomic_write(rd / inputs.revision_filename, revised_output)

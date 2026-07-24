@@ -352,7 +352,7 @@ async def test_custom_parser_and_system_prompt(spec_config, spec_file, tmp_path)
         old_cwd = os.getcwd()
         os.chdir(tmp_path)
         try:
-            with patch("devils_advocate.orchestrator._common.call_with_retry", side_effect=tracking_call_with_retry):
+            with patch("devils_advocate.providers.call_with_retry", side_effect=tracking_call_with_retry):
                 result = await run_spec_review(
                     config=spec_config,
                     input_files=[spec_file],

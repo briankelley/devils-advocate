@@ -490,7 +490,7 @@ async def revise_review(request: Request, review_id: str):
             revised = await run_revision(
                 client, revision_model, original_content, ledger,
                 mode=mode, cost_tracker=cost_tracker,
-                storage=storage, review_id=review_id,
+                storage=storage, review_id=review_id, config=config,
             )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Revision failed: {exc}")

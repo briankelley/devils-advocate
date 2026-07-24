@@ -640,6 +640,7 @@ def revise(project, review_id, config_path, project_dir, max_cost, input_overrid
                 cost_tracker=cost_tracker,
                 storage=storage,
                 review_id=review_id,
+                config=config,
             )
 
     loop = asyncio.new_event_loop()
