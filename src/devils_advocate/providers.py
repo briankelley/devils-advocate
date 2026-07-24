@@ -10,10 +10,12 @@ import asyncio
 import json
 import random
 import re
+from dataclasses import dataclass
+from typing import Awaitable, Callable
 
 import httpx
 
-from .types import APIError, ModelConfig
+from .types import AdvocateError, APIError, ConfigError, ModelConfig
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -398,6 +400,65 @@ async def call_minimax(
     }
 
 
+# ─── Provider Registry ───────────────────────────────────────────────────────
+
+# A provider is any coroutine ``(client, model, system_prompt, user_prompt,
+# max_tokens, mode) -> (text, usage_dict)``. ``call_anthropic`` additionally
+# accepts a ``cache_prefix`` keyword; the dispatcher passes it only to that
+# built-in, exactly as the historical if/elif did.
+ProviderFn = Callable[..., Awaitable[tuple]]
+
+PROVIDER_REGISTRY: dict[str, ProviderFn] = {
+    "anthropic": call_anthropic,
+    "minimax": call_minimax,
+    "local": call_openai_compatible,
+}
+
+
+def register_provider(name: str, fn: ProviderFn) -> None:
+    """Register a provider transport under *name* in the shared registry.
+
+    New transports (subscription CLI lanes, external plugins) become entries
+    here instead of new branches in :func:`call_model`.
+    """
+    PROVIDER_REGISTRY[name] = fn
+
+
+@dataclass(frozen=True)
+class ProviderPluginAPI:
+    """The stable surface a provider plugin's ``register(api)`` receives.
+
+    Carries the registration hook, the built-in provider callables, the retry
+    engine, and the exception types so a plugin can build a transport that
+    behaves like a first-class built-in without importing package internals
+    directly.
+    """
+    register_provider: Callable[[str, ProviderFn], None]
+    call_anthropic: ProviderFn
+    call_openai_compatible: ProviderFn
+    call_minimax: ProviderFn
+    call_openai_responses: ProviderFn
+    call_with_retry: Callable[..., Awaitable[tuple]]
+    AdvocateError: type
+    APIError: type
+    ConfigError: type
+
+
+def make_plugin_api() -> ProviderPluginAPI:
+    """Build the namespace handed to each provider plugin's ``register``."""
+    return ProviderPluginAPI(
+        register_provider=register_provider,
+        call_anthropic=call_anthropic,
+        call_openai_compatible=call_openai_compatible,
+        call_minimax=call_minimax,
+        call_openai_responses=call_openai_responses,
+        call_with_retry=call_with_retry,
+        AdvocateError=AdvocateError,
+        APIError=APIError,
+        ConfigError=ConfigError,
+    )
+
+
 # ─── Unified Dispatcher ─────────────────────────────────────────────────────
 
 
@@ -415,24 +476,30 @@ async def call_model(
     ``cache_prefix`` enables explicit prompt caching on Anthropic models.
     Other providers cache shared prefixes automatically server-side, so the
     parameter is ignored for them — the full prompt string is sent either way.
+
+    Dispatch resolves ``model.provider`` against :data:`PROVIDER_REGISTRY`
+    first (built-ins plus any plugin- or lane-registered transports). Only when
+    the provider is unregistered does it fall back to the Responses API (when
+    ``use_responses_api`` is set) or the OpenAI-compatible catch-all — which
+    keeps ``local`` outranking ``use_responses_api`` exactly as before.
     """
     # Honour per-model output cap from models.yaml
     if model.max_out_configured and model.max_out_configured < max_tokens:
         max_tokens = model.max_out_configured
 
-    if model.provider == "anthropic":
-        return await call_anthropic(
-            client, model, system_prompt, user_prompt, max_tokens, mode,
-            cache_prefix=cache_prefix,
-        )
-    elif model.provider == "minimax":
-        return await call_minimax(client, model, system_prompt, user_prompt, max_tokens, mode)
-    elif model.provider == "local":
-        return await call_openai_compatible(client, model, system_prompt, user_prompt, max_tokens, mode)
-    elif model.use_responses_api:
+    fn = PROVIDER_REGISTRY.get(model.provider)
+    if fn is not None:
+        # Thin adapter: only call_anthropic consumes cache_prefix.
+        if fn is call_anthropic:
+            return await fn(
+                client, model, system_prompt, user_prompt, max_tokens, mode,
+                cache_prefix=cache_prefix,
+            )
+        return await fn(client, model, system_prompt, user_prompt, max_tokens, mode)
+
+    if model.use_responses_api:
         return await call_openai_responses(client, model, system_prompt, user_prompt, max_tokens, mode)
-    else:
-        return await call_openai_compatible(client, model, system_prompt, user_prompt, max_tokens, mode)
+    return await call_openai_compatible(client, model, system_prompt, user_prompt, max_tokens, mode)
 
 
 # ─── Retry Engine ────────────────────────────────────────────────────────────

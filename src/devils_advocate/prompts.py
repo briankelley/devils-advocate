@@ -16,6 +16,14 @@ from .types import AdvocateError
 CONTENT_START = "=== FILE CONTENT ==="
 CONTENT_END = "=== END FILE CONTENT ==="
 
+# Appended (not templated) so on-disk templates stay byte-identical and the
+# sentence sits outside the cached artifact prefix.
+MIN_POINTS_HINT_SENTENCE = (
+    "Completeness requirement: enumerate every distinct finding as its own "
+    "numbered review point — do not compress the tail into summaries; if the "
+    "artifact supports more than {n} findings, report at least {n}."
+)
+
 # ─── Template Loader ─────────────────────────────────────────────────────────
 
 _reviewer_system_cache: str | None = None
@@ -40,6 +48,18 @@ def load_template(name: str, **kwargs: str) -> str:
 
 
 # ─── Prompt Builders ─────────────────────────────────────────────────────────
+
+
+def apply_min_points_hint(prompt: str, n: int | None) -> str:
+    """Append the completeness-floor sentence to *prompt* when *n* is set.
+
+    Returns *prompt* unchanged when *n* is falsy (``None`` or ``0``). The
+    sentence is appended at the end so the stable, cacheable prefix at the head
+    of the prompt is never disturbed.
+    """
+    if not n:
+        return prompt
+    return prompt + "\n\n" + MIN_POINTS_HINT_SENTENCE.format(n=n)
 
 
 def build_stable_prefix(mode: str, content: str) -> str:

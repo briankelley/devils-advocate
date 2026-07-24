@@ -18,7 +18,7 @@ from ..providers import (
     MAX_OUTPUT_TOKENS,
     call_with_retry,
 )
-from ..prompts import get_reviewer_system_prompt
+from ..prompts import apply_min_points_hint, get_reviewer_system_prompt
 from ..parser import parse_review_response
 from ..normalization import normalize_review_response
 from ..dedup import promote_points_to_groups as _promote_points_to_groups  # noqa: F401 — re-exported
@@ -159,6 +159,8 @@ async def _call_reviewer(
         f"({_call_info(reviewer, prompt, effective_max)})"
     )
     sys_prompt = system_prompt if system_prompt is not None else get_reviewer_system_prompt()
+    # Optional per-model completeness floor (appended after the cached prefix).
+    prompt = apply_min_points_hint(prompt, reviewer.min_points_hint)
     text, usage = await call_with_retry(
         client,
         reviewer,

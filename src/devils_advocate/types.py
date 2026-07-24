@@ -96,6 +96,15 @@ class ModelConfig:
     use_responses_api: bool = False
     thinking: bool = False
     stream: bool = False
+    # Opaque per-model passthrough for provider plugins / lane transports. Core
+    # never reads it; only the explicit `extra:` block populates it (typo-safe).
+    extra: dict = field(default_factory=dict)
+    # Name of another model entry to re-dispatch to when this provider is
+    # unavailable. Inert until the failover engine lands; honoured by name.
+    failover_model: str = ""
+    # Optional completeness floor: when set, reviewer prompts gain one pinned
+    # sentence asking for at least this many enumerated findings.
+    min_points_hint: int | None = None
 
     @property
     def api_key(self) -> str:

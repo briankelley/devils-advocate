@@ -12,6 +12,9 @@ from .types import ConfigError, ModelConfig
 # Default timeout matches ModelConfig dataclass default
 DEFAULT_TIMEOUT = 120
 REVISION_MIN_TIMEOUT = 900
+# Sentinel provider value for an unspecified transport (OpenAI-compatible
+# catch-all); exempt from the D1.3 unresolved-provider check.
+DEFAULT_PROVIDER = "openai"
 
 
 def _load_dotenv(config_path: Path) -> None:
@@ -30,6 +33,46 @@ def _load_dotenv(config_path: Path) -> None:
         key, sep, value = line.partition("=")
         if sep and key.strip() and key not in os.environ:
             os.environ[key] = value
+
+
+def _load_provider_plugins(plugin_paths: list, config_dir: Path) -> None:
+    """Load external provider plugins, registering their transports.
+
+    Each entry in *plugin_paths* is a file path (``~`` expanded; relative paths
+    resolve against *config_dir*). The module must expose ``register(api)``,
+    which receives a :class:`~devils_advocate.providers.ProviderPluginAPI`. Any
+    load or registration failure raises :class:`ConfigError` naming the path —
+    at load time, never mid-run.
+    """
+    import importlib.util
+
+    from . import providers as _providers
+
+    api = _providers.make_plugin_api()
+    for raw_path in plugin_paths:
+        path = Path(raw_path).expanduser()
+        if not path.is_absolute():
+            path = (config_dir / path).resolve()
+        try:
+            spec = importlib.util.spec_from_file_location(
+                f"devils_advocate_plugin_{path.stem}", path
+            )
+            if spec is None or spec.loader is None:
+                raise ConfigError(f"cannot load module spec from '{raw_path}'")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            register = getattr(module, "register", None)
+            if not callable(register):
+                raise ConfigError(
+                    f"plugin '{raw_path}' does not expose a register(api) function"
+                )
+            register(api)
+        except ConfigError:
+            raise
+        except Exception as exc:
+            raise ConfigError(
+                f"failed to load provider plugin '{raw_path}': {exc}"
+            ) from exc
 
 
 def init_config() -> tuple[str, Path]:
@@ -138,7 +181,7 @@ def load_config(path: Path | None = None) -> dict:
     for name, cfg in raw["models"].items():
         all_models[name] = ModelConfig(
             name=name,
-            provider=cfg.get("provider", "openai"),
+            provider=cfg.get("provider", DEFAULT_PROVIDER),
             model_id=cfg.get("model_id", name),
             api_key_env=cfg.get("api_key_env", ""),
             api_base=cfg.get("api_base", ""),
@@ -156,7 +199,18 @@ def load_config(path: Path | None = None) -> dict:
             use_responses_api=cfg.get("use_responses_api", False),
             thinking=cfg.get("thinking", False),
             stream=cfg.get("stream", False),
+            extra=cfg.get("extra") or {},
+            failover_model=cfg.get("failover_model", ""),
+            min_points_hint=cfg.get("min_points_hint"),
         )
+
+    # Provider plugins register external transports into PROVIDER_REGISTRY
+    # before validation and role assignment consult it. Loaded from the
+    # top-level settings block; any failure is fatal at load, never mid-run.
+    settings_block = raw.get("settings") or {}
+    plugin_paths = settings_block.get("provider_plugins") or []
+    if plugin_paths:
+        _load_provider_plugins(plugin_paths, config_path.parent)
 
     # Assign roles from the top-level 'roles' block
     roles_block = raw.get("roles") or {}
@@ -210,6 +264,30 @@ def load_config(path: Path | None = None) -> dict:
 
     # Only active models (referenced in roles) go into the working set
     models = {name: all_models[name] for name in all_models if name in active_names}
+
+    # D1.3: every model that will actually be dispatched must resolve to a
+    # transport — a registered provider (built-in or plugin), an api_base for
+    # the OpenAI-compatible catch-all, or the Responses API. This catches a
+    # named lane/plugin provider (e.g. `claude-cli`) that never registered from
+    # silently falling through to the broken catch-all. Scoped to the active
+    # working set: unused entries with a bare provider never run.
+    #
+    # The default provider value "openai" is exempt: it is the sentinel for an
+    # unspecified transport, always deferred to call-time as before, so J1 adds
+    # no regression for configs that omit `provider:`/`api_base:`.
+    from . import providers as _providers
+
+    for name, m in models.items():
+        if (
+            m.provider != DEFAULT_PROVIDER
+            and m.provider not in _providers.PROVIDER_REGISTRY
+            and not m.api_base
+            and not m.use_responses_api
+        ):
+            raise ConfigError(
+                f"provider '{m.provider}' for model '{name}' is not built-in, "
+                f"registered by a plugin, or reachable via api_base"
+            )
 
     return {
         "models": models,

@@ -31,6 +31,7 @@ from ..providers import (
     call_with_retry,
 )
 from ..prompts import (
+    apply_min_points_hint,
     build_author_final_prompt,
     build_reviewer_rebuttal_prompt,
     build_round1_author_prompt,
@@ -129,6 +130,8 @@ async def _run_round2_exchange(
         rebuttal_prompt = build_reviewer_rebuttal_prompt(
             mode, content, reviewer_grouped_text, reviewer_author_text
         )
+        # Optional per-model completeness floor (appended after the cached prefix).
+        rebuttal_prompt = apply_min_points_hint(rebuttal_prompt, r.min_points_hint)
 
         fits, est, limit = check_context_window(r, rebuttal_prompt)
         if not fits:
