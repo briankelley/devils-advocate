@@ -1,6 +1,6 @@
 # Devil's Advocate — agent instructions
 
-## "Rebuild" (standing definition)
+## "Rebuild" (standing definition — invocable as the `/rebuild` skill)
 
 When Brian says **rebuild**, run the entire release chain to completion, unattended:
 
