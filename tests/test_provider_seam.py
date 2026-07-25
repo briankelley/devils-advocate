@@ -501,17 +501,17 @@ class TestMinPointsHint:
     def test_appends_pinned_sentence(self):
         out = apply_min_points_hint("PROMPT", 20)
         expected = (
-            "PROMPT\n\nCompleteness requirement: enumerate every distinct "
-            "finding as its own numbered review point — do not compress the "
-            "tail into summaries; if the artifact supports more than 20 "
-            "findings, report at least 20."
+            "PROMPT\n\nCompleteness requirement: do not cut your candidate "
+            "pass short — if the artifact supports more than 20 candidate "
+            "findings, surface at least 20 candidates before selecting the "
+            "final reported set. The reporting cap is unchanged."
         )
         assert out == expected
 
     def test_sentence_appended_after_original(self):
         out = apply_min_points_hint("HEAD", 5)
         assert out.startswith("HEAD\n\n")
-        assert out.endswith("report at least 5.")
+        assert out.endswith("The reporting cap is unchanged.")
 
     def test_number_substituted_both_places(self):
         out = apply_min_points_hint("", 7)

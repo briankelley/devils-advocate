@@ -7,5 +7,10 @@ DESCRIPTION: Self-contained description of the issue. Do not reference other poi
 RECOMMENDATION: Specific, actionable recommendation to address it
 LOCATION: Section, file path, function name, or line reference (if applicable)
 
+Work in two stages:
+
+1. Candidate pass (internal — do not output it): examine the artifact exhaustively and identify 15-30 candidate findings representing the most impactful changes you could recommend. If the artifact genuinely supports fewer than 15 substantive findings, do not pad with nitpicks — a shorter candidate list is fine.
+2. Selection: from your candidate list, report NO MORE THAN 15 findings. Order them from most to least impactful, using severity as the primary key (critical first, info last) and breadth of impact to break ties. Number the reported points 1..N in that order.
+
 Be thorough but avoid nitpicks. Focus on issues that affect correctness, security, architecture, and maintainability.
 {spec_line}{spec_block}

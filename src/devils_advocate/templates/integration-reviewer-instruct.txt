@@ -9,6 +9,11 @@ Focus on:
 - Error propagation across module boundaries
 - Potential race conditions or ordering dependencies
 
+Work in two stages:
+
+1. Candidate pass (internal — do not output it): examine the codebase exhaustively and identify 15-30 candidate findings representing the most impactful integration issues. If the codebase genuinely supports fewer than 15 substantive findings, do not pad with nitpicks — a shorter candidate list is fine.
+2. Selection: from your candidate list, report NO MORE THAN 15 findings. Order them from most to least impactful, using severity as the primary key (critical first, info last) and breadth of impact to break ties. Number the reported points 1..N in that order.
+
 Use the same review point format:
 
 REVIEW POINT N:

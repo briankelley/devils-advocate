@@ -19,9 +19,10 @@ CONTENT_END = "=== END FILE CONTENT ==="
 # Appended (not templated) so on-disk templates stay byte-identical and the
 # sentence sits outside the cached artifact prefix.
 MIN_POINTS_HINT_SENTENCE = (
-    "Completeness requirement: enumerate every distinct finding as its own "
-    "numbered review point — do not compress the tail into summaries; if the "
-    "artifact supports more than {n} findings, report at least {n}."
+    "Completeness requirement: do not cut your candidate pass short — if the "
+    "artifact supports more than {n} candidate findings, surface at least {n} "
+    "candidates before selecting the final reported set. The reporting cap is "
+    "unchanged."
 )
 
 # ─── Template Loader ─────────────────────────────────────────────────────────
