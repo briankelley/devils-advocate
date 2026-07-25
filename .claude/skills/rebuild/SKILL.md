@@ -1,12 +1,17 @@
 ---
 name: rebuild
-description: Run the full dvad release chain to completion, unattended — publish workflow → PyPI → local reinstall → version verification. Use when the owner says "rebuild" or any release/deploy/publish stage is owed at a close-out.
+description: Run the full dvad release chain to completion, unattended — publish workflow → PyPI → local reinstall → version verification. MANDATORY at every close-out (owner's word, 2026-07-24); also runs whenever the owner says "rebuild".
 ---
 
 # /rebuild — the dvad release chain
 
 This chain is pre-authorized and runs unattended, start to finish. Do not stop
 to ask between steps. It is not done until step 4 passes.
+
+**Mandatory at close-out (owner's word, 2026-07-24):** every close-out in this
+repo ends with this chain. The one exemption: a close whose landing touched no
+public-tree file states that plainly and skips — there is nothing to release,
+and an empty version bump is noise, not a release.
 
 1. **Dispatch the publish workflow:**
    `gh workflow run publish.yml --repo briankelley/devils-advocate`

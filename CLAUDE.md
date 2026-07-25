@@ -1,6 +1,10 @@
 # Devil's Advocate — agent instructions
 
-## "Rebuild" (standing definition — invocable as the `/rebuild` skill)
+## "Rebuild" (standing definition — invocable as the `/rebuild` skill; MANDATORY at every close-out)
+
+Every close-out that landed public-tree changes ends with this chain — no
+separate order needed (standing since 2026-07-24). A close that touched no
+public-tree file says so and skips.
 
 When Brian says **rebuild**, run the entire release chain to completion, unattended:
 
