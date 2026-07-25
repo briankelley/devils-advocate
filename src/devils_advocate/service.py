@@ -16,6 +16,59 @@ from pathlib import Path
 SERVICE_NAME = "dvad-gui.service"
 DEFAULT_PORT = 8411
 
+# Daily roster scan. Separate unit from the GUI so a scan failure can never
+# take the interface down with it.
+SCAN_SERVICE_NAME = "dvad-roster-scan.service"
+SCAN_TIMER_NAME = "dvad-roster-scan.timer"
+SCAN_AUTOSTART_NAME = "dvad-roster-scan-timer.desktop"
+
+SCAN_SERVICE_TEMPLATE = """\
+[Unit]
+Description=Devil's Advocate — daily model-roster scan
+Documentation=https://github.com/briankelley/devils-advocate
+
+[Service]
+Type=oneshot
+ExecStart={dvad_bin} roster scan
+# The scan shells out to the claude and codex CLIs for judgement and
+# availability probes; a systemd user unit does not inherit a login PATH.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Nice=10
+"""
+
+# Deliberately relative (OnBootSec / OnUnitActiveSec) rather than OnCalendar
+# with Persistent=true. Persistent= needs a timestamp file under
+# ~/.local/share/systemd/, which on an encrypted home does not exist until the
+# user logs in and the volume is mounted — the timer would either never fire or
+# fire spuriously on every unlock. Relative timers need no on-disk state.
+SCAN_TIMER_TEMPLATE = """\
+[Unit]
+Description=Devil's Advocate — daily model-roster scan cadence
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=24h
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target
+"""
+
+# Belt and braces for the encrypted home: `systemctl --user enable` covers the
+# lingering case, and this covers the case where the user manager came up
+# before the home volume was decrypted and so saw no unit files at all.
+SCAN_AUTOSTART_TEMPLATE = """\
+[Desktop Entry]
+Type=Application
+Name=Devil's Advocate Roster Scan Timer
+Comment=Start dvad roster scan timer on login (encrypted-home safe)
+Exec=/bin/bash -c 'systemctl --user start {timer}'
+Terminal=false
+X-GNOME-Autostart-enabled=true
+StartupNotify=false
+Categories=System;
+"""
+
 SERVICE_TEMPLATE = """\
 [Unit]
 Description=Devil's Advocate Web GUI
@@ -184,3 +237,83 @@ def systemctl_is_enabled() -> bool:
         return result.returncode == 0
     except Exception:
         return False
+
+
+# ─── Roster scan timer ────────────────────────────────────────────────────
+
+
+def user_unit_dir() -> Path:
+    return Path.home() / ".config" / "systemd" / "user"
+
+
+def autostart_dir() -> Path:
+    return Path.home() / ".config" / "autostart"
+
+
+def render_scan_units(dvad_bin: Path | str) -> dict[Path, str]:
+    """Render every file the scheduled scan needs, keyed by destination."""
+    return {
+        user_unit_dir() / SCAN_SERVICE_NAME: SCAN_SERVICE_TEMPLATE.format(dvad_bin=dvad_bin),
+        user_unit_dir() / SCAN_TIMER_NAME: SCAN_TIMER_TEMPLATE,
+        autostart_dir() / SCAN_AUTOSTART_NAME: SCAN_AUTOSTART_TEMPLATE.format(
+            timer=SCAN_TIMER_NAME
+        ),
+    }
+
+
+def install_scan_timer(dvad_bin: Path | str) -> list[Path]:
+    """Write the unit, timer and autostart entry. Returns the paths written."""
+    written = []
+    for path, content in render_scan_units(dvad_bin).items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        written.append(path)
+    systemctl_daemon_reload()
+    _run_systemctl("enable", SCAN_TIMER_NAME)
+    _run_systemctl("start", SCAN_TIMER_NAME)
+    return written
+
+
+def remove_scan_timer() -> list[Path]:
+    """Stop, disable and delete the timer. Returns the paths removed."""
+    for args in (("stop", SCAN_TIMER_NAME), ("disable", SCAN_TIMER_NAME)):
+        try:
+            _run_systemctl(*args)
+        except RuntimeError:
+            pass  # Already stopped or never enabled; removal proceeds.
+    removed = []
+    for path in render_scan_units("dvad"):
+        if path.exists():
+            path.unlink()
+            removed.append(path)
+    try:
+        systemctl_daemon_reload()
+    except RuntimeError:
+        pass
+    return removed
+
+
+def scan_timer_status() -> dict:
+    """Report whether the scheduled scan is installed, enabled and pending."""
+
+    def probe(*args: str) -> str:
+        try:
+            result = subprocess.run(
+                ["systemctl", "--user", *args], capture_output=True, text=True
+            )
+            return (result.stdout or result.stderr).strip()
+        except Exception:
+            return "unknown"
+
+    units = render_scan_units("dvad")
+    return {
+        "installed": all(p.exists() for p in units),
+        "enabled": probe("is-enabled", SCAN_TIMER_NAME) == "enabled",
+        "active": probe("is-active", SCAN_TIMER_NAME) == "active",
+        "next": probe(
+            "show", SCAN_TIMER_NAME, "--property=NextElapseUSecRealtime", "--value"
+        ),
+        "last_result": probe(
+            "show", SCAN_SERVICE_NAME, "--property=Result", "--value"
+        ),
+    }

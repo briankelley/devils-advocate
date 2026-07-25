@@ -1583,3 +1583,39 @@ async def scorecard_json(request: Request, show_test: bool = False):
         compute_scorecard, storage.reviews_dir, show_test
     )
     return JSONResponse(data)
+
+
+# ─── Roster notices ──────────────────────────────────────────────────────
+
+
+@router.get("/roster/notices")
+async def roster_notices():
+    """Pending findings from the background roster scan.
+
+    Read-only and deliberately quiet: the scan never mails, never notifies the
+    desktop, and never interrupts a run. This endpoint is the whole of its
+    voice, polled once when a page loads.
+    """
+    from dataclasses import asdict
+
+    from ..roster import state as roster_state
+
+    try:
+        notices = await asyncio.to_thread(roster_state.active)
+    except Exception:
+        logging.exception("Failed to read roster notices")
+        return {"notices": []}
+    return {"notices": [asdict(n) for n in notices]}
+
+
+@router.post("/roster/notices/{notice_id}/dismiss")
+async def roster_dismiss_notice(notice_id: str, request: Request):
+    """Dismiss one notice. It stays dismissed until its finding changes."""
+    _check_csrf(request)
+
+    from ..roster import state as roster_state
+
+    ok = await asyncio.to_thread(roster_state.dismiss, notice_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="No such notice")
+    return {"status": "dismissed", "id": notice_id}

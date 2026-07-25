@@ -125,6 +125,32 @@ The `models.yaml` equivalent is a `provider: claude-cli` / `provider: codex-cli`
 
 **Platform.** Linux and macOS (the tested surface). The lanes follow dvad's existing XDG / `DVAD_HOME` path conventions.
 
+## Keeping the roster current
+
+Vendors ship new models constantly, and a roster assembled six months ago is quietly out of date. `dvad roster` watches [models.dev](https://models.dev) and keeps `models.yaml` aware of what exists, without ever editing the decisions you made.
+
+**Two rules bound everything it does.** It is **additive only** — it adds models and refreshes upstream facts, and it has no code path that deletes a model, disables one, or reads your `roles:` block, let alone writes it. And it respects **field ownership**: `context_window`, `max_out_stated` and the two cost fields belong to the vendor; `provider`, `api_base` and `api_key_env` are learned from how you already configure that vendor; and `thinking`, `timeout`, `max_out_configured`, `failover_model` and role assignments are yours alone and are never written on any path.
+
+That last one matters more than it looks. models.dev publishes a `reasoning` flag meaning *this model is capable of reasoning*, while `thinking` in your config means *ask this model to think for this role*. They are different questions, and syncing one onto the other would silently change both your output and your bill.
+
+**What a pass actually does.** It fetches the catalogue and compares a content hash against yesterday's. On the great majority of days nothing has moved and the pass exits having written nothing at all. When the catalogue does change, a purely mechanical filter reduces several thousand entries to a short candidate list — dropping non-text products, deprecated and free-tier models, dated and floating aliases, anything under a context floor or outside a release window, and anything more than three deep in its family. Only that short list, a few KB of it, goes to a model for the one judgement involved: which candidates earn a place, and at what tier. Everything else about the resulting entry is derived from fixed tables.
+
+Additions are inert until you assign one to a role, so a scan can never change the behaviour of a review you run afterwards.
+
+**Retirement is reported, never acted on.** models.dev marks deprecated models, so you find out in the browser rather than through a failed run. But the scanner will not remove or disable the model, because a role pointing at a missing or disabled entry is a fatal config error — it would leave dvad unable to load at all, which is worse than the problem it was solving.
+
+**How it speaks to you.** Only through the GUI. Findings collect as dismissible notices that appear the next time you open a page. No mail, no desktop notification, nothing that interrupts a run.
+
+```bash
+dvad roster scan --dry-run     # see what a pass would do
+dvad roster scan               # run one pass now
+dvad roster status             # last scan, timer state, pending notices
+dvad roster install            # schedule it daily
+dvad roster uninstall          # unschedule; config and notices are kept
+```
+
+`dvad roster install` writes a systemd user timer on a relative cadence (24h after each run, 10 minutes after boot) rather than a wall-clock schedule, plus an autostart entry that starts the timer at login. That combination is deliberate: a wall-clock timer needs a timestamp file that does not exist on an encrypted home until the user logs in.
+
 ## CLI Quick Start
 
 ```bash
@@ -134,6 +160,7 @@ dvad review --mode plan --input plan.md --input ref.py --project myproject
 dvad review --mode code --input src/app.py --spec spec.md --project myproject
 dvad review --mode plan --input plan.md --project myproject --max-cost 0.50
 dvad review --mode plan --input plan.md --project myproject --dry-run
+dvad roster scan --dry-run
 ```
 
 ## Design Notes

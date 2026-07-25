@@ -298,6 +298,64 @@ const dvad = {
         return document.querySelector('meta[name="csrf-token"]')?.content || '';
     },
 
+    // ── Roster notices ───────────────────────────────────────────────
+    // The background model-roster scan has no other way to reach the user.
+    // It never mails, never raises a desktop notification and never blocks a
+    // review; it leaves notices here and they surface on the next page load.
+    async loadRosterNotices() {
+        const host = document.getElementById('roster-notices');
+        if (!host) return;
+        let notices = [];
+        try {
+            const res = await fetch('/api/roster/notices');
+            if (!res.ok) return;
+            notices = (await res.json()).notices || [];
+        } catch (err) {
+            return;  // A quiet feature stays quiet when it cannot load.
+        }
+        if (!notices.length) { host.hidden = true; return; }
+
+        host.innerHTML = '';
+        for (const notice of notices) {
+            const card = document.createElement('div');
+            card.className = 'roster-notice roster-notice-' + (notice.level || 'info');
+
+            const body = document.createElement('div');
+            body.className = 'roster-notice-body';
+            const title = document.createElement('strong');
+            title.textContent = notice.title || '';
+            const text = document.createElement('span');
+            text.textContent = notice.body || '';
+            body.append(title, text);
+
+            const close = document.createElement('button');
+            close.className = 'roster-notice-dismiss';
+            close.type = 'button';
+            close.title = 'Dismiss';
+            close.textContent = '×';
+            close.addEventListener('click', () => this.dismissRosterNotice(notice.id, card));
+
+            card.append(body, close);
+            host.appendChild(card);
+        }
+        host.hidden = false;
+    },
+
+    async dismissRosterNotice(id, card) {
+        try {
+            const res = await fetch('/api/roster/notices/' + encodeURIComponent(id) + '/dismiss', {
+                method: 'POST',
+                headers: { 'X-DVAD-Token': this.getToken() },
+            });
+            if (!res.ok) return;
+        } catch (err) {
+            return;
+        }
+        card.remove();
+        const host = document.getElementById('roster-notices');
+        if (host && !host.children.length) host.hidden = true;
+    },
+
     // ── Column sorting ───────────────────────────────────────────────
     initSorting() {
         const headers = document.querySelectorAll('.th-sortable');

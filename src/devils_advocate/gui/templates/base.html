@@ -37,6 +37,9 @@
             </a>
         </div>
     </nav>
+    <!-- Filled by dvad.loadRosterNotices() on load; stays empty when the
+         background roster scan has nothing to say, which is most days. -->
+    <div id="roster-notices" class="roster-notices" hidden></div>
     <main>
         {% block content %}{% endblock %}
     </main>
@@ -52,7 +55,10 @@
       </div>
     </div>
     <script src="/static/app.js?v={{ version }}"></script>
-    <script>document.addEventListener('DOMContentLoaded', () => { if (typeof lucide !== 'undefined') lucide.createIcons(); });</script>
+    <script>document.addEventListener('DOMContentLoaded', () => {
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof dvad !== 'undefined' && dvad.loadRosterNotices) dvad.loadRosterNotices();
+    });</script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

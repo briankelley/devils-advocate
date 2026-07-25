@@ -603,4 +603,9 @@ MUTATING_ROUTE_PATTERNS: list[tuple[str, str]] = [
     ("POST", "/api/review/{review_id}/cancel"),
     ("POST", "/api/review/{review_id}/override"),
     ("POST", "/api/review/{review_id}/revise"),
+    # Roster notices: flips a dismissed flag in the scanner's own sidecar state
+    # under the data dir. CSRF-guarded, touches neither models.yaml nor review
+    # data, and is not body-driven, so it is registered here for completeness
+    # rather than fuzzed via the body-payload WRITE_ENDPOINTS specs.
+    ("POST", "/api/roster/notices/{notice_id}/dismiss"),
 ]

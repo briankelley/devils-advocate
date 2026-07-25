@@ -1598,3 +1598,51 @@ main { padding: var(--pad-lg); max-width: 1200px; margin: 0 auto; }
 .scorecard-sentences li { font-size: 12px; margin-bottom: 6px; color: var(--text-dim); }
 .scorecard-footnote ul { margin-left: 18px; font-size: 12px; }
 .scorecard-footnote li { margin-bottom: 3px; }
+
+/* -- Roster Notices ------------------------------------------------------ */
+/* Findings from the background model-roster scan. Sits between the nav and
+   page content on every page, styled to read as informational rather than
+   alarming — critical is reserved for a role pointing at a dying model. */
+
+.roster-notices {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pad-sm);
+    padding: var(--pad-md) var(--pad-lg) 0;
+}
+.roster-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--pad-md);
+    padding: var(--pad-md) var(--pad-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+.roster-notice-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--pad-xs);
+}
+.roster-notice-body strong { color: var(--text); }
+.roster-notice-body span { color: var(--text-dim); }
+.roster-notice-info { border-left-color: var(--accent); }
+.roster-notice-info strong { color: var(--accent); }
+.roster-notice-warn { border-left-color: var(--yellow); }
+.roster-notice-warn strong { color: var(--yellow); }
+.roster-notice-critical { border-left-color: var(--red); }
+.roster-notice-critical strong { color: var(--red); }
+.roster-notice-dismiss {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 var(--pad-xs);
+}
+.roster-notice-dismiss:hover { color: var(--text); }

@@ -909,3 +909,156 @@ def uninstall_cmd():
     # 7. Success
     console.print("[green]Service uninstalled.[/green]")
     console.print("  Config at ~/.config/devils-advocate/ was preserved.")
+
+
+# ─── roster ──────────────────────────────────────────────────────────────
+
+
+@cli.group("roster")
+def roster_group():
+    """Keep the model roster current from models.dev."""
+
+
+@roster_group.command("scan")
+@click.option("--config", "config_path", type=click.Path(exists=True, path_type=Path),
+              help="Path to models.yaml")
+@click.option("--dry-run", is_flag=True, help="Report what would change without writing")
+@click.option("--force", is_flag=True, help="Scan even if the catalogue has not changed")
+@click.option("--no-reason", is_flag=True, help="Skip the judgement stage; refresh values only")
+def roster_scan_cmd(config_path, dry_run, force, no_reason):
+    """Run one discovery pass. Silent when nothing upstream has moved."""
+    from .roster.scan import run_scan
+
+    try:
+        target = config_path or find_config()
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        sys.exit(1)
+
+    report = run_scan(
+        target, force=force, dry_run=dry_run, use_reasoner=not no_reason
+    )
+
+    if report.skipped:
+        console.print(f"[yellow]Deferred:[/yellow] {report.skipped}")
+        return
+    if not report.changed:
+        console.print("Upstream catalogue unchanged. Nothing to do.")
+        return
+
+    if report.added:
+        console.print(f"[green]Added[/green] ({len(report.added)}):")
+        for name in report.added:
+            console.print(f"  + {name}")
+    if report.refreshed:
+        console.print(f"[cyan]Refreshed[/cyan] ({len(report.refreshed)}):")
+        for name in report.refreshed:
+            console.print(f"  ~ {name}")
+    for conflict in report.conflicts:
+        console.print(f"[yellow]Withheld:[/yellow] {conflict}")
+    for note in report.notices:
+        console.print(f"[yellow]Note:[/yellow] {note}")
+
+    if dry_run:
+        console.print("\n[dim]Dry run — models.yaml was not written.[/dim]")
+    elif not report.wrote:
+        console.print("Catalogue moved, but nothing actionable for your roster.")
+    else:
+        console.print("\nmodels.yaml updated. Previous version saved as models.yaml.bak.")
+
+
+@roster_group.command("status")
+def roster_status_cmd():
+    """Show scan state, the timer, and any pending notices."""
+    from .roster import state as st
+    from .service import scan_timer_status
+
+    scan_state = st.load_state()
+    console.print(f"Last scan:   {scan_state.get('last_scan') or 'never'}")
+    digest = scan_state.get("last_digest")
+    console.print(f"Catalogue:   {digest[:16] + '…' if digest else 'not yet fetched'}")
+
+    timer = scan_timer_status()
+    if not timer["installed"]:
+        console.print("Timer:       not installed (run: dvad roster install)")
+    else:
+        state = "enabled" if timer["enabled"] else "disabled"
+        state += ", active" if timer["active"] else ", inactive"
+        console.print(f"Timer:       {state}")
+        if timer["next"] and timer["next"] != "0":
+            console.print(f"Next run:    {timer['next']}")
+        if timer["last_result"]:
+            console.print(f"Last result: {timer['last_result']}")
+
+    availability = scan_state.get("availability") or {}
+    if availability:
+        console.print(f"\nSubscription probes cached: {len(availability)}")
+        for key, entry in sorted(availability.items()):
+            console.print(f"  {key}: {entry.get('verdict')}")
+
+    notices = st.active()
+    if notices:
+        console.print(f"\n[bold]{len(notices)} pending notice(s):[/bold]")
+        for notice in notices:
+            colour = {"critical": "red", "warn": "yellow"}.get(notice.level, "cyan")
+            console.print(f"  [{colour}]{notice.level.upper()}[/{colour}] {notice.title}")
+            console.print(f"        {notice.body}")
+    else:
+        console.print("\nNo pending notices.")
+
+
+@roster_group.command("install")
+def roster_install_cmd():
+    """Schedule the daily scan as a systemd user timer."""
+    from .service import check_platform, detect_dvad_binary, install_scan_timer
+
+    err = check_platform()
+    if err:
+        console.print(f"[red]Error:[/red] {err}")
+        sys.exit(1)
+    try:
+        dvad_bin = detect_dvad_binary()
+    except FileNotFoundError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        sys.exit(1)
+
+    try:
+        written = install_scan_timer(dvad_bin)
+    except RuntimeError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        sys.exit(1)
+
+    console.print("[green]Daily roster scan scheduled.[/green]")
+    for path in written:
+        console.print(f"  {path}")
+    console.print(
+        "\n  Cadence is relative (24h after each run, 10min after boot) rather "
+        "than a wall-clock time, so it needs no state file inside an encrypted "
+        "home. The autostart entry starts the timer at login as a fallback."
+    )
+
+
+@roster_group.command("uninstall")
+def roster_uninstall_cmd():
+    """Remove the scheduled scan. Your config and notices are left alone."""
+    from .service import remove_scan_timer
+
+    removed = remove_scan_timer()
+    if not removed:
+        console.print("Nothing to remove — the timer was not installed.")
+        return
+    console.print("[green]Scheduled scan removed.[/green]")
+    for path in removed:
+        console.print(f"  {path}")
+
+
+@roster_group.command("dismiss")
+@click.argument("notice_id")
+def roster_dismiss_cmd(notice_id):
+    """Dismiss a pending notice by id."""
+    from .roster import state as st
+
+    if st.dismiss(notice_id):
+        console.print(f"Dismissed {notice_id}.")
+    else:
+        console.print(f"[yellow]No notice with id {notice_id}.[/yellow]")
